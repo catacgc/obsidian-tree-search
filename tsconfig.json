@@ -1,11 +1,14 @@
 {
   "compilerOptions": {
+    "types": ["react", "node", "obsidian-typings"],
     "baseUrl": ".",
+    "jsx": "react-jsx",
     "inlineSourceMap": true,
     "inlineSources": true,
     "module": "ESNext",
     "target": "ES6",
     "allowJs": true,
+    "esModuleInterop": true,
     "noImplicitAny": true,
     "moduleResolution": "node",
     "importHelpers": true,
@@ -20,5 +23,6 @@
   },
   "include": [
     "**/*.ts"
-  ]
+  , "src/**.tsx", 
+    "src/**.ts"  ]
 }
