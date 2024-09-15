@@ -1,5 +1,6 @@
-import {EdgeAttributes, GraphAttributes, Index, NodeAttributes} from "./tree-builder";
+import {DirectedGraphOfNotes, EdgeAttributes, GraphAttributes, Index, NodeAttributes} from "./tree-builder";
 import Graph from "graphology";
+import {matchQuery, parseQuery, SearchExpr} from "./query";
 
 export type ResultNode = {
 	value: string,
@@ -8,20 +9,18 @@ export type ResultNode = {
 	parents: string[]
 }
 
-type GF = Graph<NodeAttributes, EdgeAttributes, GraphAttributes>
-
-function filterTreeByWord(node: ResultNode, word: string): ResultNode | null {
-	// Check if the current node contains the word
-	if (node.value.includes(word)) {
+function filterTreeByWord(node: ResultNode, expr: SearchExpr): ResultNode | null {
+	// Check if the current node contains the expr
+	if (matchQuery(node.value, expr)) {
 		return node;
 	}
 
 	// Recursively filter the children
 	const filteredChildren = node.children
-		.map(child => filterTreeByWord(child, word))
+		.map(child => filterTreeByWord(child, expr))
 		.filter(child => child !== null) as ResultNode[];
 
-	// If no children contain the word, return null
+	// If no children contain the expr, return null
 	if (filteredChildren.length === 0) {
 		return null;
 	}
@@ -33,19 +32,19 @@ function filterTreeByWord(node: ResultNode, word: string): ResultNode | null {
 	};
 }
 
-function filterDown(results: ResultNode[], words: string[]): ResultNode[] {
-	if (words.length === 0) return results
+function filterDown(results: ResultNode[], search: SearchExpr[]): ResultNode[] {
+	if (search.length === 0) return results
 
-	const word = words[0]
+	const expr = search[0]
 
 	const filtered = results
-		.map(r => filterTreeByWord(r, word))
+		.map(r => filterTreeByWord(r, expr))
 		.filter(child => child !== null) as ResultNode[]
 
-	return filterDown(filtered, words.slice(1))
+	return filterDown(filtered, search.slice(1))
 }
 
-function traverseChildren(graph: GF, node: ResultNode, depth: number, allChildren: Set<string>) {
+function traverseChildren(graph: DirectedGraphOfNotes, node: ResultNode, depth: number, allChildren: Set<string>) {
 	if (depth > 2) return
 
 	const neighbours = graph.outboundNeighborEntries(node.value)
@@ -74,30 +73,33 @@ function getParents(graph: Graph, node: string) {
 	return parents;
 }
 
-
-export function searchIndex(index: Index, qs: string): ResultNode[] {
+export function searchIndex(graph: DirectedGraphOfNotes, qs: string): ResultNode[] {
 	if (qs.length < 3) return []
 
-	const words = qs.split(">")
+	const treeWords = qs.split(">")
 		.map(w => w.toLowerCase().trim())
-	const anchor = words.length > 0 ? words[0] : ""
+		.map(it => parseQuery(it))
+
 	const filtered: ResultNode[] = []
 
-	const nodes = index.graph.filterNodes(n => n.toLowerCase().includes(anchor))
+	const nodes = graph.filterNodes(n => matchQuery(n, treeWords[0]))
 	const allChildren = new Set<string>()
 
 	for (const node of nodes) {
-		const attrs = index.graph.getNodeAttributes(node)
+		const attrs = graph.getNodeAttributes(node)
 		const newNode = {
 			value: node,
 			children: [],
 			attrs: attrs,
-			parents: getParents(index.graph, node)
+			parents: getParents(graph, node)
 		}
 
 		filtered.push(newNode)
-		traverseChildren(index.graph, newNode, 0, allChildren)
+		traverseChildren(graph, newNode, 0, allChildren)
 	}
 
-	return filterDown(filtered, words.slice(1)).filter(f => !allChildren.has(f.value))
+	return filterDown(filtered, treeWords.slice(1)).filter(f => !allChildren.has(f.value))
+		.sort((a, b) => b.children.length - a.children.length)
 }
+
+

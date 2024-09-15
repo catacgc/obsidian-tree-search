@@ -6,8 +6,8 @@ import {ResultNode, searchIndex} from "../search";
 import Markdown from "react-markdown";
 
 
-export const SearchView = ({index}: { index: Index }) => {
-	const [idx, setIdx] = useState(index)
+export const SearchView = () => {
+	const [idx, setIdx] = useState<Index>()
 	const [search, setSearch] = useState("")
 	const [results, setResults] = useState<ResultNode[]>([])
 	const [pages, setPages] = useState(0)
@@ -18,7 +18,16 @@ export const SearchView = ({index}: { index: Index }) => {
 	}
 
 	useEffect(() => {
-		setResults(searchIndex(idx, search))
+		if (!idx) {
+			// console.log("Indexing")
+			refreshIndex()
+		}
+	}, [idx]);
+
+	useEffect(() => {
+		if (!idx) return
+
+		setResults(searchIndex(idx.graph, search))
 		setPages(0)
 	}, [search, idx])
 
@@ -45,7 +54,7 @@ export const SearchPage = (props: {results: ResultNode[], page: number}) => {
 
 export const SearchTreeList = (props: { node: ResultNode, level: number }) => {
 
-	return <div style={{marginLeft: props.level * 10 + "px"}}>
+	return <div style={{marginLeft: props.level * 10 + "px"}} className={props.level == 0 ? "search-tree-container" : ""}>
 		<NodeView node={props.node} index={props.level} key={props.node.value}/>
 
 		<div>
@@ -59,7 +68,7 @@ export const NodeView = (props: { node: ResultNode, index: number }) => {
 
 	async function openFile(attrs: NodeAttributes) {
 		if (app == undefined) return
-		await openFileAndHighlightLine(app, attrs.location.path, attrs.location.line)
+		await openFileAndHighlightLine(app, attrs.location.path, attrs.location.position.start, attrs.location.position.end)
 	}
 
 	const attrs = props.node.attrs
@@ -75,7 +84,7 @@ export const NodeView = (props: { node: ResultNode, index: number }) => {
 		className="search-result-file-match better-search-views-file-match markdown-preview-view markdown-rendered"
 		onClick={() => openFile(attrs)}
 	>
-		<Markdown>{`${props.index + 1}. ${text}`}</Markdown>
+		<Markdown>{props.index == 0 ? `**${text}**` : `${props.index}. ${text}`}</Markdown>
 	</div>
 }
 

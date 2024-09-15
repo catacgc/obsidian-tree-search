@@ -1,6 +1,6 @@
 import Graph from "graphology";
 import {Notice} from "obsidian";
-import {getAPI, DataviewAPI} from "obsidian-dataview";
+import {getAPI} from "obsidian-dataview";
 import {parseMarkdown} from "./parser";
 import {Token} from "markdown-it";
 
@@ -29,19 +29,40 @@ export type GraphAttributes = {
 	name?: string;
 }
 
+export type DirectedGraphOfNotes = Graph<NodeAttributes, EdgeAttributes, GraphAttributes>
+
 export type Index = {
-	graph: Graph<NodeAttributes, EdgeAttributes, GraphAttributes>,
+	graph: DirectedGraphOfNotes
 }
 
 export type Location = {
 	path: string,
-	line: number
+	position: {
+		start: {
+			line: number,
+			col: number
+		},
+		end: {
+			line: number,
+			col: number
+		}
+	}
 }
 
 export type DvList = {
 	link: { path: string },
 	text: string,
 	line: number,
+	position: {
+		start: {
+			line: number,
+			col: number
+		},
+		end: {
+			line: number,
+			col: number
+		}
+	}
 	parent: number,
 	children: DvList[],
 	tags: string[],
@@ -102,11 +123,58 @@ function extractUrlFromMarkdown(markdown: string) {
 	return markdown.match(/\(([^)]+)\)/)?.[1] || extractHttpUrlFromMarkdown(markdown)
 }
 
-function shouldNotRender(item: DvList) {
-	return !item.text.startsWith("[")
-		&& !item.text.startsWith('!')
-		&& !item.text.contains('#')
-		&& !item.text.contains('http');
+// not interested in plain text
+function shouldSkip(lst: DvList) {
+	return !lst.text.startsWith("[")
+		&& !lst.text.startsWith('!')
+		&& !lst.text.includes('#')
+		&& !lst.text.includes('http');
+}
+
+export function indexSinglePage(page: DvPage, graph: Graph<NodeAttributes, EdgeAttributes, GraphAttributes>) {
+	const pageRef = "[[" + page.file.name + "]]";
+	addNode(graph, pageRef.toLowerCase(), {
+		fullMarkdownText: pageRef,
+		parsed: {page: page.file.name},
+		location: {
+			path: page.file.path,
+			position: {
+				start: {line: 0, col: 0},
+				end: {line: 0, col: 0}
+			}
+		},
+		tokens: []
+	})
+
+	for (const item of page.file.lists.values) {
+		if (shouldSkip(item)) continue
+
+		addNode(graph, item.text.toLowerCase(), {
+			fullMarkdownText: item.text,
+			location: {
+				path: page.file.path,
+				position: item.position
+			},
+			parsed: parseLine(item.text),
+			tokens: parseMarkdown(item.text, {})
+		})
+
+		if (!item.parent) {
+			addEdge(graph, pageRef.toLowerCase(), item.text.toLowerCase(), {mtime: page.file.mtime.ts})
+		}
+
+		for (const child of item.children) {
+			if (shouldSkip(child)) continue
+
+			addNode(graph, child.text.toLowerCase(), {
+				fullMarkdownText: child.text,
+				location: {path: page.file.path, position: child.position,},
+				parsed: parseLine(child.text),
+				tokens: parseMarkdown(item.text, {})
+			})
+			addEdge(graph, item.text.toLowerCase(), child.text.toLowerCase(), {mtime: page.file.mtime.ts})
+		}
+	}
 }
 
 export function indexTree(): Index | undefined {
@@ -118,56 +186,17 @@ export function indexTree(): Index | undefined {
 	}
 
 	const pages = dv.pages("")
-		// .where(p => p.file.name == "My Teams")
+		// .where(p => p.file.name == "ImportantProjects")
 
 	const graph = new Graph<NodeAttributes, EdgeAttributes, GraphAttributes>();
 	const idx: Index = {graph: graph}
 
 	for (const dvp of pages) {
-		const page = dvp as DvPage
-		const pageRef = "[[" + page.file.name + "]]";
-		addNode(graph, pageRef.toLowerCase(), {
-			fullMarkdownText: pageRef,
-			parsed: { page: page.file.name },
-			location: {
-				path: page.file.path,
-				line: 0
-			},
-			tokens: []
-		})
-
-		for (const item of page.file.lists.values) {
-			if (shouldNotRender(item)) continue
-
-			addNode(graph, item.text.toLowerCase(), {
-				fullMarkdownText: item.text,
-				location: {
-					path: page.file.path,
-					line: item.line
-				},
-				parsed: parseLine(item.text),
-				tokens: parseMarkdown(item.text, {})
-			})
-
-			addEdge(graph, pageRef.toLowerCase(), item.text.toLowerCase(), {mtime: page.file.mtime.ts})
-
-			for (const child of item.children) {
-				if (shouldNotRender(child)) continue
-
-				addNode(graph, child.text.toLowerCase(), {
-					fullMarkdownText: child.text,
-					location: { path: page.file.path, line: child.line,},
-					parsed: parseLine(child.text),
-					tokens: parseMarkdown(item.text, {})
-				})
-				addEdge(graph, item.text.toLowerCase(), child.text.toLowerCase(), {mtime: page.file.mtime.ts})
-			}
-		}
+		const page = dvp as DvPage;
+		indexSinglePage(page, graph);
 	}
 
-	console.log(idx)
-
-	return idx
+	return idx;
 }
 
 
