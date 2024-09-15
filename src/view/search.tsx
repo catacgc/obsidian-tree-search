@@ -3,11 +3,10 @@ import {useEffect, useState} from "react";
 import {useApp} from "./hooks";
 import {openFileAndHighlightLine} from "src/obsidian-utils";
 import {ResultNode, searchIndex} from "../search";
-import Markdown from "react-markdown";
+import {Token} from "markdown-it";
 
-
-export const SearchView = ({index}: { index: Index }) => {
-	const [idx, setIdx] = useState(index)
+export const SearchView = () => {
+	const [idx, setIdx] = useState<Index>()
 	const [search, setSearch] = useState("")
 	const [results, setResults] = useState<ResultNode[]>([])
 	const [pages, setPages] = useState(0)
@@ -18,7 +17,16 @@ export const SearchView = ({index}: { index: Index }) => {
 	}
 
 	useEffect(() => {
-		setResults(searchIndex(idx, search))
+		if (!idx) {
+			// console.log("Indexing")
+			refreshIndex()
+		}
+	}, [idx]);
+
+	useEffect(() => {
+		if (!idx) return
+
+		setResults(searchIndex(idx.graph, search))
 		setPages(0)
 	}, [search, idx])
 
@@ -45,7 +53,7 @@ export const SearchPage = (props: {results: ResultNode[], page: number}) => {
 
 export const SearchTreeList = (props: { node: ResultNode, level: number }) => {
 
-	return <div style={{marginLeft: props.level * 10 + "px"}}>
+	return <div style={{marginLeft: props.level * 10 + "px"}} className={props.level == 0 ? "search-tree-container" : ""}>
 		<NodeView node={props.node} index={props.level} key={props.node.value}/>
 
 		<div>
@@ -59,25 +67,71 @@ export const NodeView = (props: { node: ResultNode, index: number }) => {
 
 	async function openFile(attrs: NodeAttributes) {
 		if (app == undefined) return
-		await openFileAndHighlightLine(app, attrs.location.path, attrs.location.line)
+		await openFileAndHighlightLine(app, attrs.location.path, attrs.location.position.start, attrs.location.position.end)
 	}
 
 	const attrs = props.node.attrs
 
-	const text = attrs.fullMarkdownText
-		.replace("![[", "[[")
-		.replace(
-`[[${attrs.parsed.page}]]`,
-`[${attrs.parsed.page}](#)`
-		)
-
 	return <div
-		className="search-result-file-match better-search-views-file-match markdown-preview-view markdown-rendered"
+		className="search-tree-node"
 		onClick={() => openFile(attrs)}
 	>
-		<Markdown>{`${props.index + 1}. ${text}`}</Markdown>
+		<NodeRenderer tokens={props.node.attrs.tokens}/>
 	</div>
 }
+
+export const NodeRenderer = (props: { tokens: Token[] }) => {
+	const tokens = props.tokens
+
+	if (tokens.length == 0) return <></>
+
+	const token = tokens[0]
+
+	if (token.type == "inline" && token.children) {
+		return <NodeRenderer tokens={token.children}/>
+	}
+
+	if (token.type == "obsidian_link") {
+		return <>
+			<a className={"obsidian-link"} href="#" onClick={ev => ev.preventDefault()}>{token.content}</a>
+			<NodeRenderer tokens={tokens.slice(1)}/>
+		</>
+	}
+
+	if (token.type == "link_open") {
+		const href = token.attrs?.[0]?.[1] || "#"
+		const content = tokens[1]?.content
+		return <>
+			<a className={"external-link"} href={href}>{content}</a>
+			<NodeRenderer tokens={tokens.slice(2)}/>
+		</>
+	}
+
+	if (token.type == "link_close") {
+		return <NodeRenderer tokens={tokens.slice(1)}/>
+	}
+
+	if (token.type == "text") {
+		return <>
+			<span>{token.content}</span>
+			<NodeRenderer tokens={tokens.slice(1)}/>
+		</>
+	}
+
+	if (token.type == "strong_open") {
+		return <b>
+				<NodeRenderer tokens={tokens.slice(1)}/>
+			</b>
+	}
+
+	if (token.type == "strong_close") {
+		return <NodeRenderer tokens={tokens.slice(1)}/>
+	}
+
+	// console.log("tokens not rendered: ", tokens.map(it => it.content).join(","))
+	return <></>
+}
+
 
 
 

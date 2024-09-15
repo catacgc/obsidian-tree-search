@@ -7,7 +7,7 @@ function obsidianLinkPlugin(md: MarkdownIt) {
 		const start = state.pos;
 
 		if (start + 4 > max) return false;
-		if (state.src.charAt(start) !== '[' || state.src.charAt(start + 1) !== '[' /* [ */) {
+		if (state.src.charAt(start-1) == '!' || state.src.charAt(start) !== '[' || state.src.charAt(start + 1) !== '[' /* [ */) {
 			return false;
 		}
 

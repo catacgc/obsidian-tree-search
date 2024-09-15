@@ -26,13 +26,12 @@ export class TreeSearch extends ItemView {
 	}
 
 	async onOpen() {
-		const idx = indexTree()
 
 		this.root = createRoot(this.containerEl.children[1]);
 		this.root.render(
 			<StrictMode>
 				<AppContext.Provider value={this.app}>
-					{idx != undefined ? <SearchView index={idx}/> : <h4>Index not found</h4>} 
+					<SearchView/>
 				</AppContext.Provider>
 			</StrictMode>,
 		);

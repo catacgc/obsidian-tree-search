@@ -10,27 +10,30 @@ Consider the following example: you have daily/weekly notes where you jolt down 
 in `2026-01-01.md` you have the following:
 
 ```markdown
-- [[MyArea]]
-	- [[MyProject]]
-		- https://my-project-reference #bookmark
+- [[Project1]]
+	- [An external link to remember](https://company-reference) #bookmark
 ```
 
-in another day, you decide you want to add a note to `My Project` in `2026-01-02.md`. Most natural way to do so in Obsidian
-is to quickly nest it in your otline
+As your work progresses you add more notes, nested with a hierarchy that evolves as your work evolves.
+Obsidian is good at linking these notes together easily. You start adding more important links
 
 ```markdown
-- [[MyProject]]
-	- [[MyProject Task]] with some optional inline context
+- [[Project1]]
+	- [[Project1 Task]] with some optional inline context
+		- https://task-tracker/item - this is something I should keep track of temporarily
+
+- [[Project2]]
+	- https://my-project-himepage #bookmark/important
 ```
 
-yet another day comes and you start ading some references tot the area you're working on in `2026-01-03.md`
+Not let's decide you want to start organizing a bit and organize your more important projects [[ImportantProjects]] page 
 
 ```markdown
-- [[MyArea]]
-	- https://some-web-reference #bookmark/important
+- [[Project1]]
+- [[Project2]] 
 ```
 
-TreeSearch let's explore these connections quickly and easily.
+TreeSearch let's search and explore these connections across your vault, easily.
 
 ![img.png](docs/img/img.png)
 
@@ -38,6 +41,9 @@ TreeSearch let's explore these connections quickly and easily.
 
 The plugin adds a new command `TreeSearch: Search` that opens a new pane with a search bar. 
 You can search for a note and see all the notes (and links) that are nested under it.
+
+The search algo is very simple and only supports exact matches for now. There are only two operators you should care about:
+- `>` - searches down in the tee 
 
 ## Funding URL
 
