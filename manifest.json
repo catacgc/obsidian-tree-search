@@ -1,7 +1,7 @@
 {
 	"id": "tree-search",
 	"name": "Tree Search",
-	"version": "v0.0.1",
+	"version": "0.0.9",
 	"minAppVersion": "0.15.0",
 	"description": "Quickly search hierarchical line trees in Obsidian",
 	"author": "Catalin Costache",

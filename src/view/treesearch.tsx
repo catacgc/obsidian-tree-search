@@ -4,7 +4,6 @@ import { Root, createRoot } from "react-dom/client";
 import { SearchView } from "./search";
 import { createContext } from "react";
 import { App } from "obsidian";
-import { indexTree } from "src/tree-builder";
 
 export const AppContext = createContext<App | undefined>(undefined);
 

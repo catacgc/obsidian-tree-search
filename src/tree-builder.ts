@@ -1,4 +1,4 @@
-import {Notice} from "obsidian";
+// import {Notice} from "obsidian";
 import {getAPI} from "obsidian-dataview";
 import {NotesGraph} from "./graph";
 
@@ -52,7 +52,7 @@ function shouldSkip(lst: DvList) {
 		;
 }
 
-export function indexSinglePage(page: DvPage, graph: NotesGraph) {
+export async function indexSinglePage(page: DvPage, graph: NotesGraph) {
 	const pageRef = graph.addPageNode(page)
 
 	for (const item of page.file.lists.values) {
@@ -73,11 +73,11 @@ export function indexSinglePage(page: DvPage, graph: NotesGraph) {
 	}
 }
 
-export function indexTree(): Index | undefined {
+export async function indexTree(): Promise<Index | undefined> {
 	const dv = getAPI(this.app);
 
 	if (dv == undefined) {
-		new Notice("Dataview not enabled")
+		console.log("Dataview not enabled")
 		return
 	}
 
@@ -92,7 +92,7 @@ export function indexTree(): Index | undefined {
 			console.log(dvp)
 		}
 		const page = dvp as DvPage;
-		indexSinglePage(page, graph);
+		await indexSinglePage(page, graph);
 	}
 
 	return idx;

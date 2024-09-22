@@ -8,7 +8,6 @@ import {
 } from 'obsidian';
 
 import {TreeSearch, VIEW_TYPE_NAME} from 'src/view/treesearch';
-import {indexTree} from "./src/tree-builder";
 
 interface TreeSearchSettings {
 	mySetting: string;
@@ -67,6 +66,11 @@ export default class TreeSearchPlugin extends Plugin {
 
 		// "Reveal" the leaf in case it is in a collapsed sidebar
 		if (leaf) workspace.revealLeaf(leaf);
+
+		setTimeout(() => {
+			const inputEl = leaf?.view.containerEl.querySelector('input');
+			inputEl?.select()
+		}, 0);
 	}
 
 	async loadSettings() {

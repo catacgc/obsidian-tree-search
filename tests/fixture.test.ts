@@ -2,8 +2,8 @@ import {createFixture, fixture} from "./fixtures";
 import {describe, expect, test} from "@jest/globals";
 
 describe('createFixture', () => {
-	test("sample graph", () => {
-		const graph = fixture(`
+	test("sample graph", async () => {
+		const graph = await fixture(`
 ImportantProjects.md,alias
 - [[Project1]]
  	- [[Project2]]
@@ -31,8 +31,8 @@ ImportantProjects.md,alias
 		expect(fixture.file.lists.values[0].children[0].children.length).toBe(1)
 	})
 
-	test("headers support", () => {
-		const graph = fixture(`
+	test("headers support", async () => {
+		const graph = await fixture(`
 		File.md
 		#Header
 		- [[Note]]

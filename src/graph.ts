@@ -2,6 +2,7 @@ import Graph from "graphology";
 import {Token} from "markdown-it";
 import {DvList, DvPage} from "./tree-builder";
 import {parseMarkdown} from "./parser";
+import {searchIndex} from "./search";
 
 export type NodeAttributes = {
 	location: Location
@@ -266,5 +267,9 @@ export class NotesGraph {
 			searchKey: `${page.file.name} ${page.file.aliases.values.join(" ")}`.toLowerCase(),
 			nodeType: "page"
 		}
+	}
+
+	search(qs: string) {
+		return searchIndex(this.graph, qs)
 	}
 }

@@ -25,7 +25,8 @@ export function renderResult(result: ResultNode[], indent = ""): string[] {
 	])
 }
 
-export function testGraphSearch(graph: NotesGraph, qs: string, expected: string) {
+export async function testGraphSearch(promiseGraph: Promise<NotesGraph>, qs: string, expected: string) {
+	const graph = await promiseGraph;
 	const resultNodes = searchIndex(graph.graph, qs);
 	const result = renderTextResult(resultNodes);
 	const exp = trimIndent(expected.split("\n")).join("\n");
@@ -38,7 +39,7 @@ export function testGraphSearch(graph: NotesGraph, qs: string, expected: string)
  *
  * Following lines will trimIndent to the minimal indent
  */
-export function fixture(...fixtures: string[]): NotesGraph {
+export async function fixture(...fixtures: string[]): Promise<NotesGraph> {
 	const graph = new NotesGraph()
 	for (const fixture of fixtures) {
 		const lines = fixture.trim().split("\n");
@@ -48,7 +49,7 @@ export function fixture(...fixtures: string[]): NotesGraph {
 		const trimmed = trimIndent(lines.slice(1));
 
 		const pageFixture = createFixture(pagename, trimmed.join("\n"), aliases);
-		indexSinglePage(pageFixture, graph);
+		await indexSinglePage(pageFixture, graph);
 	}
 
 	return graph
