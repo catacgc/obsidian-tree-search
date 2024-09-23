@@ -1,4 +1,4 @@
-import { App } from "obsidian";
+import {App} from "obsidian";
 
 export async function openFileAndHighlightLine(app: App, path: string, start: { line: number, col: number }, end: { line: number, col: number }) {
     const file = app.vault.getAbstractFileByPath(path);
@@ -15,3 +15,13 @@ export async function openFileAndHighlightLine(app: App, path: string, start: { 
       }, 100);
     }
   }
+
+export async function openFileByName(app: App, fileName: string) {
+	const file = app.vault.getFiles().find(f => f.name === fileName);
+	if (file) {
+		const leaf = app.workspace.getLeaf();
+		await leaf.openFile(file);
+	} else {
+		console.error(`File "${fileName}" not found`);
+	}
+}

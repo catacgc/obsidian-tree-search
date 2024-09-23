@@ -1,10 +1,7 @@
 import {Index, indexTree} from "src/tree-builder";
 import {useEffect, useState} from "react";
-import {useApp} from "./hooks";
-import {openFileAndHighlightLine} from "src/obsidian-utils";
 import {ResultNode, searchIndex} from "../search";
-import {Token} from "markdown-it";
-import {NodeAttributes} from "src/graph";
+import {NodeView} from "./nodeRenderer";
 
 export const SearchView = () => {
 	const [idx, setIdx] = useState<Index>()
@@ -111,94 +108,6 @@ export const SearchTreeList = (props: { node: ResultNode, level: number }) => {
             {props.node.children.map(child => <SearchTreeList node={child} level={props.level + 1} key={child.value}/>)}
         </div>
     </div>
-}
-
-export const NodeView = (props: { node: ResultNode, index: number }) => {
-    const app = useApp()
-
-    async function openFile(attrs: NodeAttributes) {
-        if (app == undefined) return
-        await openFileAndHighlightLine(app, attrs.location.path, attrs.location.position.start, attrs.location.position.end)
-    }
-
-    const attrs = props.node.attrs
-
-    return <div
-        className="search-tree-node"
-        onClick={() => openFile(attrs)}
-    >
-        {props.node.attrs.nodeType == "task" ? <input type={"checkbox"} disabled={true}/> :
-            (props.node.attrs.nodeType == "completed-task" ?
-                <input type={"checkbox"} checked={true} disabled={true}/> : "↳")
-        }
-        <NodeRenderer
-            tokens={props.node.attrs.tokens}/> {props.node.attrs.aliases.length > 0 && `(${props.node.attrs.aliases.join(", ")})`}
-    </div>
-}
-
-export const NodeRenderer = (props: { tokens: Token[] }) => {
-    const tokens = props.tokens
-
-    if (tokens.length == 0) return <></>
-
-    const token = tokens[0]
-
-    if (token.type == "inline" && token.children) {
-        return <NodeRenderer tokens={token.children}/>
-    }
-
-    if (token.type == "obsidian_link") {
-        return <>
-            <a className={"obsidian-link"} href="#" onClick={ev => ev.preventDefault()}>{token.content}</a>
-            <NodeRenderer tokens={tokens.slice(1)}/>
-        </>
-    }
-
-    if (token.type == "link_open") {
-        const href = token.attrs?.[0]?.[1] || "#"
-        const content = tokens[1]?.content
-        return <>
-            <a className={"external-link"} href={href}>{content}</a>
-            <NodeRenderer tokens={tokens.slice(2)}/>
-        </>
-    }
-
-    if (token.type == "link_close") {
-        return <NodeRenderer tokens={tokens.slice(1)}/>
-    }
-
-    if (token.type == "text") {
-        return <>
-            <span>{token.content}</span>
-            <NodeRenderer tokens={tokens.slice(1)}/>
-        </>
-    }
-
-    if (token.type == "strong_open") {
-        return <b>
-            <NodeRenderer tokens={tokens.slice(1)}/>
-        </b>
-    }
-
-    if (token.type == "strong_close") {
-        return <NodeRenderer tokens={tokens.slice(1)}/>
-    }
-
-    if (token.type == "em_open") {
-        return <em><NodeRenderer tokens={tokens.slice(1)}/></em>
-    }
-
-    if (token.type == "softbreak") {
-        return <NodeRenderer tokens={tokens.slice(1)}/>
-    }
-
-    if (token.type == "s_open") {
-        return <s><NodeRenderer tokens={tokens.slice(1)}/></s>
-    }
-
-    // if (!token.type.includes("_close")) console.log("tokens not rendered: ", tokens)
-
-    return <NodeRenderer tokens={tokens.slice(1)}/>
 }
 
 
