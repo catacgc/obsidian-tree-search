@@ -1,36 +1,62 @@
 import {
-	App,
-	Editor,
+	App, debounce,
+	Editor, EventRef,
 	MarkdownView,
 	Plugin,
-	PluginSettingTab,
+	PluginSettingTab, Setting, TFile,
 	WorkspaceLeaf
 } from 'obsidian';
 
 import {TreeSearch, VIEW_TYPE_NAME} from 'src/view/treesearch';
+import {getAPI} from "obsidian-dataview";
+
+import {IndexedTree} from "./src/indexed-tree";
 
 interface TreeSearchSettings {
-	mySetting: string;
+	searchSeparator: string;
 }
 
 const DEFAULT_SETTINGS: TreeSearchSettings = {
-	mySetting: 'defaultValue'
+	searchSeparator: '>'
 }
 
 export default class TreeSearchPlugin extends Plugin {
 	settings: TreeSearchSettings;
+	index: IndexedTree
+	ref: EventRef
+
+	async onunload() {
+		this.ref && this.app.metadataCache.offref(this.ref)
+	}
 
 	async onload() {
-		this.registerView(
-			VIEW_TYPE_NAME,
-			(leaf) => new TreeSearch(leaf)
-		);
+
+		const api = getAPI(this.app);
+		if (api) {
+			this.index = new IndexedTree(api);
+			this.index.refresh()
+
+			this.registerView(
+				VIEW_TYPE_NAME,
+				(leaf) => new TreeSearch(leaf, this.index)
+			);
+		} else {
+			throw new Error("Obsidian Data View plugin is required to use this plugin");
+		}
 
 		this.addRibbonIcon("search", "Tree Search: Open", () => {
 			this.activateView();
 		});
 
 		await this.loadSettings();
+
+		const debouncer = debounce(async (file: TFile) => {
+			await this.index.refreshPage(file)
+		}, 500, true);
+
+		this.ref = this.app.metadataCache.on('changed', async (file) => {
+			debouncer(file);
+		})
 
 		this.addCommand({
 			id: 'parse-tree',
@@ -95,15 +121,15 @@ class SampleSettingTab extends PluginSettingTab {
 
 		containerEl.empty();
 
-		// new Setting(containerEl)
-		// 	.setName('Setting #1')
-		// 	.setDesc('It\'s a secret')
-		// 	.addText(text => text
-		// 		.setPlaceholder('Enter your secret')
-		// 		.setValue(this.plugin.settings.mySetting)
-		// 		.onChange(async (value) => {
-		// 			this.plugin.settings.mySetting = value;
-		// 			await this.plugin.saveSettings();
-		// 		}));
+		new Setting(containerEl)
+			.setName('Graph Levels Search Separator')
+			.setDesc('What you use to search between levels in the graph: e.g. `parent > child`')
+			.addText(text => text
+				.setPlaceholder('Search Separator')
+				.setValue(this.plugin.settings.searchSeparator)
+				.onChange(async (value) => {
+					this.plugin.settings.searchSeparator = value;
+					await this.plugin.saveSettings();
+				}));
 	}
 }

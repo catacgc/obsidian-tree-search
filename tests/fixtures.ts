@@ -1,4 +1,4 @@
-import {DvList, DvPage, indexSinglePage,} from "../src/tree-builder";
+import {DvList, indexSinglePage} from "../src/tree-builder";
 import {ResultNode, searchIndex} from "../src/search";
 import {expect} from "@jest/globals";
 import {NotesGraph} from "../src/graph";
@@ -25,7 +25,15 @@ export function renderResult(result: ResultNode[], indent = ""): string[] {
 	])
 }
 
-export async function testGraphSearch(promiseGraph: Promise<NotesGraph>, qs: string, expected: string) {
+export async function testSearchContains(promiseGraph: Promise<NotesGraph>, qs: string, expected: string) {
+	const graph = await promiseGraph;
+	const resultNodes = searchIndex(graph.graph, qs);
+	const result = renderTextResult(resultNodes);
+	const exp = trimIndent(expected.split("\n")).join("\n");
+	expect(result).toContain(exp)
+}
+
+export async function testSearchEquals(promiseGraph: Promise<NotesGraph>, qs: string, expected: string) {
 	const graph = await promiseGraph;
 	const resultNodes = searchIndex(graph.graph, qs);
 	const result = renderTextResult(resultNodes);

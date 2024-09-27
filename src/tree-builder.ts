@@ -1,10 +1,5 @@
 // import {Notice} from "obsidian";
-import {getAPI} from "obsidian-dataview";
 import {NotesGraph} from "./graph";
-
-export type Index = {
-	graph: NotesGraph
-}
 
 export type DvList = {
 	link: { path: string },
@@ -71,31 +66,10 @@ export async function indexSinglePage(page: DvPage, graph: NotesGraph) {
 			graph.createSubtree(item.text, page, child)
 		}
 	}
+
 }
 
-export async function indexTree(): Promise<Index | undefined> {
-	const dv = getAPI(this.app);
 
-	if (dv == undefined) {
-		console.log("Dataview not enabled")
-		return
-	}
 
-	const pages = dv.pages("")
-		// .where(it => it.file.name == "ImportantProjects")
-
-	const graph = new NotesGraph();
-	const idx: Index = {graph: graph}
-
-	for (const dvp of pages) {
-		if (dvp.file.name == "TreeTest") {
-			console.log(dvp)
-		}
-		const page = dvp as DvPage;
-		await indexSinglePage(page, graph);
-	}
-
-	return idx;
-}
 
 
