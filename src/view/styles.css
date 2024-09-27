@@ -1,0 +1,66 @@
+/*@import "tailwindcss/base";*/
+/*@import "tailwindcss/components";*/
+/*@import "tailwindcss/utilities";*/
+
+.search-tree-container {
+}
+
+.search-tree-separator {
+	width: 100%;
+	height: 1px;
+	background: linear-gradient(to right, rgba(0, 0, 0, 0) 0%, rgba(128, 128, 128, 0.5) 50%, rgba(0, 0, 0, 0) 100%);
+	/*position: absolute;*/
+	/*top: 50%;*/
+	transform: translateY(-50%);
+}
+
+.tree-node {
+	padding: 3px 0 3px 0;
+}
+
+.tree-node:hover {
+	background-color: #f0f0f0;
+}
+
+.obsidian-link {
+	text-decoration: none;
+}
+
+.h1 .h2 .h3 .h4 .h5 .h6 {
+	margin: 0;
+	padding: 0;
+}
+
+/* Tooltip container */
+
+.tooltip-container {
+	position: relative;
+	display: inline-block;
+}
+
+.tree-search-tooltip {
+	visibility: visible;
+	background-color: black;
+	color: #fff;
+	text-align: center;
+	border-radius: 5px;
+	padding: 5px;
+	position: absolute;
+	z-index: 1;
+	top: 0; /* Position in the middle vertically */
+	left: 225%; /* Position to the right of the element */
+	margin-top: -0px; /* Center the tooltip vertically */
+	opacity: 0.9;
+	width: 120px;
+}
+
+.tree-search-tooltip::after {
+	content: "";
+	position: absolute;
+	top: 0; /* In the middle of the tooltip */
+	right: 100%; /* At the left of the tooltip */
+	margin-top: -5px;
+	border-width: 5px;
+	border-style: solid;
+	border-color: transparent black transparent transparent;
+}

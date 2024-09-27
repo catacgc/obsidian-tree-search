@@ -1,6 +1,12 @@
 import {describe, expect, it} from "@jest/globals";
-import {buildIndexFromFixture, fixture, testGraphSearch} from "./fixtures";
+import {buildIndexFromFixture, fixture, testSearchContains, testSearchEquals} from "./fixtures";
+import {NotesGraph} from "../src/graph";
 
+
+async function printGraph(graph: Promise<NotesGraph>) {
+	const data = (await graph).graph.export();
+	console.log(data)
+}
 
 describe('index and search operators', () => {
 	it('should index the sample vault correctly', () => {
@@ -22,7 +28,7 @@ describe('index and search operators', () => {
 			- [[Task2]]
 		`);
 
-		testGraphSearch(nestedGraph, 'Important', `
+		testSearchEquals(nestedGraph, 'Important', `
 		[[ImportantProjects]]
 		 [[Project1]]
 		  [[Task1]]
@@ -39,7 +45,7 @@ describe('index and search operators', () => {
 		- [[Project2]]
 			- [[Task2]]
 		`);
-		testGraphSearch(nestedGraph, 'Important > Project2', `
+		testSearchEquals(nestedGraph, 'Important > Project2', `
 		[[ImportantProjects]]
 		 [[Project2]]
 		  [[Task2]]
@@ -64,14 +70,14 @@ describe('index and search operators', () => {
 			- [[Project2]] with a mention of a few topics [[Topic1]] [[Topic2]]
 			`);
 
-		testGraphSearch(inlineMentions, 'Topic1 -topic2', `
+		testSearchEquals(inlineMentions, 'Topic1 -topic2', `
 			[[Topic1]]
 			 Task1 related to [[Topic1]]
 			 [[Project2]] with a mention of a few topics [[Topic1]] [[Topic2]]
 			Task1 related to [[Topic1]]
 			`);
 
-		testGraphSearch(inlineMentions, 'Project1', `
+		testSearchEquals(inlineMentions, 'Project1', `
 			[[Project1]]
 			 [[Project1]] with an inline mention
 			  Task1 related to [[Topic1]]
@@ -88,7 +94,7 @@ describe('index and search operators', () => {
 		- [[Project2]] with a mention of a few topics [[Topic1]] [[Topic2]]
 		`);
 
-		testGraphSearch(inlineMentions, 'important', `
+		testSearchEquals(inlineMentions, 'important', `
 		[[ImportantProjects]]
 		 [[Project1]]
 		  [[Project1]] with an inline mention
@@ -106,7 +112,7 @@ describe('index and search operators', () => {
 		- [[Project2]] with a mention of a few topics [[Topic1]] [[Topic2]]
 `);
 
-		testGraphSearch(graph, 'topic1', `
+		testSearchEquals(graph, 'topic1', `
 		[[Topic1]]
 		 Task1 related to [[Topic1]]
 		 [[Project2]] with a mention of a few topics [[Topic1]] [[Topic2]]
@@ -114,7 +120,7 @@ describe('index and search operators', () => {
 		[[Project2]] with a mention of a few topics [[Topic1]] [[Topic2]]
 		`);
 
-		testGraphSearch(graph, 'topic2', `
+		testSearchEquals(graph, 'topic2', `
 		[[Topic2]]
 		 [[Project2]] with a mention of a few topics [[Topic1]] [[Topic2]]
 		[[Project2]] with a mention of a few topics [[Topic1]] [[Topic2]]
@@ -127,7 +133,7 @@ describe('index and search operators', () => {
 		- Getting things done [[Books]]
 		`)
 
-		testGraphSearch(graph, 'Books', `
+		testSearchEquals(graph, 'Books', `
 		[[Books]]
 		 Getting things done [[Books]]
 		Getting things done [[Books]]
@@ -146,13 +152,13 @@ describe('index and search operators', () => {
 		`)
 
 
-		testGraphSearch(graph, 'project1', `
+		testSearchEquals(graph, 'project1', `
 		[[Project1]]
 		 [[Task1]]
 		  [[Note1]]
 		  [[Note2]]
 		`);
-		testGraphSearch(graph, 'task1', `
+		testSearchEquals(graph, 'task1', `
 		[[Task1]]
 		 [[Note1]]
 		 [[Note2]]
@@ -166,11 +172,11 @@ describe('index and search operators', () => {
 			- [[Project|Alias]]
 				 - [[Task2]]
 			`, `
-			Project.md,Alias
+			Project.md,{"aliases": ["Alias"]}
 			- [[Task1]]
 			`);
 
-		testGraphSearch(graph, 'alias', `
+		testSearchEquals(graph, 'alias', `
 			[[Project]] Alias
 			 [[Project|Alias]]
 			  [[Task2]]
@@ -187,12 +193,12 @@ describe('index and search operators', () => {
 		- [[DirectChild]]
 		`)
 
-		testGraphSearch(graph, 'Project', `
+		testSearchEquals(graph, 'Project', `
 		[[Project]]
 		 A related note about [[RelatedNote]]
 		 [[DirectChild]]
 		`);
-		testGraphSearch(graph, 'Related', `
+		testSearchEquals(graph, 'Related', `
 		[[RelatedNote]]
 		 A related note about [[RelatedNote]]
 		A related note about [[RelatedNote]]
@@ -207,7 +213,7 @@ describe('index and search operators', () => {
 		`)
 
 
-		testGraphSearch(graph, 'project1', `
+		testSearchEquals(graph, 'project1', `
 		[[Project1]]
 		 [ ] Task1
 		 [x] Task2
@@ -220,18 +226,42 @@ describe('index and search operators', () => {
 			Note.md
 			- [[Project#TaskList]]
 				 - [[Task2]]
+			`,`
+			AnotherNote.md
+			- Inline Ref [[Project#TaskList]]
 			`, `
 			Project.md
 			# TaskList
 			- [[Task1]]
 			`);
 
-		testGraphSearch(graph, 'TaskList', `
+		testSearchContains(graph, 'TaskList', `
 			**TaskList**
 			 [[Project#TaskList]]
 			  [[Task2]]
+			 Inline Ref [[Project#TaskList]]
 			 [[Task1]]
 			[[Project#TaskList]]
+			`);
+	})
+
+	it('header refs with parent search', async () => {
+		const graph = fixture(`
+			AnotherNote.md
+			- Inline Ref [[Project#TaskList]]
+			`, `
+			Project.md
+			# TaskList
+			- [[Task1]]
+			`);
+
+		// await printGraph(graph);
+
+		testSearchContains(graph, 'project > tasklist', `
+			[[Project]]
+			 **TaskList**
+			  Inline Ref [[Project#TaskList]]
+			  [[Task1]]
 			`);
 	})
 });

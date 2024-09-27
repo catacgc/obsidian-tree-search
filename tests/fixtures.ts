@@ -1,12 +1,13 @@
-import {DvList, DvPage, indexSinglePage,} from "../src/tree-builder";
+import {DvList, indexSinglePage} from "../src/tree-builder";
 import {ResultNode, searchIndex} from "../src/search";
 import {expect} from "@jest/globals";
 import {NotesGraph} from "../src/graph";
+import {REACT_PLUGIN_CONTEXT} from "../src/view/PluginContext";
 
 export function buildIndexFromFixture(page: string, lines: string, aliases: string[] = []) {
 	const graph = new NotesGraph()
 	const pageFixture = createFixture(page, lines, aliases);
-	indexSinglePage(pageFixture, graph);
+	indexSinglePage(pageFixture, graph, REACT_PLUGIN_CONTEXT.settings);
 	return graph;
 }
 
@@ -25,7 +26,15 @@ export function renderResult(result: ResultNode[], indent = ""): string[] {
 	])
 }
 
-export async function testGraphSearch(promiseGraph: Promise<NotesGraph>, qs: string, expected: string) {
+export async function testSearchContains(promiseGraph: Promise<NotesGraph>, qs: string, expected: string) {
+	const graph = await promiseGraph;
+	const resultNodes = searchIndex(graph.graph, qs);
+	const result = renderTextResult(resultNodes);
+	const exp = trimIndent(expected.split("\n")).join("\n");
+	expect(result).toContain(exp)
+}
+
+export async function testSearchEquals(promiseGraph: Promise<NotesGraph>, qs: string, expected: string) {
 	const graph = await promiseGraph;
 	const resultNodes = searchIndex(graph.graph, qs);
 	const result = renderTextResult(resultNodes);
@@ -43,13 +52,13 @@ export async function fixture(...fixtures: string[]): Promise<NotesGraph> {
 	const graph = new NotesGraph()
 	for (const fixture of fixtures) {
 		const lines = fixture.trim().split("\n");
-		const pageAndAlias = lines[0].split(",");
-		const pagename = pageAndAlias[0] || "";
-		const aliases = pageAndAlias.slice(1).map(it => it.trim());
+		const pageAliasAndFrontmatter = lines[0].split(",");
+		const pagename = pageAliasAndFrontmatter[0] || "";
+		const frontMatter = JSON.parse(pageAliasAndFrontmatter[1] || "{}")
 		const trimmed = trimIndent(lines.slice(1));
 
-		const pageFixture = createFixture(pagename, trimmed.join("\n"), aliases);
-		await indexSinglePage(pageFixture, graph);
+		const pageFixture = createFixture(pagename, trimmed.join("\n"), frontMatter);
+		await indexSinglePage(pageFixture, graph, REACT_PLUGIN_CONTEXT.settings);
 	}
 
 	return graph
@@ -84,7 +93,7 @@ function trimIndent(lines: string[]): string[] {
 	return trimmedLines;
 }
 
-export function createFixture(path: string, linesStr: string, aliases: string[] = []) {
+export function createFixture(path: string, linesStr: string, frontMatter: any = {}) {
 	const lines = linesStr.trim().split("\n")
 	const name = path.replace(".md", "");
 	let header = ""
@@ -95,18 +104,20 @@ export function createFixture(path: string, linesStr: string, aliases: string[] 
 			header = line;
 		}
 
-		items.push(createItemFixture(name, line, i, header))
+		const tags = line.includes("#archive") ? ["#archive"] : []
+
+		items.push(createItemFixture(name, line, i, header, tags))
 	}
 
 	const page = {
 		"file": {
-			"aliases": {values: aliases},
+			"aliases": {values: frontMatter.aliases || []},
 			"name": name,
 			"path": path,
 			"lists": {
 				"values": items
 			},
-			"frontmatter": {},
+			"frontmatter": frontMatter,
 			"mtime": {
 				"ts": 0,
 				"c": {
@@ -136,7 +147,7 @@ export function embedChildren(lines: DvList[]): DvList[] {
 	return lines
 }
 
-function createItemFixture(file: string, line: string, lineNum: number, header: string): DvList {
+function createItemFixture(file: string, line: string, lineNum: number, header: string, tags: string[]): DvList {
 	return {
 		task: line.includes("- [ ]") || line.includes("- [x]"),
 		completed: false,
@@ -149,7 +160,7 @@ function createItemFixture(file: string, line: string, lineNum: number, header: 
 			"subpath": header
 		},
 		"text": line.replace("-", "").trim(),
-		"tags": [],
+		"tags": tags,
 		"line": lineNum,
 		// "lineCount": 1,
 		// "list": 4,

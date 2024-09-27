@@ -79,10 +79,10 @@ function getParents(graph: Graph, node: string) {
 	return parents;
 }
 
-export function searchIndex(graph: DirectedGraphOfNotes, qs: string): ResultNode[] {
+export function searchIndex(graph: DirectedGraphOfNotes, qs: string, separator = ">"): ResultNode[] {
 	if (qs.length < 3) return []
 
-	const expressions = qs.split(">")
+	const expressions = qs.split(separator)
 		.map(w => w.toLowerCase().trim())
 		.map(it => parseQuery(it))
 
@@ -116,5 +116,3 @@ export function searchIndex(graph: DirectedGraphOfNotes, qs: string): ResultNode
 	return filterDown(filtered, expressions.slice(1))
 		.sort((a, b) => b.children.length - a.children.length)
 }
-
-

@@ -1,29 +1,24 @@
-import {Index, indexTree} from "src/tree-builder";
 import {useEffect, useState} from "react";
 import {ResultNode, searchIndex} from "../search";
-import {NodeView} from "./nodeRenderer";
+import {NotesGraph} from "../graph";
+import {SearchPage} from "./SearchPage";
+import {usePluginContext} from "./PluginContext";
 
-export const SearchView = () => {
-	const [idx, setIdx] = useState<Index>()
+export const SearchView = (props: {version: number, graph: NotesGraph, refresh: () => void}) => {
 	const [search, setSearch] = useState("")
 	const [results, setResults] = useState<ResultNode[]>([])
 	const [pages, setPages] = useState(0)
+	const graph = props.graph
+	const context = usePluginContext()
 
 	async function refreshIndex() {
-		const newIndex = await indexTree()
-		newIndex && setIdx(newIndex)
+		props.refresh()
 	}
 
 	useEffect(() => {
-		refreshIndex()
-	}, []);
-
-	useEffect(() => {
-		if (!idx) return
-
-		setResults(searchIndex(idx.graph.graph, search))
+		setResults(searchIndex(graph.graph, search, context.settings.searchSeparator))
 		setPages(0)
-	}, [search, idx])
+	}, [search, graph, props.version])
 
     return <>
         <div className="search-row">
@@ -88,27 +83,6 @@ export const SearchView = () => {
 		</div>
     </>
 };
-
-export const SearchPage = (props: { results: ResultNode[], page: number }) => {
-
-    return <>
-        {props.results.slice(props.page * 10, (props.page + 1) * 10).map(tree =>
-            <SearchTreeList node={tree} level={0} key={`${tree.value}`}/>)}
-    </>
-}
-
-export const SearchTreeList = (props: { node: ResultNode, level: number }) => {
-
-    return <div className={props.level == 0 ? "search-tree-container" : ""}>
-        <div className={"tree-node indent-" + props.level} style={{paddingLeft: props.level * 10 + "px"}}>
-            <NodeView node={props.node} index={props.level} key={props.node.value}/>
-        </div>
-
-        <div className={"sub-tree indent-" + props.level}>
-            {props.node.children.map(child => <SearchTreeList node={child} level={props.level + 1} key={child.value}/>)}
-        </div>
-    </div>
-}
 
 
 

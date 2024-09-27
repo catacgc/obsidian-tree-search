@@ -71,9 +71,21 @@ export class NotesGraph {
 		this.graph = new Graph<NodeAttributes, EdgeAttributes, GraphAttributes>()
 	}
 
-	addPageNode(page: DvPage): string {
-		const pageRef = "[[" + page.file.name + "]]";
-		this.addNode(pageRef, this.createPageNodeAttribute(page))
+	addPageNode(page: DvPage, parentRelation: string): string {
+		const pageRef = "[[" + page.file.name + "]]"
+
+		if (this.graph.hasNode(pageRef.toLowerCase())) {
+			this.removeExistingPageEdges(page)
+		}
+
+		const pageAttribute = this.createPageNodeAttribute(page);
+		this.addNode(pageRef, pageAttribute)
+
+		const parents = page.file.frontmatter[parentRelation] || [];
+		for (const parent of parents) {
+			this.addNode(parent, this.createVirtualPageNodeAttribute(parent, pageAttribute.location))
+			this.addChild(parent, pageRef, page.file.mtime.ts, pageAttribute.location)
+		}
 
 		return pageRef
 	}
@@ -101,6 +113,44 @@ export class NotesGraph {
 			searchKey: header.toLowerCase(),
 			nodeType: "header"
 		};
+	}
+
+	private pruneDanglingNodes(node: string) {
+		if (this.graph.inDegree(node) == 0) {
+			const outgoingRefs = this.graph.outNeighbors(node)
+			this.graph.dropNode(node)
+			for (const ref of outgoingRefs) {
+				this.pruneDanglingNodes(ref)
+			}
+		}
+	}
+
+	/**
+	 * Gets rid of all edges that where created on this page and that need to be recreated after this
+	 * If a not was created in this page and no other edge points to it, then it will be removed
+	 * TODO: add some tests
+	 */
+	private removeExistingPageEdges(page: DvPage) {
+		const ref = "[[" + page.file.name.toLowerCase() + "]]"
+		const edgesCreatedInFile = this.graph.filterDirectedEdges((_, edge) => edge.location.path == page.file.path);
+
+		// nodes in this file
+		const nodesFromFile = edgesCreatedInFile
+			.map(it => this.graph.extremities(it))
+			.flat()
+			.filter(it => it != ref)
+
+		// delete edges
+		edgesCreatedInFile
+			.forEach(edge => {
+				this.graph.dropEdge(edge)
+			})
+
+		// delete nodes if there's no edge pointing to them
+		new Set(nodesFromFile).forEach(node => {
+			// console.log("remove page node", page.file.path, node)
+			this.pruneDanglingNodes(node)
+		})
 	}
 
 	/**
@@ -164,8 +214,14 @@ export class NotesGraph {
 		}
 
 		for (const ref of created.virtualReferences) {
+			// is this ref equal to the line itself?
 			if (ref.pageTarget.toLowerCase() != created.textLine.toLowerCase()) {
-				this.addChild(ref.pageTarget, created.textLine, page.file.mtime.ts, created.attributes.location)
+				if (!ref.headerKey) {
+					this.addChild(ref.pageTarget, created.textLine, page.file.mtime.ts, created.attributes.location)
+				} else {
+					this.addChild(ref.pageTarget, ref.headerKey, page.file.mtime.ts, created.attributes.location)
+					this.addChild(ref.headerKey, created.textLine, page.file.mtime.ts, created.attributes.location)
+				}
 			}
 
 			if (ref.alias) {

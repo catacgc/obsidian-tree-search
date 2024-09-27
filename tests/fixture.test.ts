@@ -4,7 +4,7 @@ import {describe, expect, test} from "@jest/globals";
 describe('createFixture', () => {
 	test("sample graph", async () => {
 		const graph = await fixture(`
-ImportantProjects.md,alias
+ImportantProjects.md,{"aliases":["alias"]}
 - [[Project1]]
  	- [[Project2]]
  	 	- [[Project3]]
@@ -39,8 +39,8 @@ ImportantProjects.md,alias
 			- [[Note2]]
 		`)
 
-		expect(graph.graph.getNodeAttributes('#header').nodeType).toBe('header')
-		expect(graph.graph.hasEdge('#header', '[[note]]')).toBeTruthy()
+		expect(graph.graph.getNodeAttributes('file#header').nodeType).toBe('header')
+		expect(graph.graph.hasEdge('file#header', '[[note]]')).toBeTruthy()
 		expect(graph.graph.hasEdge('[[note]]', '[[note2]]')).toBeTruthy()
 
 	})

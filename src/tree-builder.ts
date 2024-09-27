@@ -1,10 +1,6 @@
 // import {Notice} from "obsidian";
-import {getAPI} from "obsidian-dataview";
 import {NotesGraph} from "./graph";
-
-export type Index = {
-	graph: NotesGraph
-}
+import {TreeSearchSettings} from "./view/PluginContext";
 
 export type DvList = {
 	link: { path: string },
@@ -43,7 +39,9 @@ export type DvPage = {
 }
 
 // not interested in plain text or random paragraphs
-function shouldSkip(lst: DvList) {
+function shouldSkip(lst: DvList, archiveTag: string) {
+	if (lst.tags.includes(archiveTag)) return true
+
 	return !lst.text.includes("[[")
 		&& !lst.text.includes('![[')
 		&& !lst.text.startsWith('#')
@@ -52,11 +50,14 @@ function shouldSkip(lst: DvList) {
 		;
 }
 
-export async function indexSinglePage(page: DvPage, graph: NotesGraph) {
-	const pageRef = graph.addPageNode(page)
+export async function indexSinglePage(page: DvPage, graph: NotesGraph, settings: TreeSearchSettings) {
+	if ((page.file.frontmatter.tags || []).includes(settings.archiveTag)) return
+
+	const pageRef = graph.addPageNode(page, settings.parentRelation)
 
 	for (const item of page.file.lists.values) {
-		if (shouldSkip(item)) continue
+		const lineArchiveTag = '#' + settings.archiveTag;
+		if (shouldSkip(item, lineArchiveTag)) continue
 
 		if (!item.parent) {
 			graph.createSubtree(pageRef, page, item)
@@ -66,36 +67,15 @@ export async function indexSinglePage(page: DvPage, graph: NotesGraph) {
 		}
 
 		for (const child of item.children) {
-			if (shouldSkip(child)) continue
+			if (shouldSkip(child, lineArchiveTag)) continue
 
 			graph.createSubtree(item.text, page, child)
 		}
 	}
+
 }
 
-export async function indexTree(): Promise<Index | undefined> {
-	const dv = getAPI(this.app);
 
-	if (dv == undefined) {
-		console.log("Dataview not enabled")
-		return
-	}
 
-	const pages = dv.pages("")
-		// .where(it => it.file.name == "ImportantProjects")
-
-	const graph = new NotesGraph();
-	const idx: Index = {graph: graph}
-
-	for (const dvp of pages) {
-		if (dvp.file.name == "TreeTest") {
-			console.log(dvp)
-		}
-		const page = dvp as DvPage;
-		await indexSinglePage(page, graph);
-	}
-
-	return idx;
-}
 
 

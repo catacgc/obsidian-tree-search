@@ -1,8 +1,6 @@
 import {Token} from "markdown-it";
-import {useApp} from "./hooks";
-import {ResultNode} from "../search";
-import {NodeAttributes} from "../graph";
-import {openFileAndHighlightLine, openFileByName} from "../obsidian-utils";
+import {useApp} from "./AppContext";
+import {openFileByName} from "../obsidian-utils";
 
 export const NodeRenderer = (props: { tokens: Token[] }) => {
 	const { tokens } = props
@@ -78,30 +76,3 @@ export const NodeRenderer = (props: { tokens: Token[] }) => {
 	return <NodeRenderer tokens={tokens.slice(1)}/>
 }
 
-export const NodeView = (props: { node: ResultNode, index: number }) => {
-	const app = useApp()
-
-	async function openFile(attrs: NodeAttributes) {
-		if (app == undefined) return
-		await openFileAndHighlightLine(app, attrs.location.path, attrs.location.position.start, attrs.location.position.end)
-	}
-
-	const attrs = props.node.attrs
-
-	return <div
-		className="search-tree-node"
-		onClick={async (ev) => {
-			if (ev.isDefaultPrevented()) {
-				return
-			}
-			await openFile(attrs)
-		}}
-	>
-		{props.node.attrs.nodeType == "task" ? <input type={"checkbox"} disabled={true}/> :
-			(props.node.attrs.nodeType == "completed-task" ?
-				<input type={"checkbox"} checked={true} disabled={true}/> : "↳")
-		}
-		<NodeRenderer
-			tokens={props.node.attrs.tokens}/> {props.node.attrs.aliases.length > 0 && `(${props.node.attrs.aliases.join(", ")})`}
-	</div>
-}
