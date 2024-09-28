@@ -34,4 +34,23 @@ describe('edit capabilities, graph updates', () => {
 		[[Node1]]
 		`)
 	})
+
+	it('should not delete nodes from parent', () => {
+		const graph = fixture(`
+		File.md
+		- [[Node]]`,`
+		Child.md,{"parent": ["[[File]]"]}
+		- [[Node2]]`,`
+		Child.md,{"parent": ["[[File]]"]}
+		- [[Node3]]`
+		);
+
+		testSearchEquals(graph, 'File', `
+		[[File]]
+		 [[Node]]
+		 [[Child]]
+		  [[Node3]]
+		`)
+	})
+
 });

@@ -116,7 +116,8 @@ export class NotesGraph {
 	}
 
 	private pruneDanglingNodes(node: string) {
-		if (this.graph.inDegree(node) == 0) {
+		const attributes = this.graph.getNodeAttributes(node)
+		if (this.graph.inDegree(node) == 0 && attributes.nodeType != "page") {
 			const outgoingRefs = this.graph.outNeighbors(node)
 			this.graph.dropNode(node)
 			for (const ref of outgoingRefs) {
