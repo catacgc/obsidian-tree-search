@@ -52,5 +52,4 @@ describe('edit capabilities, graph updates', () => {
 		  [[Node3]]
 		`)
 	})
-
 });
