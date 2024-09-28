@@ -82,7 +82,7 @@ export default class TreeSearchPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		this.context.settings = Object.assign({}, REACT_PLUGIN_CONTEXT, await this.loadData());
+		this.context.settings = Object.assign({}, REACT_PLUGIN_CONTEXT.settings, await this.loadData());
 		this.index.setSettings(this.context.settings);
 	}
 
