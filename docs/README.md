@@ -129,19 +129,16 @@ The plugin track relations between nodes. The relation have the direction implie
 - If a List Item contains multiple references to other Pages, all Pages are parents of the List Item
 - Tasks are treated identical to List Items
 
-## Features
+## Other Features
 
-- No setup, just install and use
-- Add relations as they happen, no special annotation needed
-- Powerful and very (for a thousand-sized vault) graph search
-- Nested search ( parent / children )
-- Exclude relations via tagging (e.g. #archive)
-- Web pages as first class citizens in the graph
-- Support page aliases
-- Live update of the graph as you type
-- Search results point back to where the relation was recorded
-
-
+- Exclude relations via tagging (#archive, configurable in settings)
+- Web pages as first class citizens in the graph (any time a web page is referenced, it becomes a node)
+- Page aliases support
+- Flexible and fast search. 
+- Live update of the graph as you type.
+- Parent property to link a note to another note without having to nest them (configurable in settings. Needs to be a list property)
+- Search results point back to where the relation was recorded (when you click on them)
+- Hotkey to quickly focus the search bar
 
 ## Found this useful?
 
