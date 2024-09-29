@@ -4,6 +4,7 @@ import {NodeAttributes} from "../graph";
 import {openFileAndHighlightLine} from "../obsidian-utils";
 import {NodeRenderer} from "./NodeRenderer";
 import {ReactNode} from "react";
+import ControlBar from "./ControlBar";
 
 export const NodeView = (props: { node: ResultNode, index: number }) => {
 	const app = useApp()
@@ -38,5 +39,9 @@ export const NodeView = (props: { node: ResultNode, index: number }) => {
 		{heading}
 		<NodeRenderer
 			tokens={props.node.attrs.tokens}/> {props.node.attrs.aliases.length > 0 && `(${props.node.attrs.aliases.join(", ")})`}
+		<ControlBar
+			onArchive={() => console.log('Archive clicked')}
+			onFavourite={() => console.log('Favourite clicked')}
+		/>
 	</div>
 }
