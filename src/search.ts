@@ -49,7 +49,9 @@ function traverseChildren(graph: DirectedGraphOfNotes, node: ResultNode, depth: 
 	if (depth > 3) return
 
 	if (traversedAlready.has(node.value)) return
-	traversedAlready.add(node.value);
+
+	if (graph.outDegree(node.value) > 0)
+		traversedAlready.add(node.value); // add only tree nodes to the traversed set
 
 	const neighbours = graph.outboundEdgeEntries(node.value)
 

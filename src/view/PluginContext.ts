@@ -11,7 +11,7 @@ export class PluginContextContainer {
 
 	constructor() {
 		this.settings = {
-			searchSeparator: ">",
+			searchSeparator: "/", // better for mobile
 			parentRelation: "parent",
 			archiveTag: "archive"
 		}

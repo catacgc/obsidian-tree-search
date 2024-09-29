@@ -14,12 +14,16 @@
 	transform: translateY(-50%);
 }
 
+.search-tree-node {
+	position: relative;
+}
+
 .tree-node {
 	padding: 3px 0 3px 0;
 }
 
 .tree-node:hover {
-	background-color: #f0f0f0;
+	background-color: var(--color-base-30);
 }
 
 .obsidian-link {
