@@ -3,7 +3,7 @@
 	"name": "Tree Search",
 	"version": "0.0.17",
 	"minAppVersion": "0.15.0",
-	"description": "Quickly search hierarchical line trees in Obsidian",
+	"description": "Quickly search hierarchical line trees",
 	"author": "Catalin Costache",
 	"authorUrl": "https://github.com/catacgc",
 	"fundingUrl": "https://github.com/sponsors/catacgc",
