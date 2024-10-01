@@ -8,7 +8,7 @@ export class IndexedTree {
 	private graph: NotesGraph;
 	private dv: DvAPIInterface
 	private version = 0;
-	private changeHandler: (props: {graph: NotesGraph, version: number}) => void;
+	private changeHandlers: Array<(props: {graph: NotesGraph, version: number}) => void> = [];
 	private settings: TreeSearchSettings;
 
 	constructor(dv: DvAPIInterface) {
@@ -34,7 +34,7 @@ export class IndexedTree {
 	}
 
 	onChange(handler: (props: {graph: NotesGraph, version: number}) => void) {
-		this.changeHandler = handler;
+		this.changeHandlers.push(handler);
 	}
 
 	getState() {
@@ -44,7 +44,7 @@ export class IndexedTree {
 	private setState(graph: NotesGraph) {
 		this.graph = graph;
 		const version = this.version++
-		if (this.changeHandler) this.changeHandler({graph, version});
+		this.changeHandlers.forEach(handler => handler({graph, version}));
 	}
 
 	private async rebuildEntireGraph(): Promise<NotesGraph> {

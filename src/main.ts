@@ -9,11 +9,13 @@ import {PluginContextContainer, REACT_PLUGIN_CONTEXT} from "./view/PluginContext
 
 export default class TreeSearchPlugin extends Plugin {
 	index: IndexedTree
-	ref: EventRef
+	private changedRef: EventRef
+	private finishedRef: EventRef;
 	context: PluginContextContainer = REACT_PLUGIN_CONTEXT
 
 	async onunload() {
-		this.ref && this.app.metadataCache.offref(this.ref)
+		this.changedRef && this.app.metadataCache.offref(this.changedRef)
+		this.finishedRef && this.app.metadataCache.offref(this.finishedRef)
 	}
 
 	async onload() {
@@ -31,15 +33,18 @@ export default class TreeSearchPlugin extends Plugin {
 			(leaf) => new TreeSearch(leaf, this.index)
 		);
 
-		this.addRibbonIcon("search", "Tree Search: Open", () => {
-			this.activateView();
-		});
 
 		const debouncer = debounce(async (file: TFile) => {
 			await this.index.refreshPage(file)
 		}, 500, true);
 
-		this.ref = this.app.metadataCache.on('changed', async (file) => {
+		this.finishedRef = this.app.metadataCache.on("initialized", () => {
+			console.log("Refreshing")
+			this.index.refresh()
+			new Notice("Graph refreshed")
+		})
+
+		this.changedRef = this.app.metadataCache.on('changed', async (file) => {
 			debouncer(file);
 		})
 
@@ -47,6 +52,13 @@ export default class TreeSearchPlugin extends Plugin {
 			id: 'parse-tree',
 			name: 'Search',
 			callback: () => this.activateView()
+		this.addCommand({
+			id: 'Refresh-tree',
+			name: 'Refresh',
+			callback: () => {
+				this.index.refresh()
+				new Notice("Graph refreshed")
+			}
 		});
 
 		// This adds a settings tab so the user can configure various aspects of the plugin
