@@ -236,7 +236,7 @@ describe('index and search operators', () => {
 			`);
 
 		testSearchContains(graph, 'TaskList', `
-			**TaskList**
+			[[Project]] > TaskList
 			 [[Project#TaskList]]
 			  [[Task2]]
 			 Inline Ref [[Project#TaskList]]
@@ -259,7 +259,7 @@ describe('index and search operators', () => {
 
 		testSearchContains(graph, 'project > tasklist', `
 			[[Project]]
-			 **TaskList**
+			 [[Project]] > TaskList
 			  Inline Ref [[Project#TaskList]]
 			  [[Task1]]
 			`);

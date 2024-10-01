@@ -1,14 +1,14 @@
-import {App} from "obsidian";
+import {App, TFile} from "obsidian";
 
 export async function openFileAndHighlightLine(app: App, path: string, start: { line: number, col: number }, end: { line: number, col: number }) {
-    const file = app.vault.getAbstractFileByPath(path);
+    const file = app.vault.getFileByPath(path);
     if (file) {
-      const leaf = this.app.workspace.getLeaf();
+      const leaf = app.workspace.getLeaf();
       await leaf.openFile(file);
 
       // Set timeout to ensure the file is loaded
       setTimeout(() => {
-        const editor = this.app.workspace.activeLeaf.view.sourceMode.cmEditor as CodeMirror.Editor;
+        const editor = (leaf as any).view.sourceMode.cmEditor as CodeMirror.Editor;
         editor.setCursor(start.line, 0);
         editor.focus();
         editor.setSelection({ line: start.line, ch: start.col }, { line: end.line, ch: end.col });
@@ -17,11 +17,12 @@ export async function openFileAndHighlightLine(app: App, path: string, start: { 
   }
 
 export async function openFileByName(app: App, fileName: string) {
-	const file = app.vault.getFiles().find(f => f.name === fileName);
+	let file = app.vault.getFiles().find(f => f.name === fileName);
+	const leaf = app.workspace.getLeaf();
 	if (file) {
-		const leaf = app.workspace.getLeaf();
 		await leaf.openFile(file);
 	} else {
-		console.error(`File "${fileName}" not found`);
+		file = await app.vault.create(fileName, '');
+		await leaf.openFile(file);
 	}
 }

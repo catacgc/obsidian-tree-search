@@ -81,7 +81,6 @@ export class NotesGraph {
 		const pageAttribute = this.createPageNodeAttribute(page);
 		this.addNode(pageRef, pageAttribute)
 
-		const parents = page.file.frontmatter[parentRelation] || [];
 		let parents = page.file.frontmatter[parentRelation] || [];
 		if (typeof (parents) == "string") {
 			parents = [parents]
@@ -106,8 +105,8 @@ export class NotesGraph {
 		})
 	}
 
-	createHeaderNode(header: string, location: NodeAttributes['location']): NodeAttributes {
-		const tokens = [...parseMarkdown(`**${header}**`, {})];
+	createHeaderNode(page: string, header: string, location: NodeAttributes['location']): NodeAttributes {
+		const tokens = [...parseMarkdown(`${page} > ${header}`, {})];
 
 		return {
 			location: location,
@@ -172,7 +171,7 @@ export class NotesGraph {
 		// create header nodes
 		if (!item.parent && item.section.subpath) {
 			const trimmedHeaderName = item.section.subpath.replace("#", " ").trim();
-			const header = this.createHeaderNode(trimmedHeaderName, attributes.location)
+			const header = this.createHeaderNode(page.file.name, trimmedHeaderName, attributes.location)
 			headerKey = page.file.name + "#" + trimmedHeaderName
 			this.addNode(page.file.name + "#" + trimmedHeaderName, header)
 		}
@@ -188,7 +187,7 @@ export class NotesGraph {
 			}
 
 			if (ref.headerKey && ref.headerName) {
-				const header = this.createHeaderNode(ref.headerName, attributes.location)
+				const header = this.createHeaderNode(ref.pageTarget, ref.headerName, attributes.location)
 				this.addNode(ref.headerKey, header)
 			}
 		}
