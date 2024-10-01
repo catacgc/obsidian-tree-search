@@ -82,6 +82,10 @@ export class NotesGraph {
 		this.addNode(pageRef, pageAttribute)
 
 		const parents = page.file.frontmatter[parentRelation] || [];
+		let parents = page.file.frontmatter[parentRelation] || [];
+		if (typeof (parents) == "string") {
+			parents = [parents]
+		}
 		for (const parent of parents) {
 			this.addNode(parent, this.createVirtualPageNodeAttribute(parent, pageAttribute.location))
 			this.addChild(parent, pageRef, page.file.mtime.ts, pageAttribute.location)
