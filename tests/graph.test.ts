@@ -34,14 +34,58 @@ ImportantProjects.md,{"aliases":["alias"]}
 	test("headers support", async () => {
 		const graph = await fixture(`
 		File.md
-		#Header
+		# Header
 		- [[Note]]
 			- [[Note2]]
+		- [[Note3#Header]]
+			- [[Note4#Header]]
 		`)
 
 		expect(graph.graph.getNodeAttributes('file#header').nodeType).toBe('header')
 		expect(graph.graph.hasEdge('file#header', '[[note]]')).toBeTruthy()
 		expect(graph.graph.hasEdge('[[note]]', '[[note2]]')).toBeTruthy()
+		expect(graph.graph.hasEdge('file#header', '[[note3]]')).toBeTruthy()
+		expect(graph.graph.hasEdge('[[note3]]', 'note3#header')).toBeTruthy()
+		expect(graph.graph.hasEdge('note3#header', '[[note4]]')).toBeTruthy()
+	})
 
+	test("aliases support", async () => {
+		const graph = await fixture(`
+		File.md
+		- [[Note|A]]
+			- [[Note1|B]]
+		`)
+
+		expect(graph.graph.hasEdge('[[file]]', '[[note]]')).toBeTruthy()
+		expect(graph.graph.hasEdge('[[note]]', '[[note1]]')).toBeTruthy()
+	})
+
+	test("list items support", async () => {
+		const graph = await fixture(`
+		File.md
+		- reference [[Note|A]] [[Note1#B]]
+		`)
+
+		expect(graph.graph.hasEdge('[[file]]', 'reference [[note|a]] [[note1#b]]')).toBeTruthy()
+		expect(graph.graph.hasEdge('[[note]]', 'reference [[note|a]] [[note1#b]]')).toBeTruthy()
+		expect(graph.graph.hasEdge('note1#b', 'reference [[note|a]] [[note1#b]]')).toBeTruthy()
+	})
+
+	test("tags support", async () => {
+		const graph = await fixture(`
+		File.md
+		- reference #tag
+		`)
+
+		expect(graph.graph.hasEdge('[[file]]', 'reference #tag')).toBeTruthy()
+	})
+
+	test("parent with header support", async () => {
+		const graph = await fixture(`
+		File.md,{"parent":["[[some#parent]]"]}
+		`)
+
+		expect(graph.graph.hasEdge('[[some]]', 'some#parent')).toBeTruthy()
+		expect(graph.graph.hasEdge('some#parent', '[[file]]')).toBeTruthy()
 	})
 });

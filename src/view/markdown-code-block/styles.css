@@ -1,0 +1,27 @@
+
+.tree-search-header-container {
+	position: relative;
+	text-align: left;
+	/*margin: 20px 0;*/
+}
+
+.tree-search-header-container::before {
+	content: '';
+	position: absolute;
+	top: 50%;
+	left: 0;
+	right: 0;
+	height: 1px;
+	background: linear-gradient(to right, transparent, var(--color-base-25), transparent);
+	z-index: 0;
+}
+
+.tree-search-header {
+	display: inline-block;
+	position: relative;
+	background-color: var(--background-primary);
+	color: var(--color-base-40) !important;
+	font-size: 0.8em;
+	padding: 0 20px;
+	z-index: 1;
+}

@@ -1,0 +1,11 @@
+.tree-search-help i, .tree-search-help b {
+	color: var(--color-base-40);
+}
+
+.tree-search-help {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    text-align: center;
+    background-color: var(--background-primary);
+}

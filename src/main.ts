@@ -1,11 +1,13 @@
-import {App, debounce, EventRef, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf} from 'obsidian';
+import {App, debounce, EventRef, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf} from 'obsidian';
 
-import {TreeSearch, VIEW_TYPE_NAME} from 'src/view/treesearch';
+import {SEARCH_VIEW, TreeSearch} from 'src/view/obsidian-views/treesearch';
 import {getAPI} from "obsidian-dataview";
 
 import {IndexedTree} from "./indexed-tree";
-import {PluginContextContainer, REACT_PLUGIN_CONTEXT} from "./view/PluginContext";
-
+import {PluginContextContainer, REACT_PLUGIN_CONTEXT} from "./view/react-context/PluginContext";
+import {FILE_CONTEXT, FileContextView} from "./view/obsidian-views/file-context";
+import {ContextCodeBlock} from "./view/markdown-code-block/ContextCodeBlock";
+import {GraphEvents} from "./view/obsidian-views/GraphEvents";
 
 export default class TreeSearchPlugin extends Plugin {
 	index: IndexedTree
@@ -25,33 +27,29 @@ export default class TreeSearchPlugin extends Plugin {
 		}
 
 		this.index = new IndexedTree(api);
-		await this.loadSettings();
-		this.index.refresh()
 
 		this.registerView(
-			VIEW_TYPE_NAME,
+			SEARCH_VIEW,
 			(leaf) => new TreeSearch(leaf, this.index)
 		);
 
-
-		const debouncer = debounce(async (file: TFile) => {
-			await this.index.refreshPage(file)
-		}, 500, true);
-
-		this.finishedRef = this.app.metadataCache.on("initialized", () => {
-			console.log("Refreshing")
-			this.index.refresh()
-			new Notice("Graph refreshed")
-		})
-
-		this.changedRef = this.app.metadataCache.on('changed', async (file) => {
-			debouncer(file);
-		})
+		this.registerView(
+			FILE_CONTEXT,
+			(leaf) => new FileContextView(leaf, this.index)
+		);
 
 		this.addCommand({
 			id: 'parse-tree',
 			name: 'Search',
-			callback: () => this.activateView()
+			callback: () => this.activateView(SEARCH_VIEW)
+		});
+
+		this.addCommand({
+			id: 'file-context',
+			name: 'File Context',
+			callback: () => this.activateView(FILE_CONTEXT)
+		});
+
 		this.addCommand({
 			id: 'Refresh-tree',
 			name: 'Refresh',
@@ -61,15 +59,44 @@ export default class TreeSearchPlugin extends Plugin {
 			}
 		});
 
+		this.addCommand({
+			id: 'highlight-open',
+			name: 'Highlight Search Result',
+			callback: () => {
+				const event = new CustomEvent('highlight-open', { detail: { message: 'Highlight command triggered' } });
+				window.dispatchEvent(event);
+			}
+		});
+
 		// This adds a settings tab so the user can configure various aspects of the plugin
 		this.addSettingTab(new SettingsTab(this.app, this));
+		await this.loadSettings();
+
+        // @ts-ignore
+        this.registerEvent(this.app.workspace.on(GraphEvents.REFRESH_GRAPH, async() => {
+            await this.index.refresh()
+        }))
+
+		const debouncer = debounce(async (file: TFile) => {
+			await this.index.refreshPage(file)
+		}, 500, true);
+
+		this.registerEvent(this.app.metadataCache.on('changed', async (file) => {
+			debouncer(file);
+		}))
+
+		this.registerMarkdownCodeBlockProcessor("tree-search-context", (source, element, context) => {
+			context.addChild(new ContextCodeBlock(source, context, element,
+				this.index, this.app
+			));
+		});
 	}
 
-	async activateView() {
+	async activateView(viewType = SEARCH_VIEW) {
 		const {workspace} = this.app;
 
 		let leaf: WorkspaceLeaf | null = null;
-		const leaves = workspace.getLeavesOfType(VIEW_TYPE_NAME);
+		const leaves = workspace.getLeavesOfType(viewType);
 
 		if (leaves.length > 0) {
 			// A leaf with our view already exists, use that
@@ -80,7 +107,7 @@ export default class TreeSearchPlugin extends Plugin {
 			leaf = workspace.getRightLeaf(false);
 
 			if (leaf) {
-				await leaf.setViewState({type: VIEW_TYPE_NAME, active: true});
+				await leaf.setViewState({type: viewType, active: true});
 			}
 		}
 

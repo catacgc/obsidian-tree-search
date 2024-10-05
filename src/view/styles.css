@@ -2,38 +2,10 @@
 /*@import "tailwindcss/components";*/
 /*@import "tailwindcss/utilities";*/
 
-.search-tree-container {
-}
-
-.search-tree-separator {
-	width: 100%;
-	height: 1px;
-	background: linear-gradient(to right, rgba(0, 0, 0, 0) 0%, rgba(128, 128, 128, 0.5) 50%, rgba(0, 0, 0, 0) 100%);
-	/*position: absolute;*/
-	/*top: 50%;*/
-	transform: translateY(-50%);
-}
-
-.search-tree-node {
-	position: relative;
-}
-
-.tree-node {
-	padding: 3px 0 3px 0;
-}
-
-.tree-node:hover {
-	background-color: var(--color-base-30);
-}
-
-.obsidian-link {
-	text-decoration: none;
-}
-
-.h1 .h2 .h3 .h4 .h5 .h6 {
-	margin: 0;
-	padding: 0;
-}
+@import "./markdown-code-block/styles.css";
+@import "./SearchPage.css";
+@import "./SearchTreeList.css";
+@import "./search/SearchView.css";
 
 /* Tooltip container */
 
@@ -67,4 +39,34 @@
 	border-width: 5px;
 	border-style: solid;
 	border-color: transparent black transparent transparent;
+}
+
+/* Loading animations */
+
+/* Add this to your CSS file */
+@keyframes dot-blink {
+	0% { opacity: 0.2; }
+	20% { opacity: 1; }
+	100% { opacity: 0.2; }
+}
+
+.loading-dots {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	height: 100%;
+}
+
+.loading-dots span {
+	animation: dot-blink 1.4s infinite both;
+	font-size: 60px; /* Increase the size of the dots */
+	margin: 0 5px; /* Adjust spacing between dots */
+}
+
+.loading-dots span:nth-child(2) {
+	animation-delay: 0.2s;
+}
+
+.loading-dots span:nth-child(3) {
+	animation-delay: 0.4s;
 }
