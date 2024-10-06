@@ -1,0 +1,6 @@
+* [Installing](/)
+* [Using it](usage.md "Supercharged backlinks")
+* [Searching](search/index.md)
+* [Feature: Markdown Processor](tree-context/index.md)
+* [Feature: File Context](file-context/index.md)
+* [How It Works](graph.md)

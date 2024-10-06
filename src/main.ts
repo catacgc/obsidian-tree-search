@@ -1,141 +1,192 @@
-import {App, debounce, EventRef, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf} from 'obsidian';
+import {App, debounce, EventRef, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf} from 'obsidian';
 
-import {TreeSearch, VIEW_TYPE_NAME} from 'src/view/treesearch';
+import {SEARCH_VIEW, TreeSearch} from 'src/view/search/treesearch';
 import {getAPI} from "obsidian-dataview";
 
 import {IndexedTree} from "./indexed-tree";
-import {PluginContextContainer, REACT_PLUGIN_CONTEXT} from "./view/PluginContext";
-
+import {PluginContextContainer, REACT_PLUGIN_CONTEXT} from "./view/react-context/PluginContext";
+import {FILE_CONTEXT, FileContextView} from "./view/backlinks/file-context";
+import {ContextCodeBlock} from "./view/markdown-code-block/ContextCodeBlock";
+import {GraphEvents} from "./view/obsidian-views/GraphEvents";
+import {QuickAddModal} from "./view/quick-add/QuickAddModal";
 
 export default class TreeSearchPlugin extends Plugin {
-	index: IndexedTree
-	ref: EventRef
-	context: PluginContextContainer = REACT_PLUGIN_CONTEXT
+    index: IndexedTree
+    private changedRef: EventRef
+    private finishedRef: EventRef;
+    context: PluginContextContainer = REACT_PLUGIN_CONTEXT
 
-	async onunload() {
-		this.ref && this.app.metadataCache.offref(this.ref)
-	}
+    async onunload() {
+        this.changedRef && this.app.metadataCache.offref(this.changedRef)
+        this.finishedRef && this.app.metadataCache.offref(this.finishedRef)
+    }
 
-	async onload() {
-		const api = getAPI(this.app);
-		if (!api) {
-			throw new Error("Obsidian Data View plugin is required to use this plugin");
-		}
+    async onload() {
+        const api = getAPI(this.app);
+        if (!api) {
+            throw new Error("Obsidian Data View plugin is required to use this plugin");
+        }
 
-		this.index = new IndexedTree(api);
-		await this.loadSettings();
-		this.index.refresh()
+        this.index = new IndexedTree(api);
 
-		this.registerView(
-			VIEW_TYPE_NAME,
-			(leaf) => new TreeSearch(leaf, this.index)
-		);
+        this.registerView(
+            SEARCH_VIEW,
+            (leaf) => new TreeSearch(leaf, this.index)
+        );
 
-		this.addRibbonIcon("search", "Tree Search: Open", () => {
-			this.activateView();
-		});
+        this.registerView(
+            FILE_CONTEXT,
+            (leaf) => new FileContextView(leaf, this.index)
+        );
 
-		const debouncer = debounce(async (file: TFile) => {
-			await this.index.refreshPage(file)
-		}, 500, true);
+        this.addCommand({
+            id: 'parse-tree',
+            name: 'Search',
+            callback: () => this.activateView(SEARCH_VIEW)
+        });
 
-		this.ref = this.app.metadataCache.on('changed', async (file) => {
-			debouncer(file);
-		})
+        this.addCommand({
+            id: 'file-context',
+            name: 'File Context',
+            callback: () => this.activateView(FILE_CONTEXT)
+        });
 
-		this.addCommand({
-			id: 'parse-tree',
-			name: 'Search',
-			callback: () => this.activateView()
-		});
+        const quickAddModal = new QuickAddModal(this.app, this.index);
+        quickAddModal.setTitle("Search");
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SettingsTab(this.app, this));
-	}
+        this.addCommand({
+            id: "search-modal",
+            name: "Search Modal",
+            callback: () => {
+                quickAddModal.open();
+            },
+        });
 
-	async activateView() {
-		const {workspace} = this.app;
+        this.addCommand({
+            id: 'Refresh-tree',
+            name: 'Refresh',
+            callback: () => {
+                this.index.refresh()
+                new Notice("Graph refreshed")
+            }
+        });
 
-		let leaf: WorkspaceLeaf | null = null;
-		const leaves = workspace.getLeavesOfType(VIEW_TYPE_NAME);
+        this.addCommand({
+            id: 'highlight-open',
+            name: 'Highlight Search Result',
+            callback: () => {
+                const event = new CustomEvent('highlight-open', {detail: {message: 'Highlight command triggered'}});
+                window.dispatchEvent(event);
+            }
+        });
 
-		if (leaves.length > 0) {
-			// A leaf with our view already exists, use that
-			leaf = leaves[0];
-		} else {
-			// Our view could not be found in the workspace, create a new leaf
-			// in the right sidebar for it
-			leaf = workspace.getRightLeaf(false);
+        // This adds a settings tab so the user can configure various aspects of the plugin
+        this.addSettingTab(new SettingsTab(this.app, this));
+        await this.loadSettings();
 
-			if (leaf) {
-				await leaf.setViewState({type: VIEW_TYPE_NAME, active: true});
-			}
-		}
+        // @ts-ignore
+        this.registerEvent(this.app.workspace.on(GraphEvents.REFRESH_GRAPH, async () => {
+            await this.index.refresh()
+        }))
 
-		// "Reveal" the leaf in case it is in a collapsed sidebar
-		if (leaf) workspace.revealLeaf(leaf);
+        const debouncer = debounce(async (file: TFile) => {
+            await this.index.refreshPage(file)
+        }, 500, true);
 
-		setTimeout(() => {
-			const inputEl = leaf?.view.containerEl.querySelector('input');
-			inputEl?.select()
-		}, 0);
-	}
+        this.registerEvent(this.app.metadataCache.on('changed', async (file) => {
+            debouncer(file);
+        }))
 
-	async loadSettings() {
-		this.context.settings = Object.assign({}, REACT_PLUGIN_CONTEXT.settings, await this.loadData());
-		this.index.setSettings(this.context.settings);
-	}
+        this.registerMarkdownCodeBlockProcessor("tree-context", (source, element, context) => {
+            context.addChild(new ContextCodeBlock(source, context, element,
+                this.index, this.app
+            ));
+        });
+    }
 
-	async saveSettings() {
-		await this.saveData(this.context.settings);
-	}
+    async activateView(viewType = SEARCH_VIEW) {
+        const {workspace} = this.app;
+
+        let leaf: WorkspaceLeaf | null = null;
+        const leaves = workspace.getLeavesOfType(viewType);
+
+        if (leaves.length > 0) {
+            // A leaf with our view already exists, use that
+            leaf = leaves[0];
+        } else {
+            // Our view could not be found in the workspace, create a new leaf
+            // in the right sidebar for it
+            leaf = workspace.getRightLeaf(false);
+
+            if (leaf) {
+                await leaf.setViewState({type: viewType, active: true});
+            }
+        }
+
+        // "Reveal" the leaf in case it is in a collapsed sidebar
+        if (leaf) workspace.revealLeaf(leaf);
+
+        setTimeout(() => {
+            const inputEl = leaf?.view.containerEl.querySelector('input');
+            inputEl?.select()
+        }, 0);
+    }
+
+    async loadSettings() {
+        this.context.settings = Object.assign({}, REACT_PLUGIN_CONTEXT.settings, await this.loadData());
+        this.index.setSettings(this.context.settings);
+    }
+
+    async saveSettings() {
+        await this.saveData(this.context.settings);
+    }
 }
 
 class SettingsTab extends PluginSettingTab {
-	plugin: TreeSearchPlugin;
+    plugin: TreeSearchPlugin;
 
-	constructor(app: App, plugin: TreeSearchPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
+    constructor(app: App, plugin: TreeSearchPlugin) {
+        super(app, plugin);
+        this.plugin = plugin;
+    }
 
-	display(): void {
-		const {containerEl} = this;
+    display(): void {
+        const {containerEl} = this;
 
-		containerEl.empty();
+        containerEl.empty();
 
-		new Setting(containerEl)
-			.setName('Graph Search Separator')
-			.setDesc('What you use to search between levels in the graph: e.g. `parent / child`')
-			.addText(text => text
-				.setPlaceholder('Search Separator')
-				.setValue(this.plugin.context.settings.searchSeparator)
-				.onChange(async (value) => {
-					this.plugin.context.settings.searchSeparator = value;
-					await this.plugin.saveSettings();
-				}));
+        new Setting(containerEl)
+            .setName('Graph Search Separator')
+            .setDesc('What you use to search between levels in the graph: e.g. `parent / child`')
+            .addText(text => text
+                .setPlaceholder('Search Separator')
+                .setValue(this.plugin.context.settings.searchSeparator)
+                .onChange(async (value) => {
+                    this.plugin.context.settings.searchSeparator = value;
+                    await this.plugin.saveSettings();
+                }));
 
-		new Setting(containerEl)
-			.setName('Parent Relation')
-			.setDesc('Frontmatter key that defines the parent relation')
-			.addText(text => text
-				.setPlaceholder('parent')
-				.setValue(this.plugin.context.settings.parentRelation)
-				.onChange(async (value) => {
-					this.plugin.context.settings.parentRelation = value;
-					await this.plugin.saveSettings();
-				}));
+        new Setting(containerEl)
+            .setName('Parent Relation')
+            .setDesc('Frontmatter key that defines the parent relation')
+            .addText(text => text
+                .setPlaceholder('parent')
+                .setValue(this.plugin.context.settings.parentRelation)
+                .onChange(async (value) => {
+                    this.plugin.context.settings.parentRelation = value;
+                    await this.plugin.saveSettings();
+                }));
 
 
-		new Setting(containerEl)
-			.setName('Archive Tag')
-			.setDesc('Archive tag to ignore notes, lines or sections / headers')
-			.addText(text => text
-				.setPlaceholder('archive')
-				.setValue(this.plugin.context.settings.archiveTag)
-				.onChange(async (value) => {
-					this.plugin.context.settings.archiveTag = value;
-					await this.plugin.saveSettings();
-				}));
-	}
+        new Setting(containerEl)
+            .setName('Archive Tag')
+            .setDesc('Archive tag to ignore notes, lines or sections / headers')
+            .addText(text => text
+                .setPlaceholder('archive')
+                .setValue(this.plugin.context.settings.archiveTag)
+                .onChange(async (value) => {
+                    this.plugin.context.settings.archiveTag = value;
+                    await this.plugin.saveSettings();
+                }));
+    }
 }

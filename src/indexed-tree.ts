@@ -2,13 +2,14 @@ import {NotesGraph} from "./graph";
 import {DvAPIInterface} from "obsidian-dataview/lib/typings/api";
 import {TFile} from "obsidian";
 import {DvPage, indexSinglePage} from "./tree-builder";
-import {REACT_PLUGIN_CONTEXT, TreeSearchSettings} from "./view/PluginContext";
+import {REACT_PLUGIN_CONTEXT, TreeSearchSettings} from "./view/react-context/PluginContext";
 
 export class IndexedTree {
 	private graph: NotesGraph;
 	private dv: DvAPIInterface
+    private isLoading = false;
 	private version = 0;
-	private changeHandler: (props: {graph: NotesGraph, version: number}) => void;
+	private changeHandlers: Array<(props: { graph: NotesGraph, version: number }) => void> = [];
 	private settings: TreeSearchSettings;
 
 	constructor(dv: DvAPIInterface) {
@@ -29,12 +30,15 @@ export class IndexedTree {
 	}
 
 	async refresh() {
+        if (this.isLoading) return;
+        this.isLoading = true;
 		const newGraph = await this.rebuildEntireGraph()
 		this.setState(newGraph)
+        this.isLoading = false
 	}
 
-	onChange(handler: (props: {graph: NotesGraph, version: number}) => void) {
-		this.changeHandler = handler;
+	onChange(handler: (props: { graph: NotesGraph, version: number }) => void) {
+		this.changeHandlers.push(handler);
 	}
 
 	getState() {
@@ -43,24 +47,53 @@ export class IndexedTree {
 
 	private setState(graph: NotesGraph) {
 		this.graph = graph;
-		const version = this.version++
-		if (this.changeHandler) this.changeHandler({graph, version});
+		const version = ++this.version
+		this.changeHandlers.forEach(handler => handler({graph, version}));
+	}
+
+	// index all pages in async batches to not block the main thread
+	* batchPages(batchSize: number): Generator<DvPage[]> {
+		const pages = this.dv.pages("")
+		let batch: DvPage[] = [];
+
+		for (const dvp of pages) {
+			const page = dvp as DvPage;
+			batch.push(page);
+
+			if (batch.length === batchSize) {
+				yield batch;
+				batch = [];
+			}
+		}
+
+		if (batch.length > 0) {
+			yield batch;
+		}
 	}
 
 	private async rebuildEntireGraph(): Promise<NotesGraph> {
 
-		const pages = this.dv.pages("")
-
 		const graph = new NotesGraph();
 
-		for (const dvp of pages) {
-			const page = dvp as DvPage;
-			if (page.file.name == "Obsidian Tree Search Plugin") {
-				// console.log(page)
-			}
-			await indexSinglePage(page, graph, this.settings);
+		for (const batch of this.batchPages(10)) {
+			await this.indexBatch(batch, graph);
 		}
 
 		return graph;
+	}
+
+	private indexBatch(batch: DvPage[], graph: NotesGraph) : Promise<boolean> {
+		return new Promise((resolve) => {
+			setTimeout(async () => {
+				for (const page of batch) {
+					if (page.file.name == "Obsidian Tree Search Plugin") {
+						// console.log(page)
+					}
+
+					await indexSinglePage(page, graph, this.settings);
+					resolve(true)
+				}
+			}, 0)
+		})
 	}
 }

@@ -1,9 +1,9 @@
 import {Token} from "markdown-it";
-import {useApp} from "./AppContext";
+import {useApp} from "./react-context/AppContext";
 import {openFileByName} from "../obsidian-utils";
 
 export const NodeRenderer = (props: { tokens: Token[] }) => {
-	const { tokens } = props
+	const {tokens} = props
 	const app = useApp()
 
 	if (tokens.length == 0) return <></>
@@ -21,8 +21,10 @@ export const NodeRenderer = (props: { tokens: Token[] }) => {
 	if (token.type == "obsidian_link") {
 		return <>
 			<a className={"obsidian-link"} href="#" onClick={async ev => {
-					await openFile(token.content + ".md") // TODO: this only opens markdown references
-					ev.preventDefault()
+				let fileName = token.content.split("|")[0]
+				fileName = fileName.split("#")[0]
+				await openFile(fileName) // TODO: this only opens markdown references
+				ev.preventDefault()
 			}
 			}>{token.content}</a>
 			<NodeRenderer tokens={tokens.slice(1)}/>

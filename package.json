@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-tree-search",
-	"version": "0.0.18",
+	"version": "0.5.0",
 	"description": "Quickly search trees of lines in Obsidian",
 	"main": "main.js",
 	"scripts": {
@@ -41,6 +41,7 @@
 	},
 	"dependencies": {
 		"graphology": "^0.25.4",
+		"js-yaml": "^4.1.0",
 		"luxon": "^3.5.0",
 		"markdown-it": "^14.1.0",
 		"promise-worker": "^2.0.1",

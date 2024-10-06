@@ -1,0 +1,30 @@
+.tree-node {
+	white-space: nowrap;
+	width: 1000px !important;
+	cursor: pointer !important;
+}
+
+.tree-node:hover {
+	background-color: var(--color-base-30);
+}
+
+.tree-search-page .cm-formatting-list-ul {
+	padding-right: 10px;
+}
+
+.highlight {
+	background-color: var(--color-base-20);
+}
+
+.obsidian-link {
+	text-decoration: none;
+}
+
+.h1 .h2 .h3 .h4 .h5 .h6 {
+	margin: 0;
+	padding: 0;
+}
+
+.markdown-source-view.mod-cm6 .cm-indent {
+
+}

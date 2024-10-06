@@ -29,4 +29,20 @@ describe('archive support', () => {
 		`)
 	})
 
+	it('excludes marked headers / sections', () => {
+		const graph = fixture(
+			`File.md
+	- http://example.com
+	### -- Archived --
+	- http://example1.com #tag
+	- http://example2.com
+	`
+		);
+
+		testSearchEquals(graph, 'file', `
+		[[File]]
+		 http://example.com
+		`)
+	})
+
 });

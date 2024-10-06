@@ -2,7 +2,7 @@ import {DvList, indexSinglePage} from "../src/tree-builder";
 import {ResultNode, searchIndex} from "../src/search";
 import {expect} from "@jest/globals";
 import {NotesGraph} from "../src/graph";
-import {REACT_PLUGIN_CONTEXT} from "../src/view/PluginContext";
+import {REACT_PLUGIN_CONTEXT} from "../src/view/react-context/PluginContext";
 
 export function buildIndexFromFixture(page: string, lines: string, aliases: string[] = []) {
 	const graph = new NotesGraph()
@@ -28,15 +28,20 @@ export function renderResult(result: ResultNode[], indent = ""): string[] {
 
 export async function testSearchContains(promiseGraph: Promise<NotesGraph>, qs: string, expected: string) {
 	const graph = await promiseGraph;
-	const resultNodes = searchIndex(graph.graph, qs);
+	const resultNodes = searchIndex(graph.graph, qs).nodes;
 	const result = renderTextResult(resultNodes);
 	const exp = trimIndent(expected.split("\n")).join("\n");
 	expect(result).toContain(exp)
 }
 
+export async function testParentOf(promiseGraph: Promise<NotesGraph>, parent: string, child: string) {
+	const graph = await promiseGraph;
+	expect(graph.graph.edge(parent.toLowerCase(), child.toLowerCase())).toBeTruthy()
+}
+
 export async function testSearchEquals(promiseGraph: Promise<NotesGraph>, qs: string, expected: string) {
 	const graph = await promiseGraph;
-	const resultNodes = searchIndex(graph.graph, qs);
+	const resultNodes = searchIndex(graph.graph, qs).nodes;
 	const result = renderTextResult(resultNodes);
 	const exp = trimIndent(expected.split("\n")).join("\n");
 	expect(result).toEqual(exp)
@@ -104,7 +109,8 @@ export function createFixture(path: string, linesStr: string, frontMatter: any =
 			header = line;
 		}
 
-		const tags = line.includes("#archive") ? ["#archive"] : []
+		const tagPattern = /#\w+/g;
+		const tags = line.match(tagPattern) || [];
 
 		items.push(createItemFixture(name, line, i, header, tags))
 	}

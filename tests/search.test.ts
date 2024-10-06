@@ -1,5 +1,5 @@
 import {describe, expect, it} from "@jest/globals";
-import {buildIndexFromFixture, fixture, testSearchContains, testSearchEquals} from "./fixtures";
+import {buildIndexFromFixture, fixture, testParentOf, testSearchContains, testSearchEquals} from "./fixtures";
 import {NotesGraph} from "../src/graph";
 
 
@@ -178,10 +178,8 @@ describe('index and search operators', () => {
 
 		testSearchEquals(graph, 'alias', `
 			[[Project]] Alias
-			 [[Project|Alias]]
-			  [[Task2]]
+			 [[Task2]]
 			 [[Task1]]
-			[[Alias]]
 			[[Project|Alias]]
 			`);
 	})
@@ -235,10 +233,11 @@ describe('index and search operators', () => {
 			- [[Task1]]
 			`);
 
+		testParentOf(graph, '[[Note]]', '[[Project]]');
+
 		testSearchContains(graph, 'TaskList', `
-			**TaskList**
-			 [[Project#TaskList]]
-			  [[Task2]]
+			[[Project]] > TaskList
+			 [[Task2]]
 			 Inline Ref [[Project#TaskList]]
 			 [[Task1]]
 			[[Project#TaskList]]
@@ -259,7 +258,7 @@ describe('index and search operators', () => {
 
 		testSearchContains(graph, 'project > tasklist', `
 			[[Project]]
-			 **TaskList**
+			 [[Project]] > TaskList
 			  Inline Ref [[Project#TaskList]]
 			  [[Task1]]
 			`);

@@ -11,7 +11,7 @@ export class PluginContextContainer {
 
 	constructor() {
 		this.settings = {
-			searchSeparator: "/", // better for mobile
+			searchSeparator: ".", // better for mobile
 			parentRelation: "parent",
 			archiveTag: "archive"
 		}
@@ -20,8 +20,9 @@ export class PluginContextContainer {
 
 export const REACT_PLUGIN_CONTEXT = new PluginContextContainer()
 
-export const PluginContext = createContext<PluginContextContainer>(REACT_PLUGIN_CONTEXT);
+const PluginContext = createContext<PluginContextContainer>(REACT_PLUGIN_CONTEXT);
 
-export const usePluginContext = (): PluginContextContainer => {
-	return useContext(PluginContext);
-};
+export const useSettings = () => {
+    return useContext(PluginContext).settings
+}
+

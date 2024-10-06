@@ -1,6 +1,6 @@
 // import {Notice} from "obsidian";
 import {NotesGraph} from "./graph";
-import {TreeSearchSettings} from "./view/PluginContext";
+import {TreeSearchSettings} from "./view/react-context/PluginContext";
 
 export type DvList = {
 	link: { path: string },
@@ -42,6 +42,13 @@ export type DvPage = {
 function shouldSkip(lst: DvList, archiveTag: string) {
 	if (lst.tags.includes(archiveTag)) return true
 
+	if (lst.section.subpath) {
+		const header = lst.section.subpath.replace(/#/g, " ").trim()
+		if (header.startsWith('--') && header.endsWith('--')) return true
+	}
+
+	if (lst.tags.length > 0) return false;
+
 	return !lst.text.includes("[[")
 		&& !lst.text.includes('![[')
 		&& !lst.text.startsWith('#')
@@ -56,11 +63,15 @@ export async function indexSinglePage(page: DvPage, graph: NotesGraph, settings:
 	const pageRef = graph.addPageNode(page, settings.parentRelation)
 
 	for (const item of page.file.lists.values) {
+		item.text = item.text.trim()
+
 		const lineArchiveTag = '#' + settings.archiveTag;
 		if (shouldSkip(item, lineArchiveTag)) continue
 
-		if (!item.parent) {
-			graph.createSubtree(pageRef, page, item)
+		let childrenParent = item.text
+
+		if (item.parent == undefined) {
+			childrenParent = graph.createSubtree(pageRef, page, item)
 		} else {
 			// just create the node and later handle the edges
 			graph.addItemNode(page, item)
@@ -69,10 +80,9 @@ export async function indexSinglePage(page: DvPage, graph: NotesGraph, settings:
 		for (const child of item.children) {
 			if (shouldSkip(child, lineArchiveTag)) continue
 
-			graph.createSubtree(item.text, page, child)
+			graph.createSubtree(childrenParent, page, child)
 		}
 	}
-
 }
 
 
