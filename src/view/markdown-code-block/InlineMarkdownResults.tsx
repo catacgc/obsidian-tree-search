@@ -1,40 +1,45 @@
-import React, {useEffect, useState} from "react";
-import {ResultNode, searchChildren} from "../../search";
-import {SearchPage} from "../SearchPage";
+import React, {useCallback, useEffect, useState} from "react";
+import {advancedSearch, index, SearchQuery} from "../../search";
 import {TFile} from "obsidian";
 import {useGraph} from "../react-context/GraphContext";
 import {MarkdownContextSettings} from "./ContextCodeBlock";
+import {SearchView} from "../search/SearchView";
 
 export type InlineMarkdownResultsProps = {
-	activeFile: TFile;
-	heading?: string;
+    activeFile: TFile;
+    heading?: string;
     settings: MarkdownContextSettings
 }
 
 export const InlineMarkdownResults: React.FC<InlineMarkdownResultsProps> = (props) => {
-	const [results, setResults] = useState<ResultNode[]>([])
-	const [pages, setPages] = useState(0)
-	const {graph, version} = useGraph()
-	const children = props.heading ? props.activeFile.basename + ' > ' + props.heading : props.activeFile.basename;
+    const {graph, version} = useGraph()
+    const children = props.heading ? props.activeFile.basename + ' > ' + props.heading : props.activeFile.basename;
 
-	useEffect(() => {
-		setResults(searchChildren(graph.graph, props.activeFile, props.settings.depth, props.heading))
-		setPages(0)
-	}, [graph, version, props.activeFile, props.heading])
+    const [showSearch, setShowSearch] = useState(false)
 
-	return <>
-		<div className="tree-search-header-container">
-			<div className="tree-search-header">{children} Children</div>
-		</div>
+    const search = useCallback((query: SearchQuery) => {
+        console.log(query)
+        const searchResults = advancedSearch(graph.graph, props.activeFile,
+            props.settings.depth,
+            props.heading,
+            query.query)
 
-		<div className="search-results">
-			{[...Array(pages + 1)].map((_, page) => (
-				<SearchPage key={`sp-ctx-${page}`} searchResult={results} page={page} pageSize={100} selectedLine={-1}/>
-			))}
+        return index(searchResults)
+    }, [version, props.activeFile, props.heading, showSearch])
 
-			{results.length > (pages + 1) * 100 && <button onClick={() => setPages(pages + 1)}>Next</button>}
-		</div>
-	</>
+    // useEffect(() => {
+    //     // trigger rerender
+    // }, [showSearch, props.activeFile]);
+
+    return <>
+        <div className="tree-search-header-container" onClick={() => setShowSearch(!showSearch)}>
+            <div className="tree-search-header">{children} Children</div>
+        </div>
+
+        {showSearch ?
+            <SearchView searchFunction={search} showSearch={showSearch}></SearchView>
+            : <SearchView searchFunction={search} showSearch={showSearch}></SearchView>}
+    </>
 };
 
 

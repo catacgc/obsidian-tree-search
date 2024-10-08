@@ -2,11 +2,26 @@
 	color: var(--color-base-40);
 }
 
+.flex-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.flex-main {
+    display: flex;
+    flex-direction: column;
+    flex: 1 0 auto;
+    height: 95%;
+    overflow-y: scroll;
+}
+
 .tree-search-help {
     position: absolute;
     bottom: 0;
     width: 90%;
     text-align: center;
+    background-color: var(--color-base-90);
 }
 
 .tree-search-modal {

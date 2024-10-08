@@ -10,8 +10,6 @@ type FileContextComponentProps = {
 };
 
 export const FileContextComponent = (props: FileContextComponentProps) => {
-    const {graph, version} = useGraph();
-
 	const [activeFile, setActiveFile] = useState<TFile | null>(null);
 	const [pin, setPin] = useState<TFile>();
 	const app = useApp();
@@ -47,6 +45,6 @@ export const FileContextComponent = (props: FileContextComponentProps) => {
 		<h4><a href='#' onClick={ev => {openActiveFile(); ev.preventDefault() }}>{(pin || activeFile).basename}</a></h4>
 		<button onClick={() => setPin(pin ? undefined : activeFile)}>{pin ? `Unpin` : "Pin"}</button>
 
-		<FileContextResults version={version} graph={graph} activeFile={pin || activeFile}/>
+		<FileContextResults activeFile={pin || activeFile}/>
 	</>
 }

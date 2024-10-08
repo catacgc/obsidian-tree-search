@@ -74,11 +74,26 @@
   color: var(--color-base-40);
 }
 
+.flex-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.flex-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1 0 auto;
+  height: 95%;
+  overflow-y: scroll;
+}
+
 .tree-search-help {
   position: absolute;
   bottom: 0;
   width: 90%;
   text-align: center;
+  background-color: var(--color-base-90);
 }
 
 .tree-search-modal {
@@ -102,6 +117,26 @@
   position: relative;
   overflow-y: auto;
   /* Scrollable */
+}
+
+.tree-search-modal-instructions {
+  border-top: 1px solid var(--background-secondary);
+  -webkit-user-select: none;
+     -moz-user-select: none;
+          user-select: none;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  padding: var(--size-4-2);
+  text-align: center;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--size-4-3);
+}
+
+.tree-search-modal-instructions .tree-search-modal-instructions-key {
+  font-weight: var(--font-extrabold);
+  margin-right: var(--size-2-2);
 }
 
 /* Tooltip container */

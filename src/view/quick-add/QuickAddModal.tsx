@@ -4,6 +4,7 @@ import {createRoot, Root} from "react-dom/client";
 import {GraphContextProvider} from "../react-context/GraphContextProvider";
 import {SearchContainer} from "../search/SearchContainer";
 import {GraphEvents} from "../obsidian-views/GraphEvents";
+import {Instructions} from "../search/Instructions";
 
 export class QuickAddModal extends Modal {
 
@@ -24,6 +25,7 @@ export class QuickAddModal extends Modal {
                     </div>
                 </div>
             </GraphContextProvider>
+
         );
     }
 

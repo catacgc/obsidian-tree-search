@@ -2,18 +2,27 @@ import {useEffect, useState} from "react";
 import {IndexedResult, ResultNode, SearchQuery} from "../../search";
 import {SearchPage} from "../SearchPage";
 import {useApp} from "../react-context/AppContext";
-import {highlightLine, selectLine} from "../../obsidian-utils";
+import {highlightLine} from "../../obsidian-utils";
 import {SEARCH_ICON} from "src/view/icons";
 import {useGraph} from "../react-context/GraphContext";
 import {useIsLoading} from "../react-context/GraphContextProvider";
 import {GraphEvents} from "../obsidian-views/GraphEvents";
 import {useUrlOpener} from "./useUrlOpener";
+import {Instructions} from "./Instructions";
 
 export type SearchViewProps = {
     searchFunction: (query: SearchQuery) => IndexedResult
+    showSearch?: boolean,
+    context?: string,
+    mode?: "launcher" | "search"
 }
 
-export const SearchView = ({searchFunction}: SearchViewProps) => {
+export const SearchView = ({
+                               searchFunction,
+                               showSearch = true,
+                               context = "global",
+                               mode = "search"
+                           }: SearchViewProps) => {
     const [search, setSearch] = useState("")
     const [indexedResult, setIndexedResult] = useState<IndexedResult>({nodes: [], total: 0})
     const [pages, setPages] = useState(0)
@@ -46,14 +55,10 @@ export const SearchView = ({searchFunction}: SearchViewProps) => {
     const handleCmdEnter = async (event: React.KeyboardEvent<HTMLInputElement>) => {
         const node = findNode(selectedLine, indexedResult.nodes);
         if (node && app) {
-            if (event.ctrlKey || event.metaKey) {
-                setSelectedLine(-1)
-                await selectLine(app, node.attrs.location)
-            }
             if (event.shiftKey) {
-                await tryOpenUrl(app, node)
-            } else {
                 await highlightLine(app, node.attrs.location)
+            } else {
+                await tryOpenUrl(app, node)
             }
         }
     };
@@ -67,7 +72,7 @@ export const SearchView = ({searchFunction}: SearchViewProps) => {
     useEffect(() => {
         setIndexedResult(searchFunction({query: search}))
         setPages(0)
-    }, [search, version])
+    }, [search, version, context])
 
     const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
         if (event.key === 'ArrowUp') {
@@ -91,55 +96,59 @@ export const SearchView = ({searchFunction}: SearchViewProps) => {
     }, [indexedResult.total]);
 
     return <>
-
-            <div className="search-row search-view-top">
-                <a style={{display: "none"}} target="_blank" ref={linkRef} href="#"></a>
-                <div className="search-input-container global-search-input-container">
-                    <input enterKeyHint="search"
-                           type="search"
-                           spellCheck="false"
-                           onChange={ev => setSearch(ev.target.value)}
-                           onKeyDown={handleKeyDown}
-                           value={search}
-                           placeholder="Search..."/>
-                    <div className="search-input-clear-button" aria-label="Clear search"
-                         onClick={() => setSearch("")}></div>
-                </div>
-                <div className="float-search-view-switch">
-                    <div className="clickable-icon" aria-label="Refresh Tree"
-                         onClick={handleRefresh}>
-                        <SEARCH_ICON/>
+        <div className="flex-container">
+            <div className="flex-main">
+                {showSearch &&
+                    <div>
+                        <div className="search-row search-view-top">
+                            <a style={{display: "none"}} target="_blank" ref={linkRef} href="#"></a>
+                            <div className="search-input-container global-search-input-container">
+                                <input enterKeyHint="search"
+                                       type="search"
+                                       spellCheck="false"
+                                       onChange={ev => setSearch(ev.target.value)}
+                                       onKeyDown={handleKeyDown}
+                                       value={search}
+                                       placeholder="Search..."/>
+                                <div className="search-input-clear-button" aria-label="Clear search"
+                                     onClick={() => setSearch("")}></div>
+                            </div>
+                            <div className="float-search-view-switch">
+                                <div className="clickable-icon" aria-label="Refresh Tree"
+                                     onClick={handleRefresh}>
+                                    <SEARCH_ICON/>
+                                </div>
+                                {/*<div className="clickable-icon" aria-label="Search settings">*/}
+                                {/*    <SETTINGS_ICON/>*/}
+                                {/*</div>*/}
+                            </div>
+                        </div>
                     </div>
-                    {/*<div className="clickable-icon" aria-label="Search settings">*/}
-                    {/*    <SETTINGS_ICON/>*/}
-                    {/*</div>*/}
+
+                }
+                <div className="search-results search-view-middle">
+                    {isLoading ? (
+                        <div className="loading-dots">
+                            <span>.</span><span>.</span><span>.</span>
+                        </div>
+                    ) : (
+                        <>
+
+                            {[...Array(pages + 1)].map((_, page) => (
+                                <SearchPage key={page} searchResult={indexedResult.nodes} page={page} pageSize={10}
+                                            selectedLine={selectedLine}
+                                            selectHoveredLine={(l) => setSelectedLine(l)}/>
+                            ))}
+
+                            {indexedResult.nodes.length > (pages + 1) * 10 &&
+                                <button onClick={() => setPages(pages + 1)}>Next</button>}
+                        </>
+                    )}
                 </div>
-
             </div>
+            <Instructions></Instructions>
+        </div>
 
-            <div className="search-results search-view-middle">
-            {isLoading ? (
-                    <div className="loading-dots">
-                        <span>.</span><span>.</span><span>.</span>
-                    </div>
-                ) : (
-                    <>
-
-                        {[...Array(pages + 1)].map((_, page) => (
-                            <SearchPage key={page} searchResult={indexedResult.nodes} page={page} pageSize={10}
-                                        selectedLine={selectedLine}
-                                        selectHoveredLine={(l) => setSelectedLine(l)}/>
-                        ))}
-
-                        {indexedResult.nodes.length > (pages + 1) * 10 &&
-                            <button onClick={() => setPages(pages + 1)}>Next</button>}
-                    </>
-                )}
-            </div>
-
-            {/*<div className="tree-search-help search-view-footer">*/}
-            {/*    <i><b>Enter</b>: highlight | <b>Cmd+Enter</b>: select | <b>Shift+Enter</b>: open URL</i>*/}
-            {/*</div>*/}
     </>
 };
 

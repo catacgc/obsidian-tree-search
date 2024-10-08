@@ -28,5 +28,5 @@ export const SearchContainer = ({refresh = false}: {refresh?: boolean}) => {
         return searchIndex(graph.graph, query.query, searchSeparator)
     }, [version, searchSeparator])
 
-    return <SearchView searchFunction={searchFunction}/>
+    return <SearchView searchFunction={searchFunction} mode={"launcher"}/>
 }

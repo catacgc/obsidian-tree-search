@@ -109,6 +109,51 @@ export function searchParents(graph: DirectedGraphOfNotes, file: TFile): ResultN
     return filtered
 }
 
+export function dfs(query: SearchQuery, graph: DirectedGraphOfNotes, node: string, traversed: Set<string>, maxCount = 300): [ResultNode | null, "has" | "not"] {
+    if (traversed.size > maxCount || traversed.has(node)) return [null, "not"];
+
+    traversed.add(node);
+
+    const newNode: ResultNode = {
+        value: node,
+        children: [],
+        attrs: graph.getNodeAttributes(node),
+        parents: [],
+        index: 0
+    };
+
+    const nodeMatchesQuery = newNode.value.toLowerCase().includes(query.query.toLowerCase());
+    let childHas = false;
+
+    for (const edge of graph.outboundEdgeEntries(node)) {
+        const [childNode, childStatus] = dfs(query, graph, edge.target, traversed, maxCount);
+        if ((childStatus === "has" || nodeMatchesQuery) && childNode) {
+            newNode.children.push(childNode);
+            childHas = true;
+        }
+    }
+
+    return [newNode, nodeMatchesQuery || childHas ? "has" : "not"];
+}
+
+export function advancedSearch(graph: DirectedGraphOfNotes,
+                               file: TFile,
+                               maxDepth = 3,
+                               heading?: string, query?: string): ResultNode[] {
+    let node = `[[${file.basename}]]`.toLowerCase();
+    if (heading) {
+        node = `${file.basename}#${heading}`.toLowerCase();
+    }
+
+    if (query) {
+        const results = dfs({query: query}, graph, node, new Set<string>(), 300)
+        return results[0] ? [results[0]] : []
+    }
+
+    return searchChildren(graph, file, maxDepth, heading)
+}
+
+
 export function searchChildren(graph: DirectedGraphOfNotes,
                                file: TFile,
                                maxDepth = 3,
@@ -143,14 +188,20 @@ export function searchChildren(graph: DirectedGraphOfNotes,
     return filtered
 }
 
-export function indexResults(nodes: ResultNode[], index = 0): number {
+function indexResultsInline(nodes: ResultNode[], index = 0): number {
     let i = index
     for (const node of nodes) {
         node.index = i
         i++
-        i = indexResults(node.children, i)
+        i = indexResultsInline(node.children, i)
     }
     return i
+}
+
+export function index(nodes: ResultNode[]): IndexedResult  {
+    const total = indexResultsInline(nodes)
+
+    return {nodes: nodes, total: total}
 }
 
 export type IndexedResult = { nodes: ResultNode[], total: number }
@@ -193,11 +244,11 @@ export function searchIndex(graph: DirectedGraphOfNotes, qs: string, separator =
     const sorted = filterDown(filtered, expressions.slice(1))
         .sort((a, b) => b.children.length - a.children.length);
 
-    const total = indexResults(sorted)
-
-    return {nodes: sorted, total: total}
+    return index(sorted)
 }
 
 export type SearchQuery = {
-    query: string
+    query: string,
+    file?: string,
+    heading?: string
 }
