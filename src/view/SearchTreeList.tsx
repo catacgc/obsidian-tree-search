@@ -1,4 +1,4 @@
-import {selectLine} from "src/obsidian-utils";
+import {highlightLine} from "src/obsidian-utils";
 import {ResultNode} from "../search";
 import {useApp} from "./react-context/AppContext";
 import {useEffect, useRef} from "react";
@@ -32,8 +32,7 @@ export const SearchTreeList = (props: SearchTreeListProps) => {
     }, [props.selectedLine, props.node.index]);
 
     async function openFile(attrs: NodeAttributes) {
-        if (app == undefined) return;
-        await selectLine(app, attrs.location);
+        await highlightLine(app, attrs.location);
         const customEvent = new CustomEvent(GraphEvents.RESULT_SELECTED, {detail: {type: "mouse"}});
         window.dispatchEvent(customEvent);
     }
