@@ -1,6 +1,5 @@
 import {describe, expect, it} from "@jest/globals";
 import {matchQuery, parseQuery} from "../src/query";
-import { EMPTY_NODE } from "../src/graph";
 
 describe('parseSearchQuery', () => {
 	it('queries', () => {

@@ -100,4 +100,15 @@ ImportantProjects.md,{"aliases":["alias"]}
         expect(graph.graph.hasEdge('[[file]]', '[[child]]')).toBeFalsy()
         expect(graph.graph.hasEdge('[[parent]]', '[[child]]')).toBeTruthy()
     })
+
+    test("create headers as children even if no line exists", async () => {
+        const graph = await fixture(`
+		File.md
+		# Child1
+		# Child2
+		`)
+
+        expect(graph.graph.hasEdge('[[file]]', 'file#child1')).toBeTruthy()
+        expect(graph.graph.hasEdge('[[file]]', 'file#child2')).toBeTruthy()
+    })
 });

@@ -1,20 +1,18 @@
 import {NotesGraph} from "./graph";
 import {DvAPIInterface} from "obsidian-dataview/lib/typings/api";
-import {TFile} from "obsidian";
+import {App, TFile} from "obsidian";
 import {DvPage, indexSinglePage} from "./tree-builder";
 import {REACT_PLUGIN_CONTEXT, TreeSearchSettings} from "./view/react-context/PluginContext";
 
 export class IndexedTree {
 	private graph: NotesGraph;
-	private dv: DvAPIInterface
     private isLoading = false;
 	private version = 0;
 	private changeHandlers: Array<(props: { graph: NotesGraph, version: number }) => void> = [];
 	private settings: TreeSearchSettings;
 
-	constructor(dv: DvAPIInterface) {
+    constructor(private dv: DvAPIInterface, private app: App) {
 		this.graph = new NotesGraph();
-		this.dv = dv;
 		this.settings = REACT_PLUGIN_CONTEXT.settings
 	}
 
@@ -25,6 +23,10 @@ export class IndexedTree {
 	async refreshPage(file: TFile) {
 		const page = this.dv.page(file.path)
 		if (!page) return
+
+        const cache = this.app.metadataCache.getCache(page.file.path);
+        page.headers = cache?.headings ?? [];
+
 		await indexSinglePage(page as DvPage, this.graph, this.settings);
 		this.setState(this.graph)
 	}
@@ -58,7 +60,16 @@ export class IndexedTree {
 
 		for (const dvp of pages) {
 			const page = dvp as DvPage;
+
+            const cache = this.app.metadataCache.getCache(page.file.path);
+            page.headers = cache?.headings ?? [];
+
 			batch.push(page);
+
+            if (page.file.name == "ChildTestPage") {
+                console.log(page)
+                // console.log(cache)
+            }
 
 			if (batch.length === batchSize) {
 				yield batch;
@@ -86,10 +97,6 @@ export class IndexedTree {
 		return new Promise((resolve) => {
 			setTimeout(async () => {
 				for (const page of batch) {
-					if (page.file.name == "Obsidian Tree Search Plugin") {
-						// console.log(page)
-					}
-
 					await indexSinglePage(page, graph, this.settings);
 					resolve(true)
 				}

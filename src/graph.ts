@@ -96,6 +96,8 @@ export class NotesGraph {
 			this.createParentFromRelation(parent, pageAttribute, pageRef, page);
 		}
 
+        this.createHeadersNodes(pageRef, page)
+
 		return pageRef
 	}
 
@@ -220,6 +222,26 @@ export class NotesGraph {
 			attributes: attributes
 		}
 	}
+
+    private createHeadersNodes(pageRef: string, page: DvPage) {
+        for (const header of page.headers) {
+            const position = {
+                start: {line: header.position.start.line, ch: header.position.start.col},
+                end: {line: header.position.end.line, ch: header.position.end.col}
+            };
+            const location = {
+                path: page.file.path,
+                position: position
+            };
+            const headerNode = this.createHeaderNode(page.file.name, header.heading, location)
+            this.addNode(page.file.name + "#" + header.heading, headerNode)
+            this.addEdge(pageRef, page.file.name + "#" + header.heading, {
+                mtime: page.file.mtime.ts,
+                type: "parent",
+                location: location
+            })
+        }
+    }
 
 	private createRefsNodes(obsidianLinkReference: ObsidianRef[], attributes: NodeAttributes) {
 		for (const ref of obsidianLinkReference) {

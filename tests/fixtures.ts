@@ -101,12 +101,26 @@ function trimIndent(lines: string[]): string[] {
 export function createFixture(path: string, linesStr: string, frontMatter: any = {}) {
 	const lines = linesStr.trim().split("\n")
 	const name = path.replace(".md", "");
+
+    const headers = lines.filter(it => it.trim().startsWith("#"))
+        .map(((it, line) => {
+            return {
+                level: 1,
+                heading: it.trim().replace("#", "").trim(),
+                position: {
+                    start: {line:0, col:0, offset:0},
+                    end: {line:0, col:0, offset:0}
+                }
+            }
+        }));
+
 	let header = ""
 	const items: DvList[] = []
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i];
 		if (line.trim().startsWith("#")) {
 			header = line;
+            continue
 		}
 
 		const tagPattern = /#\w+/g;
@@ -116,6 +130,7 @@ export function createFixture(path: string, linesStr: string, frontMatter: any =
 	}
 
 	const page = {
+        "headers": headers,
 		"file": {
 			"aliases": {values: frontMatter.aliases || []},
 			"name": name,
@@ -146,8 +161,8 @@ export function createFixture(path: string, linesStr: string, frontMatter: any =
 export function embedChildren(lines: DvList[]): DvList[] {
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i]
-		if (line.parent !== 0) {
-			lines[line.parent - 1].children.push(line)
+		if (line.parent !== undefined) {
+			lines.find(it => it.line == line.parent)?.children.push(line)
 		}
 	}
 	return lines
@@ -174,7 +189,7 @@ function createItemFixture(file: string, line: string, lineNum: number, header: 
 		"children": [],
 		// "task": false,
 		// "annotated": false,
-		"parent": line.startsWith("-") ? 0 : lineNum,
+		"parent": line.startsWith("-") ? undefined : lineNum - 1,
 		"position": {
 			"start": {
 				"line": lineNum,

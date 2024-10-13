@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { App } from 'obsidian';
-import { openFileByName } from '../../obsidian-utils';
+import {highlightLine, openFileByName} from '../../obsidian-utils';
 import {ResultNode} from "../../search";
 
 export const useUrlOpener = () => {
@@ -25,6 +25,8 @@ export const useUrlOpener = () => {
                 linkRef.current.href = url;
                 linkRef.current.click();
                 break;
+            } else {
+                await highlightLine(app, node.attrs.location);
             }
         }
     };

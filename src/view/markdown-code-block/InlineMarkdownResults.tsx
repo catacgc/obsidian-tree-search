@@ -18,7 +18,6 @@ export const InlineMarkdownResults: React.FC<InlineMarkdownResultsProps> = (prop
     const [showSearch, setShowSearch] = useState(false)
 
     const search = useCallback((query: SearchQuery) => {
-        console.log(query)
         const searchResults = advancedSearch(graph.graph, props.activeFile,
             props.settings.depth,
             props.heading,
