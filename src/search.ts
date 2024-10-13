@@ -13,9 +13,8 @@ export type ResultNode = {
 }
 
 function filterTreeByWord(node: ResultNode, expr: SearchExpr): ResultNode | null {
-    // Check if the current node contains the expr
-    if (matchQuery(node.attrs.searchKey, expr)) {
-        return node;
+    if (matchQuery(node.attrs, expr)) {
+        return node
     }
 
     // Recursively filter the children
@@ -109,8 +108,10 @@ export function searchParents(graph: DirectedGraphOfNotes, file: TFile): ResultN
     return filtered
 }
 
-export function dfs(query: SearchQuery, graph: DirectedGraphOfNotes, node: string, traversed: Set<string>, maxCount = 300): [ResultNode | null, "has" | "not"] {
+export function dfs(query: SearchExpr, graph: DirectedGraphOfNotes, node: string, traversed: Set<string>, maxCount = 300): [ResultNode | null, "has" | "not"] {
     if (traversed.size > maxCount || traversed.has(node)) return [null, "not"];
+
+    if (!graph.hasNode(node)) return [null, "not"];
 
     traversed.add(node);
 
@@ -122,7 +123,7 @@ export function dfs(query: SearchQuery, graph: DirectedGraphOfNotes, node: strin
         index: 0
     };
 
-    const nodeMatchesQuery = newNode.value.toLowerCase().includes(query.query.toLowerCase());
+    const nodeMatchesQuery = matchQuery(newNode.attrs, query);
     let childHas = false;
 
     for (const edge of graph.outboundEdgeEntries(node)) {
@@ -146,8 +147,9 @@ export function advancedSearch(graph: DirectedGraphOfNotes,
     }
 
     if (query) {
-        const results = dfs({query: query}, graph, node, new Set<string>(), 300)
-        return results[0] ? [results[0]] : []
+        const expr = parseQuery(query)
+        const results = dfs(expr, graph, node, new Set<string>(), 30000)
+        return results[0] ? results[0].children : []
     }
 
     return searchChildren(graph, file, maxDepth, heading)
@@ -204,6 +206,26 @@ export function index(nodes: ResultNode[]): IndexedResult  {
     return {nodes: nodes, total: total}
 }
 
+export function flattenTasks(nodes: ResultNode[]): IndexedResult {
+    
+    function search(children: ResultNode[], result: ResultNode[], parent?: ResultNode) {
+        for (const node of children) {
+            if (node.attrs.nodeType == "task") {
+                node.attrs.tokens.push(...parent?.attrs.tokens || [])
+                result.push(node)
+            }
+
+            search(node.children, result, node)
+        }
+    }
+
+    const result: ResultNode[] = []
+    search(nodes, result)
+    const total = indexResultsInline(result)
+
+    return {nodes: result, total: total}
+}
+
 export type IndexedResult = { nodes: ResultNode[], total: number }
 
 export function searchIndex(graph: DirectedGraphOfNotes, qs: string, separator = ">", maxDepth = 3): IndexedResult {
@@ -217,12 +239,12 @@ export function searchIndex(graph: DirectedGraphOfNotes, qs: string, separator =
 
     const pageNodes = graph.filterNodes((_, attrs) =>
         attrs.nodeType == "page" &&
-        matchQuery(attrs.searchKey, expressions[0]))
+        matchQuery(attrs, expressions[0]))
         .sort((a, b) => a.length - b.length)
 
     const textNodes = graph.filterNodes((_, attrs) =>
         attrs.nodeType != "page" &&
-        matchQuery(attrs.searchKey, expressions[0]))
+        matchQuery(attrs, expressions[0]))
         .sort((a, b) => a.length - b.length) // always favour traversal of shorter matches first
 
     const traversed = new Set<string>()

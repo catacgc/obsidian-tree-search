@@ -1,6 +1,7 @@
 // import {Notice} from "obsidian";
 import {NotesGraph} from "./graph";
 import {TreeSearchSettings} from "./view/react-context/PluginContext";
+import {HeadingCache} from "obsidian";
 
 export type DvList = {
 	link: { path: string },
@@ -16,7 +17,7 @@ export type DvList = {
 			col: number
 		}
 	}
-	parent: number,
+	parent?: number,
 	children: DvList[],
 	tags: string[],
 	section: {
@@ -36,6 +37,7 @@ export type DvPage = {
 		lists: { values: DvList[] },
 		tags: string[]
 	},
+    headers: HeadingCache[]
 }
 
 // not interested in plain text or random paragraphs
@@ -70,7 +72,7 @@ export async function indexSinglePage(page: DvPage, graph: NotesGraph, settings:
 
 		let childrenParent = item.text
 
-		if (item.parent == undefined) {
+		if (item.parent === undefined) {
 			childrenParent = graph.createSubtree(pageRef, page, item)
 		} else {
 			// just create the node and later handle the edges

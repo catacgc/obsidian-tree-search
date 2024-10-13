@@ -25,8 +25,8 @@ export const SearchContainer = ({refresh = false}: {refresh?: boolean}) => {
     }, [version, refresh]);
 
     const searchFunction = useCallback((query: SearchQuery) => {
-        return searchIndex(graph.graph, query.query, searchSeparator)
+        return searchIndex(graph.graph, query.query, searchSeparator, 5)
     }, [version, searchSeparator])
 
-    return <SearchView searchFunction={searchFunction} mode={"launcher"}/>
+    return <SearchView minExpand={5} searchFunction={searchFunction} mode={"launcher"}/>
 }

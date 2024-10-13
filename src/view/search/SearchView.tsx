@@ -14,14 +14,18 @@ export type SearchViewProps = {
     searchFunction: (query: SearchQuery) => IndexedResult
     showSearch?: boolean,
     context?: string,
-    mode?: "launcher" | "search"
+    mode?: "launcher" | "search",
+    minExpand?: number,
+    pageSize?: number
 }
 
 export const SearchView = ({
                                searchFunction,
                                showSearch = true,
                                context = "global",
-                               mode = "search"
+                               mode = "search",
+                               minExpand = 3,
+                               pageSize = 20
                            }: SearchViewProps) => {
     const [search, setSearch] = useState("")
     const [indexedResult, setIndexedResult] = useState<IndexedResult>({nodes: [], total: 0})
@@ -29,6 +33,8 @@ export const SearchView = ({
     const {version} = useGraph()
     const isLoading = useIsLoading()
     const app = useApp()
+    const [defaultExpandLevel, setDefaultExpandLevel] = useState(minExpand)
+    const [userSetExpandLevel, setUserSetExpandLevel] = useState(minExpand)
 
     const [selectedLine, setSelectedLine] = useState(0);
 
@@ -63,6 +69,15 @@ export const SearchView = ({
         }
     };
 
+    const inc = () => {
+        setDefaultExpandLevel(ex => ex + 1)
+        setUserSetExpandLevel(ex => ex + 1)
+    }
+    const dec = () => {
+        setDefaultExpandLevel(ex => ex - 1 > 0 ? ex - 1 : 0)
+        setUserSetExpandLevel(ex => ex - 1 > 0 ? ex - 1 : 0)
+    }
+
     const handleRefresh = () => {
         if (app) {
             app.workspace.trigger(GraphEvents.REFRESH_GRAPH)
@@ -70,8 +85,17 @@ export const SearchView = ({
     }
 
     useEffect(() => {
-        setIndexedResult(searchFunction({query: search}))
+        const results = searchFunction({ query: search });
+        setIndexedResult(results)
         setPages(0)
+
+        // this is a bit of magic, but indentation should expand with number of results
+        // in order to keep rendering really fast
+        // max indentation at 20 results
+        // min indentation at 200 resuls
+        const renderedExpand = Math.max(0, 10 - results.total / 20)
+        
+        setDefaultExpandLevel(search.length >= 3 ? renderedExpand : userSetExpandLevel)
     }, [search, version, context])
 
     const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -96,57 +120,63 @@ export const SearchView = ({
     }, [indexedResult.total]);
 
     return <>
-        <div className="flex-container">
-            <div className="flex-main">
-                {showSearch &&
-                    <div>
-                        <div className="search-row search-view-top">
-                            <a style={{display: "none"}} target="_blank" ref={linkRef} href="#"></a>
-                            <div className="search-input-container global-search-input-container">
-                                <input enterKeyHint="search"
-                                       type="search"
-                                       spellCheck="false"
-                                       onChange={ev => setSearch(ev.target.value)}
-                                       onKeyDown={handleKeyDown}
-                                       value={search}
-                                       placeholder="Search..."/>
-                                <div className="search-input-clear-button" aria-label="Clear search"
-                                     onClick={() => setSearch("")}></div>
-                            </div>
-                            <div className="float-search-view-switch">
-                                <div className="clickable-icon" aria-label="Refresh Tree"
-                                     onClick={handleRefresh}>
-                                    <SEARCH_ICON/>
-                                </div>
-                                {/*<div className="clickable-icon" aria-label="Search settings">*/}
-                                {/*    <SETTINGS_ICON/>*/}
-                                {/*</div>*/}
-                            </div>
+        {showSearch &&
+            <div>
+                <div className="search-row search-view-top">
+                    <a style={{display: "none"}} target="_blank" ref={linkRef} href="#"></a>
+                    <div className="search-input-container global-search-input-container">
+                        <input enterKeyHint="search"
+                               type="search"
+                               spellCheck="false"
+                               onChange={ev => setSearch(ev.target.value)}
+                               onKeyDown={handleKeyDown}
+                               value={search}
+                               placeholder="Search..."/>
+                        <div className="search-input-clear-button" aria-label="Clear search"
+                             onClick={() => setSearch("")}></div>
+                    </div>
+                    <div className="float-search-view-switch">
+                        <div className="clickable-icon" aria-label="Refresh Tree"
+                             onClick={handleRefresh}>
+                            <SEARCH_ICON/>
+                        </div>
+                        <div className="clickable-icon" aria-label="Search settings"
+                            onClick={dec}
+                        >
+                           -
+                        </div>
+                        <div className="clickable-icon" aria-label="Search settings"
+                            onClick={inc}
+                        >
+                           +
                         </div>
                     </div>
-
-                }
-                <div className="search-results search-view-middle">
-                    {isLoading ? (
-                        <div className="loading-dots">
-                            <span>.</span><span>.</span><span>.</span>
-                        </div>
-                    ) : (
-                        <>
-
-                            {[...Array(pages + 1)].map((_, page) => (
-                                <SearchPage key={page} searchResult={indexedResult.nodes} page={page} pageSize={10}
-                                            selectedLine={selectedLine}
-                                            selectHoveredLine={(l) => setSelectedLine(l)}/>
-                            ))}
-
-                            {indexedResult.nodes.length > (pages + 1) * 10 &&
-                                <button onClick={() => setPages(pages + 1)}>Next</button>}
-                        </>
-                    )}
                 </div>
             </div>
-            <Instructions></Instructions>
+
+        }
+        <div className="search-results search-view-middle">
+            {isLoading ? (
+                <div className="loading-dots">
+                    <span>.</span><span>.</span><span>.</span>
+                </div>
+            ) : (
+                <>
+
+                    {[...Array(pages + 1)].map((_, page) => (
+                        <SearchPage key={page} 
+                                    minExpand={defaultExpandLevel}
+                                    searchResult={indexedResult.nodes} 
+                                    page={page} 
+                                    pageSize={pageSize}
+                                    selectedLine={selectedLine}
+                                    selectHoveredLine={(l) => setSelectedLine(l)}/>
+                    ))}
+
+                    {indexedResult.nodes.length > (pages + 1) * pageSize &&
+                        <button onClick={() => setPages(pages + 1)}>Next</button>}
+                </>
+            )}
         </div>
 
     </>
@@ -164,7 +194,4 @@ function findNode(selectedLine: number, nodes: ResultNode[]) {
 
     return find(nodes);
 }
-
-
-
 

@@ -5,7 +5,7 @@ export async function highlightLine(app: App, loc: Location) {
 	const file = app.vault.getFileByPath(loc.path);
 	if (file) {
 		const leaf = app.workspace.getLeaf();
-		await leaf.openFile(file, {active: false});
+		await leaf.openFile(file, {active: true});
 
 		setTimeout(() => {
             const view = app.workspace?.activeEditor?.editor
@@ -20,7 +20,8 @@ export async function highlightLine(app: App, loc: Location) {
 }
 
 export async function openFileByName(app: App, basename: string) {
-	let file = app.vault.getFiles().find(f => f.basename === basename);
+	// let file = app.vault.getFiles().find(f => f.basename === basename);
+	let file = app.metadataCache.getFirstLinkpathDest(basename, basename)
 	const leaf = app.workspace.getLeaf();
 	if (file) {
 		await leaf.openFile(file, {active: false});
