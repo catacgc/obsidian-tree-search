@@ -6,7 +6,7 @@ import {SearchContainer} from "../search/SearchContainer";
 import {GraphEvents} from "../obsidian-views/GraphEvents";
 import {Instructions} from "../search/Instructions";
 
-export class QuickAddModal extends Modal {
+export class SearchModal extends Modal {
 
     root: Root | null = null;
 

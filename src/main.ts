@@ -5,10 +5,10 @@ import {getAPI} from "obsidian-dataview";
 
 import {IndexedTree} from "./indexed-tree";
 import {PluginContextContainer, REACT_PLUGIN_CONTEXT} from "./view/react-context/PluginContext";
-import {FILE_CONTEXT, FileContextView} from "./view/backlinks/file-context";
+import {FILE_CONTEXT, FileContextView} from "./view/file-context/file-context";
 import {ContextCodeBlock} from "./view/markdown-code-block/ContextCodeBlock";
 import {GraphEvents} from "./view/obsidian-views/GraphEvents";
-import {QuickAddModal} from "./view/quick-add/QuickAddModal";
+import {SearchModal} from "./view/search-modal/SearchModal";
 
 export default class TreeSearchPlugin extends Plugin {
     index: IndexedTree
@@ -27,7 +27,7 @@ export default class TreeSearchPlugin extends Plugin {
             throw new Error("Obsidian Data View plugin is required to use this plugin");
         }
 
-        this.index = new IndexedTree(api);
+        this.index = new IndexedTree(api, this.app);
 
         this.registerView(
             SEARCH_VIEW,
@@ -51,7 +51,7 @@ export default class TreeSearchPlugin extends Plugin {
             callback: () => this.activateView(FILE_CONTEXT)
         });
 
-        const quickAddModal = new QuickAddModal(this.app, this.index);
+        const quickAddModal = new SearchModal(this.app, this.index);
         quickAddModal.setTitle("Search");
 
         this.addCommand({

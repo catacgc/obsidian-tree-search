@@ -1,4 +1,4 @@
-import { NodeAttributes } from "./graph";
+import {NodeAttributes} from "./graph";
 
 export type SearchExpr = {
 	operator: "and" | "or" | "not" | "value",
@@ -6,16 +6,35 @@ export type SearchExpr = {
 	value: string
 };
 
-function matchesExpr(text: string, expr: SearchExpr): boolean {
+function matchesExpr(attrs: NodeAttributes, expr: SearchExpr): boolean {
 	if (expr.operator === "and") {
-		return expr.children.every(c => matchesExpr(text, c));
+		return expr.children.every(c => matchesExpr(attrs, c));
 	} else if (expr.operator === "or") {
-		return expr.children.some(c => matchesExpr(text, c));
+		return expr.children.some(c => matchesExpr(attrs, c));
 	} else if (expr.operator === "not") {
-		return !matchesExpr(text, expr.children[0]);
+		return !matchesExpr(attrs, expr.children[0]);
 	} else {
-		return text.includes(expr.value);
+		return matchNode(attrs, expr);
 	}
+}
+
+
+function matchNode(attrs: NodeAttributes, expr: SearchExpr) {
+    if (expr.operator === "value" && expr.value.startsWith(":")) {
+        if (expr.value == ":task" && attrs.nodeType == "task") {
+            return true
+        }
+
+        if (expr.value == ":page" && (attrs.nodeType == "page" || attrs.nodeType == "virtual-page")) {
+            return true
+        }
+
+        if (expr.value == ":header" && (attrs.nodeType == "header")) {
+            return true
+        }
+    }
+
+    return attrs.searchKey.includes(expr.value)
 }
 
 export function parseQuery(query: string): SearchExpr {
@@ -52,6 +71,6 @@ export function parseQuery(query: string): SearchExpr {
 	return root;
 }
 
-export function matchQuery(key: string, searchExpr: SearchExpr): boolean {
-	return matchesExpr(key, searchExpr);
+export function matchQuery(attr: NodeAttributes, searchExpr: SearchExpr): boolean {
+	return matchesExpr(attr, searchExpr);
 }

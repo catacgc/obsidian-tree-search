@@ -1,13 +1,14 @@
 import {describe, expect, it} from "@jest/globals";
 import {matchQuery, parseQuery} from "../src/query";
-import { EMPTY_NODE } from "../src/graph";
+import { EMPTY_NODE, NodeAttributes } from "../src/graph";
 
 describe('parseSearchQuery', () => {
 	it('queries', () => {
 		const text = "This is a sample text for testing";
 
 		function matchQueryT(text: string, query: string) {
-			return matchQuery(text, parseQuery(query));
+			const attrs: NodeAttributes = {...EMPTY_NODE, ...{searchKey: text}}
+			return matchQuery(attrs, parseQuery(query));
 		}
 
 		expect(matchQueryT(text, "-for")).toBeFalsy();

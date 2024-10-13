@@ -4,6 +4,11 @@
 	cursor: pointer !important;
 }
 
+.is-collapsed .list-bullet:after {
+    background-color: var(--list-marker-color-collapsed);
+    box-shadow: 0 0 0 4px var(--background-modifier-active-hover);
+}
+
 .tree-node:hover {
 	background-color: var(--color-base-30);
 }
@@ -23,8 +28,4 @@
 .h1 .h2 .h3 .h4 .h5 .h6 {
 	margin: 0;
 	padding: 0;
-}
-
-.markdown-source-view.mod-cm6 .cm-indent {
-
 }
