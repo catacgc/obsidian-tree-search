@@ -19,6 +19,15 @@ export const FileContextResults: React.FC<FileContextProps> = (props) => {
 		setParents(searchParents(graph.graph, props.activeFile))
     }, [graph, version, props.activeFile])
 
+    const searchTasks = useCallback((query: SearchQuery) => {
+        const searchResults = advancedSearch(graph.graph, props.activeFile,
+            30,
+            "",
+            ":task")
+
+        return index(searchResults)
+    }, [graph, version, props.activeFile, showSearch])
+
     const search = useCallback((query: SearchQuery) => {
         if (query.query.length < 3) {
             return index(searchChildren(graph.graph, props.activeFile, 1))
@@ -33,14 +42,17 @@ export const FileContextResults: React.FC<FileContextProps> = (props) => {
     }, [graph, version, props.activeFile, showSearch])
 
 	return <>
-		<h5>Parents</h5>
-		<div className="search-results">
-		<SearchPage searchResult={parents} page={0} pageSize={100} selectedLine={-1} key={"sp-parents"}/>
-		</div>
-		<h5 onClick={() => setShowSearch(!showSearch)}>Children</h5>
+        <h5>Parents</h5>
+        <div className="search-results">
+            <SearchPage searchResult={parents} page={0} pageSize={100} selectedLine={-1} key={"sp-parents"}/>
+        </div>
+        <h5>Tasks</h5>
+        <SearchView showSearch={false} searchFunction={searchTasks} context={props.activeFile.basename}></SearchView>
+
+        <h5 onClick={() => setShowSearch(!showSearch)}>Children</h5>
 
         <SearchView searchFunction={search} showSearch={showSearch} context={props.activeFile.basename}></SearchView>
-	</>
+    </>
 };
 
 

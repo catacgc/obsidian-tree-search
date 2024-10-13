@@ -5,7 +5,7 @@ type TooltipProps = {
 	children: React.ReactNode;
 };
 
-const Tooltip: React.FC<TooltipProps> = ({ text, children }) => {
+const w: React.FC<TooltipProps> = ({ text, children }) => {
 	const [visible, setVisible] = useState(false);
 
 	return (

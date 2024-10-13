@@ -5,7 +5,7 @@ import {getAPI} from "obsidian-dataview";
 
 import {IndexedTree} from "./indexed-tree";
 import {PluginContextContainer, REACT_PLUGIN_CONTEXT} from "./view/react-context/PluginContext";
-import {FILE_CONTEXT, FileContextView} from "./view/backlinks/file-context";
+import {FILE_CONTEXT, FileContextView} from "./view/file-context/file-context";
 import {ContextCodeBlock} from "./view/markdown-code-block/ContextCodeBlock";
 import {GraphEvents} from "./view/obsidian-views/GraphEvents";
 import {QuickAddModal} from "./view/quick-add/QuickAddModal";
@@ -27,7 +27,7 @@ export default class TreeSearchPlugin extends Plugin {
             throw new Error("Obsidian Data View plugin is required to use this plugin");
         }
 
-        this.index = new IndexedTree(api);
+        this.index = new IndexedTree(api, this.app);
 
         this.registerView(
             SEARCH_VIEW,

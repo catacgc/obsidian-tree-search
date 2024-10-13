@@ -33,14 +33,19 @@ describe('archive support', () => {
 		const graph = fixture(
 			`File.md
 	- http://example.com
-	### -- Archived --
+	# -- Archived --
 	- http://example1.com #tag
 	- http://example2.com
+	# Not Archived
+	- http://example4.com
 	`
 		);
 
 		testSearchEquals(graph, 'file', `
 		[[File]]
+		 File > -- Archived --
+		 File > Not Archived
+		  http://example4.com
 		 http://example.com
 		`)
 	})

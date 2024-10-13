@@ -40,7 +40,12 @@ export const SearchTreeList = (props: SearchTreeListProps) => {
     return (
         <>
             <div className="tree-node"
-                 onMouseMove={() => props.selectHoveredLine(props.node.index)}
+                 onMouseMove={
+                     (ev) => {
+                         props.selectHoveredLine(props.node.index);
+                         ev.preventDefault();
+                     }
+                 }
                  onClick={async (ev) => {
                      if (ev.isDefaultPrevented()) {
                          return;

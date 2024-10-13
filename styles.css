@@ -70,6 +70,10 @@
 .markdown-source-view.mod-cm6 .cm-indent {
 }
 
+:root {
+  --instructions-height: 64px;
+}
+
 .tree-search-help i, .tree-search-help b {
   color: var(--color-base-40);
 }
@@ -81,11 +85,15 @@
 }
 
 .flex-main {
-  display: flex;
-  flex-direction: column;
-  flex: 1 0 auto;
-  height: 95%;
-  overflow-y: scroll;
+  flex: 1;
+  /*height: calc(100% - var(--instructions-height));*/
+  overflow-y: auto;
+}
+
+.flex-footer {
+  position: sticky;
+  bottom: 0;
+  /*background-color: va;*/
 }
 
 .tree-search-help {

@@ -5,7 +5,7 @@ export async function highlightLine(app: App, loc: Location) {
 	const file = app.vault.getFileByPath(loc.path);
 	if (file) {
 		const leaf = app.workspace.getLeaf();
-		await leaf.openFile(file, {active: false});
+		await leaf.openFile(file, {active: true});
 
 		setTimeout(() => {
             const view = app.workspace?.activeEditor?.editor

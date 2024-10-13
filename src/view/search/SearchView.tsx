@@ -96,57 +96,52 @@ export const SearchView = ({
     }, [indexedResult.total]);
 
     return <>
-        <div className="flex-container">
-            <div className="flex-main">
-                {showSearch &&
-                    <div>
-                        <div className="search-row search-view-top">
-                            <a style={{display: "none"}} target="_blank" ref={linkRef} href="#"></a>
-                            <div className="search-input-container global-search-input-container">
-                                <input enterKeyHint="search"
-                                       type="search"
-                                       spellCheck="false"
-                                       onChange={ev => setSearch(ev.target.value)}
-                                       onKeyDown={handleKeyDown}
-                                       value={search}
-                                       placeholder="Search..."/>
-                                <div className="search-input-clear-button" aria-label="Clear search"
-                                     onClick={() => setSearch("")}></div>
-                            </div>
-                            <div className="float-search-view-switch">
-                                <div className="clickable-icon" aria-label="Refresh Tree"
-                                     onClick={handleRefresh}>
-                                    <SEARCH_ICON/>
-                                </div>
-                                {/*<div className="clickable-icon" aria-label="Search settings">*/}
-                                {/*    <SETTINGS_ICON/>*/}
-                                {/*</div>*/}
-                            </div>
-                        </div>
+        {showSearch &&
+            <div>
+                <div className="search-row search-view-top">
+                    <a style={{display: "none"}} target="_blank" ref={linkRef} href="#"></a>
+                    <div className="search-input-container global-search-input-container">
+                        <input enterKeyHint="search"
+                               type="search"
+                               spellCheck="false"
+                               onChange={ev => setSearch(ev.target.value)}
+                               onKeyDown={handleKeyDown}
+                               value={search}
+                               placeholder="Search..."/>
+                        <div className="search-input-clear-button" aria-label="Clear search"
+                             onClick={() => setSearch("")}></div>
                     </div>
-
-                }
-                <div className="search-results search-view-middle">
-                    {isLoading ? (
-                        <div className="loading-dots">
-                            <span>.</span><span>.</span><span>.</span>
+                    <div className="float-search-view-switch">
+                        <div className="clickable-icon" aria-label="Refresh Tree"
+                             onClick={handleRefresh}>
+                            <SEARCH_ICON/>
                         </div>
-                    ) : (
-                        <>
-
-                            {[...Array(pages + 1)].map((_, page) => (
-                                <SearchPage key={page} searchResult={indexedResult.nodes} page={page} pageSize={10}
-                                            selectedLine={selectedLine}
-                                            selectHoveredLine={(l) => setSelectedLine(l)}/>
-                            ))}
-
-                            {indexedResult.nodes.length > (pages + 1) * 10 &&
-                                <button onClick={() => setPages(pages + 1)}>Next</button>}
-                        </>
-                    )}
+                        {/*<div className="clickable-icon" aria-label="Search settings">*/}
+                        {/*    <SETTINGS_ICON/>*/}
+                        {/*</div>*/}
+                    </div>
                 </div>
             </div>
-            <Instructions></Instructions>
+
+        }
+        <div className="search-results search-view-middle">
+            {isLoading ? (
+                <div className="loading-dots">
+                    <span>.</span><span>.</span><span>.</span>
+                </div>
+            ) : (
+                <>
+
+                    {[...Array(pages + 1)].map((_, page) => (
+                        <SearchPage key={page} searchResult={indexedResult.nodes} page={page} pageSize={10}
+                                    selectedLine={selectedLine}
+                                    selectHoveredLine={(l) => setSelectedLine(l)}/>
+                    ))}
+
+                    {indexedResult.nodes.length > (pages + 1) * 10 &&
+                        <button onClick={() => setPages(pages + 1)}>Next</button>}
+                </>
+            )}
         </div>
 
     </>
