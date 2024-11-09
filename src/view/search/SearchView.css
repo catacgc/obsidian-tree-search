@@ -18,6 +18,10 @@
     overflow-y: auto;
 }
 
+.float-search-view-switch {
+    display: flex;
+}
+
 .flex-footer {
     position: sticky;
     bottom: 0;
