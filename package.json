@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-tree-search",
-	"version": "0.9.2",
+	"version": "0.9.3",
 	"description": "Quickly search trees of lines in Obsidian",
 	"main": "main.js",
 	"scripts": {
