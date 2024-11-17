@@ -196,6 +196,8 @@ class SettingsTab extends PluginSettingTab {
         helpDesc.append(helpDesc.createEl("a", { href: "https://catacgc.github.io/tree-search-docs/Roadmap-and-Release-Notes/ReleaseNotes", text: "What's new" }))
         helpDesc.append(" • ");
         helpDesc.append(helpDesc.createEl("a", { href: "https://catacgc.github.io/tree-search-docs", text: "Documentation" }))
+        helpDesc.append(" • ");
+        helpDesc.append(helpDesc.createEl("a", { href: "https://github.com/catacgc/obsidian-tree-search", text: "Repo & Issue Reporting" }))
         div.append(helpDesc)
     }
 }
