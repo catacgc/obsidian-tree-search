@@ -30,7 +30,7 @@ export const SearchView = ({
     const [search, setSearch] = useState("")
     const [indexedResult, setIndexedResult] = useState<IndexedResult>({nodes: [], total: 0})
     const [pages, setPages] = useState(0)
-    const {version} = useGraph()
+    const {version, graph} = useGraph()
     const isLoading = useIsLoading()
     const app = useApp()
     const [defaultExpandLevel, setDefaultExpandLevel] = useState(minExpand)
@@ -131,7 +131,7 @@ export const SearchView = ({
                                onChange={ev => setSearch(ev.target.value)}
                                onKeyDown={handleKeyDown}
                                value={search}
-                               placeholder="Search..."/>
+                               placeholder={`Search ${graph.graph.nodes().length} nodes and ${graph.graph.edges().length} edges` }/>
                         <div className="search-input-clear-button" aria-label="Clear search"
                              onClick={() => setSearch("")}></div>
                     </div>

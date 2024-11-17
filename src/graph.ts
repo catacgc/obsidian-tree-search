@@ -2,7 +2,6 @@ import Graph from "graphology";
 import {Token} from "markdown-it";
 import {DvList, DvPage} from "./tree-builder";
 import {parseMarkdown} from "./parser";
-import {searchIndex} from "./search";
 
 export type NodeAttributes = {
 	location: Location

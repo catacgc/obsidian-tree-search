@@ -7,18 +7,18 @@ import {GraphEvents} from "../obsidian-views/GraphEvents";
 import {useApp} from "../react-context/AppContext";
 
 
-export const SearchContainer = ({refresh = false}: {refresh?: boolean}) => {
+export const SearchContainer = ({refresh = true}: {refresh?: boolean}) => {
 
     const {graph, version} = useGraph()
     const {searchSeparator} = useSettings()
     const app = useApp()
 
     useEffect(() => {
-        // try refreshing the graph
-        if (version > 0 || !refresh) return;
+        // try refreshing the graph; nodes count is a good proxy
+        if (graph.graph.nodes().length > 0 || !refresh) return;
 
         const interval = setInterval(() => {
-            version === 0 && app.workspace.trigger(GraphEvents.REFRESH_GRAPH);
+            graph.graph.nodes().length === 0 && app.workspace.trigger(GraphEvents.REFRESH_GRAPH);
         }, 2000, 20);
 
         return () => clearInterval(interval);

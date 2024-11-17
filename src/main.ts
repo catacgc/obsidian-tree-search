@@ -188,5 +188,14 @@ class SettingsTab extends PluginSettingTab {
                     this.plugin.context.settings.archiveTag = value;
                     await this.plugin.saveSettings();
                 }));
+
+        const div = containerEl.createDiv()
+        div.setCssStyles({fontStyle: "italic", borderTop: "1px solid #ddd"})
+        const helpDesc = document.createDocumentFragment();
+        helpDesc.append("v" + this.plugin.manifest.version, " • ");
+        helpDesc.append(helpDesc.createEl("a", { href: "https://catacgc.github.io/tree-search-docs/Roadmap-and-Release-Notes/ReleaseNotes", text: "What's new" }))
+        helpDesc.append(" • ");
+        helpDesc.append(helpDesc.createEl("a", { href: "https://catacgc.github.io/tree-search-docs", text: "Documentation" }))
+        div.append(helpDesc)
     }
 }

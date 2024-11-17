@@ -66,11 +66,6 @@ export class IndexedTree {
 
 			batch.push(page);
 
-            if (page.file.name == "ChildTestPage") {
-                console.log(page)
-                // console.log(cache)
-            }
-
 			if (batch.length === batchSize) {
 				yield batch;
 				batch = [];

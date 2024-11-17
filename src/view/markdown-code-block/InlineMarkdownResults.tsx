@@ -35,9 +35,7 @@ export const InlineMarkdownResults: React.FC<InlineMarkdownResultsProps> = (prop
             <div className="tree-search-header">{children} Children</div>
         </div>
 
-        {showSearch ?
-            <SearchView searchFunction={search} showSearch={showSearch}></SearchView>
-            : <SearchView searchFunction={search} showSearch={showSearch}></SearchView>}
+        <SearchView searchFunction={search} showSearch={showSearch} minExpand={props.settings.depth}></SearchView>
     </>
 };
 
