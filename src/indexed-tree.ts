@@ -61,8 +61,13 @@ export class IndexedTree {
 		for (const dvp of pages) {
 			const page = dvp as DvPage;
 
-            const cache = this.app.metadataCache.getCache(page.file.path);
-            page.headers = cache?.headings ?? [];
+			if (this.app.metadataCache.isUserIgnored &&
+				this.app.metadataCache.isUserIgnored(page.file.path)) {
+					continue
+				}
+
+			const cache = this.app.metadataCache.getCache(page.file.path);
+			page.headers = cache?.headings ?? [];
 
 			batch.push(page);
 
