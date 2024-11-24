@@ -1,24 +1,30 @@
-import {App, debounce, EventRef, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf} from 'obsidian';
+import { App, debounce, EventRef, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf } from 'obsidian';
 
-import {SEARCH_VIEW, TreeSearch} from 'src/view/search/treesearch';
-import {getAPI} from "obsidian-dataview";
+import { SEARCH_VIEW, TreeSearch } from 'src/view/search/treesearch';
+import { getAPI } from "obsidian-dataview";
 
-import {IndexedTree} from "./indexed-tree";
-import {PluginContextContainer, REACT_PLUGIN_CONTEXT} from "./view/react-context/PluginContext";
-import {FILE_CONTEXT, FileContextView} from "./view/file-context/file-context";
-import {ContextCodeBlock} from "./view/markdown-code-block/ContextCodeBlock";
-import {GraphEvents} from "./view/obsidian-views/GraphEvents";
-import {SearchModal} from "./view/search-modal/SearchModal";
+import { IndexedTree } from "./indexed-tree";
+import { PluginContextContainer, REACT_PLUGIN_CONTEXT } from "./view/react-context/PluginContext";
+import { FILE_CONTEXT, FileContextView } from "./view/file-context/file-context";
+import { ContextCodeBlock } from "./view/markdown-code-block/ContextCodeBlock";
+import { GraphEvents } from "./view/obsidian-views/GraphEvents";
+import { SearchModal } from "./view/search-modal/SearchModal";
+import fs from 'fs';
+
+import http, { IncomingMessage, RequestListener, ServerResponse } from 'http'
+import { searchIndex } from './search';
 
 export default class TreeSearchPlugin extends Plugin {
     index: IndexedTree
     private changedRef: EventRef
     private finishedRef: EventRef;
+    private server: http.Server | null = null;
     context: PluginContextContainer = REACT_PLUGIN_CONTEXT
 
     async onunload() {
         this.changedRef && this.app.metadataCache.offref(this.changedRef)
         this.finishedRef && this.app.metadataCache.offref(this.finishedRef)
+        this.server?.close()
     }
 
     async onload() {
@@ -75,7 +81,7 @@ export default class TreeSearchPlugin extends Plugin {
             id: 'highlight-open',
             name: 'Highlight search result',
             callback: () => {
-                const event = new CustomEvent('highlight-open', {detail: {message: 'Highlight command triggered'}});
+                const event = new CustomEvent('highlight-open', { detail: { message: 'Highlight command triggered' } });
                 window.dispatchEvent(event);
             }
         });
@@ -102,10 +108,46 @@ export default class TreeSearchPlugin extends Plugin {
                 this.index, this.app
             ));
         });
+
+        const requestListener = (req: IncomingMessage, res: ServerResponse) => {
+            // get query parameter
+            const query = req.url?.split('?')[1]?.split('=')[1];
+
+            // decode the url
+            const decodedQuery = decodeURIComponent(query || "");
+
+            console.log("Search from raycast " + decodedQuery);
+
+            if (!decodedQuery) {
+                res.end("No query provided  ");
+            }
+
+            const result = searchIndex(this.index.getState().graph, decodedQuery, ".", 5);
+
+            const jsonContent = JSON.stringify(result);
+            res.end(jsonContent);
+        };
+
+        this.server = http.createServer(requestListener);
+        const socketFileName = this.context.settings.socketPath.replace("{vaultname}", this.app.vault.getName());
+
+        // delete socketFileName if it exists
+        if (fs.existsSync(socketFileName)) {
+            fs.unlink(socketFileName, (err: any) => {
+                if (err) {
+                    console.error(err)
+                }
+            });
+        }
+
+
+        this.server.listen(socketFileName, function () {
+            console.log("Server is Listening at Port " + socketFileName);
+        });
     }
 
     async activateView(viewType = SEARCH_VIEW) {
-        const {workspace} = this.app;
+        const { workspace } = this.app;
 
         let leaf: WorkspaceLeaf | null = null;
         const leaves = workspace.getLeavesOfType(viewType);
@@ -119,7 +161,7 @@ export default class TreeSearchPlugin extends Plugin {
             leaf = workspace.getRightLeaf(false);
 
             if (leaf) {
-                await leaf.setViewState({type: viewType, active: true});
+                await leaf.setViewState({ type: viewType, active: true });
             }
         }
 
@@ -135,6 +177,7 @@ export default class TreeSearchPlugin extends Plugin {
     async loadSettings() {
         this.context.settings = Object.assign({}, REACT_PLUGIN_CONTEXT.settings, await this.loadData());
         this.index.setSettings(this.context.settings);
+        await this.saveSettings(); // do this to make sure to create data.json
     }
 
     async saveSettings() {
@@ -151,7 +194,7 @@ class SettingsTab extends PluginSettingTab {
     }
 
     display(): void {
-        const {containerEl} = this;
+        const { containerEl } = this;
 
         containerEl.empty();
 
@@ -189,8 +232,22 @@ class SettingsTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
+        new Setting(containerEl)
+            .setName('Raycast API socket path')
+            .setDesc('Copy this when configuring the companion Raycast extension')
+            .addText(text => text
+                .setPlaceholder('socket')
+                .setValue(this.plugin.context.settings.socketPath.replace("{vaultname}", this.app.vault.getName()))
+                .setDisabled(true));
+
+        // no need so far to do this configurable
+        // .onChange(async (value) => {
+        //     this.plugin.context.settings.socketPath = value;
+        //     await this.plugin.saveSettings();
+        // }));
+
         const div = containerEl.createDiv()
-        div.setCssStyles({fontStyle: "italic", borderTop: "1px solid #ddd"})
+        div.setCssStyles({ fontStyle: "italic", borderTop: "1px solid #ddd" })
         const helpDesc = document.createDocumentFragment();
         helpDesc.append("v" + this.plugin.manifest.version, " • ");
         helpDesc.append(helpDesc.createEl("a", { href: "https://catacgc.github.io/tree-search-docs/Roadmap-and-Release-Notes/ReleaseNotes", text: "What's new" }))

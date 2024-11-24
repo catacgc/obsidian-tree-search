@@ -3,7 +3,8 @@ import {createContext, useContext} from "react";
 export interface TreeSearchSettings {
 	searchSeparator: string;
 	parentRelation: string;
-	archiveTag: string
+	archiveTag: string;
+	socketPath: string;
 }
 
 export class PluginContextContainer {
@@ -13,7 +14,8 @@ export class PluginContextContainer {
 		this.settings = {
 			searchSeparator: ".", // better for mobile
 			parentRelation: "parent",
-			archiveTag: "archive"
+			archiveTag: "archive",
+			socketPath: "/tmp/raycast-{vaultname}.sock"
 		}
 	}
 }
