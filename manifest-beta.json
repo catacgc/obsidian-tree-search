@@ -1,9 +1,9 @@
 {
 	"id": "tree-search",
 	"name": "Tree Search",
-	"version": "0.9.3",
+	"version": "0.9.4",
 	"minAppVersion": "0.15.0",
-	"description": "Quickly search hierarchical line trees",
+	"description": "The all-in-one quick switcher and bookmark manager. Zero-effort hierachical knowledge graph",
 	"author": "Catalin Costache",
 	"authorUrl": "https://github.com/catacgc",
 	"fundingUrl": "https://github.com/sponsors/catacgc",
