@@ -1,7 +1,7 @@
 {
 	"id": "tree-search",
 	"name": "Tree Search",
-	"version": "0.9.4",
+	"version": "0.9.5",
 	"minAppVersion": "0.15.0",
 	"description": "The all-in-one quick switcher and bookmark manager. Zero-effort hierachical knowledge graph",
 	"author": "Catalin Costache",
