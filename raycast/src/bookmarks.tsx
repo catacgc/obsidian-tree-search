@@ -179,7 +179,7 @@ function RaycastTokenRenderer(tokens: Token[], actions: ReactNode[]): string {
   }
 
   if (token.type == "link_open") {
-    const href = token.attrs?.[0]?.[1] || "#";
+    const href = decodeURI(token.attrs?.[0]?.[1] || "#");
     const content = tokens[1]?.content;
 
     actions.push(
