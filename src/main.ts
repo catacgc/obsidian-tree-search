@@ -1,4 +1,4 @@
-import { App, debounce, EventRef, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf } from 'obsidian';
+import { App, debounce, EventRef, Notice, Platform, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf } from 'obsidian';
 
 import { SEARCH_VIEW, TreeSearch } from 'src/view/search/treesearch';
 import { getAPI } from "obsidian-dataview";
@@ -28,10 +28,19 @@ export default class TreeSearchPlugin extends Plugin {
     }
 
     async onload() {
+        if (!await this.waitForDataview()) {
+            // @ts-ignore
+            this.app.metadataCache.on("dataview:index-ready", async () => await this.waitForDataview())
+        }
+    }
+
+    async waitForDataview(): Promise<boolean> {
         const api = getAPI(this.app);
         if (!api) {
-            throw new Error("Dataview is required to use this plugin");
+            return false
         }
+
+        console.log("Enabling tree search; dataview index ready")
 
         this.index = new IndexedTree(api, this.app);
 
@@ -108,6 +117,14 @@ export default class TreeSearchPlugin extends Plugin {
                 this.index, this.app
             ));
         });
+
+        this.createRaycastSocket()
+
+        return true
+    }
+
+    createRaycastSocket() {
+        if (!Platform.isMacOS) return;
 
         const requestListener = (req: IncomingMessage, res: ServerResponse) => {
             // get query parameter
@@ -250,7 +267,7 @@ class SettingsTab extends PluginSettingTab {
         div.setCssStyles({ fontStyle: "italic", borderTop: "1px solid #ddd" })
         const helpDesc = document.createDocumentFragment();
         helpDesc.append("v" + this.plugin.manifest.version, " • ");
-        helpDesc.append(helpDesc.createEl("a", { href: "https://catacgc.github.io/tree-search-docs/Roadmap-and-Release-Notes/ReleaseNotes", text: "What's new" }))
+        helpDesc.append(helpDesc.createEl("a", { href: "https://catacgc.github.io/tree-search-docs/ReleaseNotes", text: "What's new" }))
         helpDesc.append(" • ");
         helpDesc.append(helpDesc.createEl("a", { href: "https://catacgc.github.io/tree-search-docs", text: "Documentation" }))
         helpDesc.append(" • ");

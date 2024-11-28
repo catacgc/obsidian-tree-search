@@ -19,7 +19,7 @@ export const SearchContainer = ({refresh = true}: {refresh?: boolean}) => {
 
         const interval = setInterval(() => {
             graph.graph.nodes().length === 0 && app.workspace.trigger(GraphEvents.REFRESH_GRAPH);
-        }, 2000, 20);
+        }, 2000, 5);
 
         return () => clearInterval(interval);
     }, [version, refresh]);
