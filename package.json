@@ -1,7 +1,7 @@
 {
 	"name": "obsidian-tree-search",
-	"version": "0.9.5",
-	"description": "Quickly search trees of lines in Obsidian",
+	"version": "0.9.6",
+	"description": "All in one graph search, quick switcher, bookmark manager and MOC manager",
 	"main": "main.js",
 	"scripts": {
 		"watch:css": "npx tailwindcss -i src/view/styles.css -o ./styles.css --watch",
