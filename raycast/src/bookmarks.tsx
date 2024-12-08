@@ -8,7 +8,7 @@ import {
 import { ReactNode, useEffect, useState } from "react";
 import { searchBookmarks, VaultResults } from "./fetch";
 import debounce from "lodash.debounce";
-import { IndexedResult, ResultNode } from "obsidian-tree-search/src/search";
+import { ResultNode } from "obsidian-tree-search/src/search";
 import React from "react";
 import { Token } from "markdown-it/index.js";
 
@@ -35,8 +35,14 @@ function getVaultColor(vault: string, vaults: string[]): string {
 export const IndividualListItem = (props: TreeNodeSearchProps) => {
   const item = props.node;
   const actionsAccumulator: ReactNode[] = [];
-  const tokenText = RaycastTokenRenderer(item.attrs.tokens, actionsAccumulator, props.vault);
-  actionsAccumulator.push(<AdvancedUriAction item={item} vault={props.vault} />); // default open action
+  const tokenText = RaycastTokenRenderer(
+    item.attrs.tokens,
+    actionsAccumulator,
+    props.vault,
+  );
+  actionsAccumulator.push(
+    <AdvancedUriAction item={item} vault={props.vault} />,
+  ); // default open action
 
   function getIcon(item: ResultNode) {
     if (
@@ -90,7 +96,7 @@ export const RaycastTreeList = (props: TreeNodeSearchProps) => {
       <IndividualListItem key={props.node.index} {...props} />
       {props.node.children.map((child, idx) => (
         <RaycastTreeList
-          key={`ct${idx}`} 
+          key={`ct${idx}`}
           node={child}
           level={props.level + 1}
           vault={props.vault}
@@ -136,34 +142,49 @@ export default function Command() {
       onSearchTextChange={setSearchText}
       isShowingDetail={false}
     >
-      {filtered.flatMap((vault) => 
+      {filtered.flatMap((vault) =>
         vault.results.nodes.map((item, idx) => (
-          <RaycastTreeList key={`t${vault.vault}${idx}`} vaultColor={getVaultColor(vault.vault, filtered.map(it => it.vault))} vault={vault.vault} node={item} level={0} minExpand={5} />
-        ))
-    )}
+          <RaycastTreeList
+            key={`t${vault.vault}${idx}`}
+            vaultColor={getVaultColor(
+              vault.vault,
+              filtered.map((it) => it.vault),
+            )}
+            vault={vault.vault}
+            node={item}
+            level={0}
+            minExpand={5}
+          />
+        )),
+      )}
     </List>
   );
 }
 
-function AdvancedUriAction(props: { item: ResultNode, vault: string }) {
+function AdvancedUriAction(props: { item: ResultNode; vault: string }) {
   const item = props.item;
-  return <>
-    <Action.OpenInBrowser
-      title="See in Obsidian"
-      url={getUrl(item.attrs.location, props.vault)}
-      shortcut={{ modifiers: ["shift"], key: "enter" }}
-      icon={Icon.Pencil}
-    />
-    <Action.CopyToClipboard 
-      title="Copy to clipboard"
-      content={item.value}
-      shortcut={{ modifiers: ["cmd"], key: "c" }}
-      icon={Icon.Clipboard}
-    />
-  </>;
+  return (
+    <>
+      <Action.OpenInBrowser
+        title="See in Obsidian"
+        url={getUrl(item.attrs.location, props.vault)}
+        shortcut={{ modifiers: ["shift"], key: "enter" }}
+        icon={Icon.Pencil}
+      />
+      <Action.CopyToClipboard
+        title="Copy to clipboard"
+        content={item.value}
+        shortcut={{ modifiers: ["cmd"], key: "c" }}
+        icon={Icon.Clipboard}
+      />
+    </>
+  );
 }
 
-function getMarkdownUri(location: ResultNode["attrs"]["location"], vault: string) {
+function getMarkdownUri(
+  location: ResultNode["attrs"]["location"],
+  vault: string,
+) {
   return `[${location.path}](${getUrl(location, vault)})`;
 }
 
@@ -172,7 +193,11 @@ function getUrl(item: ResultNode["attrs"]["location"], vault: string): string {
   return `obsidian://adv-uri?${encodeURI(uri)}`;
 }
 
-function RaycastTokenRenderer(tokens: Token[], actions: ReactNode[], vault: string): string {
+function RaycastTokenRenderer(
+  tokens: Token[],
+  actions: ReactNode[],
+  vault: string,
+): string {
   if (tokens.length == 0) return "";
 
   const token = tokens[0];
@@ -193,7 +218,9 @@ function RaycastTokenRenderer(tokens: Token[], actions: ReactNode[], vault: stri
     );
 
     return (
-      "🔹" + token.content + RaycastTokenRenderer(tokens.slice(1), actions, vault)
+      "🔹" +
+      token.content +
+      RaycastTokenRenderer(tokens.slice(1), actions, vault)
     );
   }
 
@@ -205,7 +232,9 @@ function RaycastTokenRenderer(tokens: Token[], actions: ReactNode[], vault: stri
       <Action.OpenInBrowser title={`Browse 🔗${content}`} url={href} />,
     );
 
-    return "🔗 " + content + RaycastTokenRenderer(tokens.slice(2), actions, vault);
+    return (
+      "🔗 " + content + RaycastTokenRenderer(tokens.slice(2), actions, vault)
+    );
   }
 
   if (token.type == "link_close") {
@@ -222,35 +251,51 @@ function RaycastTokenRenderer(tokens: Token[], actions: ReactNode[], vault: stri
       );
 
       return (
-        "🔗 " + token.content + RaycastTokenRenderer(tokens.slice(1), actions, vault)
+        "🔗 " +
+        token.content +
+        RaycastTokenRenderer(tokens.slice(1), actions, vault)
       );
     }
-    return token.content + RaycastTokenRenderer(tokens.slice(1), actions, vault);
+    return (
+      token.content + RaycastTokenRenderer(tokens.slice(1), actions, vault)
+    );
   }
 
   if (token.type == "strong_open") {
-    return token.content + RaycastTokenRenderer(tokens.slice(1), actions, vault);
+    return (
+      token.content + RaycastTokenRenderer(tokens.slice(1), actions, vault)
+    );
   }
 
   if (token.type == "strong_close") {
-    return token.content + RaycastTokenRenderer(tokens.slice(1), actions, vault);
+    return (
+      token.content + RaycastTokenRenderer(tokens.slice(1), actions, vault)
+    );
   }
 
   if (token.type == "em_open") {
-    return token.content + RaycastTokenRenderer(tokens.slice(1), actions, vault);
+    return (
+      token.content + RaycastTokenRenderer(tokens.slice(1), actions, vault)
+    );
   }
 
   if (token.type == "softbreak") {
-    return token.content + RaycastTokenRenderer(tokens.slice(1), actions, vault);
+    return (
+      token.content + RaycastTokenRenderer(tokens.slice(1), actions, vault)
+    );
   }
 
   if (token.type == "s_open") {
-    return token.content + RaycastTokenRenderer(tokens.slice(1), actions, vault);
+    return (
+      token.content + RaycastTokenRenderer(tokens.slice(1), actions, vault)
+    );
   }
 
   if (token.type == "image") {
     return (
-      "🖼️ " + token.content + RaycastTokenRenderer(tokens.slice(1), actions, vault)
+      "🖼️ " +
+      token.content +
+      RaycastTokenRenderer(tokens.slice(1), actions, vault)
     );
   }
 
@@ -262,7 +307,9 @@ function RaycastTokenRenderer(tokens: Token[], actions: ReactNode[], vault: stri
       />,
     );
     return (
-      "📋 " + token.content + RaycastTokenRenderer(tokens.slice(1), actions, vault)
+      "📋 " +
+      token.content +
+      RaycastTokenRenderer(tokens.slice(1), actions, vault)
     );
   }
 

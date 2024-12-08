@@ -1,14 +1,13 @@
-import {useEffect, useState} from "react";
-import {IndexedResult, ResultNode, SearchQuery} from "../../search";
-import {SearchPage} from "../SearchPage";
-import {useApp} from "../react-context/AppContext";
-import {highlightLine} from "../../obsidian-utils";
-import {SEARCH_ICON} from "src/view/icons";
-import {useGraph} from "../react-context/GraphContext";
-import {useIsLoading} from "../react-context/GraphContextProvider";
-import {GraphEvents} from "../obsidian-views/GraphEvents";
-import {useUrlOpener} from "./useUrlOpener";
-import {Instructions} from "./Instructions";
+import { useEffect, useState } from "react";
+import { SEARCH_ICON } from "src/view/icons";
+import { highlightLine } from "../../obsidian-utils";
+import { IndexedResult, ResultNode, SearchQuery } from "../../search";
+import { SearchPage } from "../SearchPage";
+import { GraphEvents } from "../obsidian-views/GraphEvents";
+import { useApp } from "../react-context/AppContext";
+import { useGraph } from "../react-context/GraphContext";
+import { useIsLoading } from "../react-context/GraphContextProvider";
+import { useUrlOpener } from "./useUrlOpener";
 
 export type SearchViewProps = {
     searchFunction: (query: SearchQuery) => IndexedResult
@@ -93,7 +92,7 @@ export const SearchView = ({
         // in order to keep rendering really fast
         // max indentation at 20 results
         // min indentation at 200 resuls
-        const renderedExpand = Math.max(0, 10 - results.total / 20)
+        const renderedExpand = Math.round(Math.max(0, 10 - results.total / 20))
         
         setDefaultExpandLevel(search.length >= 3 ? renderedExpand : userSetExpandLevel)
     }, [search, version, context])
@@ -140,12 +139,13 @@ export const SearchView = ({
                              onClick={handleRefresh}>
                             <SEARCH_ICON/>
                         </div>
-                        <div className="clickable-icon" aria-label="Search settings"
+                        <div className="clickable-icon" aria-label="Collapse results"
                             onClick={dec}
                         >
                            -
                         </div>
-                        <div className="clickable-icon" aria-label="Search settings"
+                        <div aria-label="Current result depth">{defaultExpandLevel}</div>
+                        <div className="clickable-icon" aria-label="Expand results"
                             onClick={inc}
                         >
                            +
@@ -178,7 +178,6 @@ export const SearchView = ({
                 </>
             )}
         </div>
-
     </>
 };
 

@@ -28,5 +28,22 @@ export const SearchContainer = ({refresh = true}: {refresh?: boolean}) => {
         return searchIndex(graph.graph, query.query, searchSeparator, 5)
     }, [version, searchSeparator])
 
-    return <SearchView minExpand={5} searchFunction={searchFunction} mode={"launcher"}/>
+    return <div className="search-container-modal">
+        <div className="search-container-modal-middle">
+            <SearchView minExpand={5} searchFunction={searchFunction} mode={"launcher"}/>
+        </div>
+        <div className="search-container-modal-instructions tree-search-modal-instructions">
+            <div className="tree-search-modal-instructions-navigate"><span
+                className="tree-search-modal-instructions-key">↑↓</span><span
+                className="tree-search-modal-instructions-text">Navigate</span></div>
+
+            <div className="tree-search-modal-instructions-enter"><span
+                className="tree-search-modal-instructions-key">↵</span><span
+                className="tree-search-modal-instructions-text">Open Url or Note</span></div>
+
+            <div className="tree-search-modal-instructions-enter"><span
+                className="tree-search-modal-instructions-key">Shift+↵</span><span
+                className="tree-search-modal-instructions-text">Highlight Source</span></div>
+        </div>
+    </div>
 }

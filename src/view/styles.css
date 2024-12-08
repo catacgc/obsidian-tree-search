@@ -6,7 +6,7 @@
 @import "./SearchPage.css";
 @import "./SearchTreeList.css";
 @import "./search/SearchView.css";
-@import "search/Instructions.css";
+@import "./search/SearchContainer.css";
 
 /* Tooltip container */
 

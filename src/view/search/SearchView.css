@@ -1,31 +1,9 @@
-:root {
-    --instructions-height: 64px;
-}
-
 .tree-search-help i, .tree-search-help b {
 	color: var(--color-base-40);
 }
 
-.flex-container {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-}
-
-.flex-main {
-    flex: 1;
-    /*height: calc(100% - var(--instructions-height));*/
-    overflow-y: auto;
-}
-
 .float-search-view-switch {
     display: flex;
-}
-
-.flex-footer {
-    position: sticky;
-    bottom: 0;
-    /*background-color: va;*/
 }
 
 .tree-search-help {
@@ -51,6 +29,7 @@
 .tree-search-modal-container {
     height: 100%;
     width: 100%;
+    display: flex;
 }
 
 .search-view-middle {
