@@ -41,6 +41,12 @@ describe('NodeRenderer', () => {
         expect(screen.getByText('snippet')).toBeInTheDocument();
     });
 
+    it('renders tags', () => {
+        renderMarkdown("test #tag")
+
+        expect(screen.getByText('test #tag')).toBeInTheDocument();
+    });
+
     it('renders inline tokens', () => {
         renderMarkdown("Hello");
 

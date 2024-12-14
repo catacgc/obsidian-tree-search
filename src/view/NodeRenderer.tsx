@@ -77,14 +77,20 @@ export const NodeRenderer = (props: { tokens: Token[] }) => {
     }
 
     if (token.type == "image") {
-        return <NodeRendererImage token={token}/>
+        return <>
+            <NodeRendererImage token={token}/>
+            <NodeRenderer tokens={tokens.slice(1)}/>
+        </>
     }
 
     if (token.type == "code_inline") {
-        return <code>{token.content}</code>
+        return <>
+            <code>{token.content}</code>
+            <NodeRenderer tokens={tokens.slice(1)}/>
+        </>
     }
 
-    // if (!token.type.includes("_close")) console.log("tokens not rendered: ", tokens)
+    if (!token.type.includes("_close")) console.log("tokens not rendered: ", tokens)
 
     return <NodeRenderer tokens={tokens.slice(1)}/>
 }
