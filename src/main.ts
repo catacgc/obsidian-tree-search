@@ -1,6 +1,6 @@
 import { App, debounce, EventRef, Notice, Platform, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf } from 'obsidian';
 
-import { SEARCH_VIEW, TreeSearch } from 'src/view/search/treesearch';
+import { SEARCH_VIEW, SearchModalComponent } from './view/search/SearchModalComponent';
 import { getAPI } from "obsidian-dataview";
 
 import { IndexedTree } from "./indexed-tree";
@@ -13,6 +13,7 @@ import fs from 'fs';
 
 import http, { IncomingMessage, RequestListener, ServerResponse } from 'http'
 import { searchIndex } from './search';
+import { highlightLine } from './obsidian-utils';
 
 export default class TreeSearchPlugin extends Plugin {
     index: IndexedTree
@@ -46,7 +47,7 @@ export default class TreeSearchPlugin extends Plugin {
 
         this.registerView(
             SEARCH_VIEW,
-            (leaf) => new TreeSearch(leaf, this.index)
+            (leaf) => new SearchModalComponent(leaf, this.index)
         );
 
         this.registerView(
@@ -117,6 +118,17 @@ export default class TreeSearchPlugin extends Plugin {
                 this.index, this.app
             ));
         });
+
+        // this will handle the tree-search-uri protocol coming from raycast
+        this.registerObsidianProtocolHandler("tree-search-uri", (uri) => {
+            highlightLine(this.app, {
+                path: uri.filepath,
+                position: {
+                    start: { line: parseInt(uri.sl), ch: parseInt(uri.sc) },
+                    end: { line: parseInt(uri.el), ch: parseInt(uri.ec) }
+                }
+            })
+        })
 
         this.createRaycastSocket()
 
@@ -267,7 +279,8 @@ class SettingsTab extends PluginSettingTab {
         div.setCssStyles({ fontStyle: "italic", borderTop: "1px solid #ddd" })
         const helpDesc = document.createDocumentFragment();
         helpDesc.append("v" + this.plugin.manifest.version, " • ");
-        helpDesc.append(helpDesc.createEl("a", { href: "https://catacgc.github.io/tree-search-docs/ReleaseNotes", text: "What's new" }))
+        const strippedVersion = this.plugin.manifest.version.replace(/^v/, "").replace(/\./g, "");
+        helpDesc.append(helpDesc.createEl("a", { href: "https://catacgc.github.io/tree-search-docs/ReleaseNotes#" + strippedVersion, text: "What's new" }))
         helpDesc.append(" • ");
         helpDesc.append(helpDesc.createEl("a", { href: "https://catacgc.github.io/tree-search-docs", text: "Documentation" }))
         helpDesc.append(" • ");

@@ -5,13 +5,15 @@ import {searchIndex, SearchQuery} from "../../search";
 import {useCallback, useEffect} from "react";
 import {GraphEvents} from "../obsidian-views/GraphEvents";
 import {useApp} from "../react-context/AppContext";
+import { Platform } from "obsidian";
 
 
-export const SearchContainer = ({refresh = true}: {refresh?: boolean}) => {
+export const SearchModalContainer = ({refresh = true}: {refresh?: boolean}) => {
 
     const {graph, version} = useGraph()
     const {searchSeparator} = useSettings()
     const app = useApp()
+    const isDesktop = Platform.isDesktop
 
     useEffect(() => {
         // try refreshing the graph; nodes count is a good proxy
@@ -32,7 +34,7 @@ export const SearchContainer = ({refresh = true}: {refresh?: boolean}) => {
         <div className="search-container-modal-middle">
             <SearchView minExpand={5} searchFunction={searchFunction} mode={"launcher"}/>
         </div>
-        <div className="search-container-modal-instructions tree-search-modal-instructions">
+        {isDesktop && <div className="search-container-modal-instructions tree-search-modal-instructions">
             <div className="tree-search-modal-instructions-navigate"><span
                 className="tree-search-modal-instructions-key">↑↓</span><span
                 className="tree-search-modal-instructions-text">Navigate</span></div>
@@ -44,6 +46,6 @@ export const SearchContainer = ({refresh = true}: {refresh?: boolean}) => {
             <div className="tree-search-modal-instructions-enter"><span
                 className="tree-search-modal-instructions-key">Shift+↵</span><span
                 className="tree-search-modal-instructions-text">Highlight Source</span></div>
-        </div>
+        </div>}
     </div>
 }

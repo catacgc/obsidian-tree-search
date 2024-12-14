@@ -68,6 +68,11 @@ export const SearchView = ({
         }
     };
 
+    const resetCollapse = () => {
+        setDefaultExpandLevel(0)
+        setUserSetExpandLevel(0)
+    }
+
     const inc = () => {
         setDefaultExpandLevel(ex => ex + 1)
         setUserSetExpandLevel(ex => ex + 1)
@@ -139,17 +144,9 @@ export const SearchView = ({
                              onClick={handleRefresh}>
                             <SEARCH_ICON/>
                         </div>
-                        <div className="clickable-icon" aria-label="Collapse results"
-                            onClick={dec}
-                        >
-                           -
-                        </div>
-                        <div aria-label="Current result depth">{defaultExpandLevel}</div>
-                        <div className="clickable-icon" aria-label="Expand results"
-                            onClick={inc}
-                        >
-                           +
-                        </div>
+                        <div className="clickable-icon" aria-label="Collapse results" onClick={dec}> - </div>
+                        <div className="clickable-icon" aria-label="Collapse to zero" onClick={resetCollapse}> {defaultExpandLevel} </div>
+                        <div className="clickable-icon" aria-label="Expand results" onClick={inc}> + </div>
                     </div>
                 </div>
             </div>

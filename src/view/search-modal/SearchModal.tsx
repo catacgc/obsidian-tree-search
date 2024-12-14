@@ -2,7 +2,7 @@ import {App, Modal} from "obsidian";
 import {IndexedTree} from "../../indexed-tree";
 import {createRoot, Root} from "react-dom/client";
 import {GraphContextProvider} from "../react-context/GraphContextProvider";
-import {SearchContainer} from "../search/SearchContainer";
+import {SearchModalContainer} from "../search/SearchModalContainer";
 import {GraphEvents} from "../obsidian-views/GraphEvents";
 
 export class SearchModal extends Modal {
@@ -20,7 +20,7 @@ export class SearchModal extends Modal {
             <GraphContextProvider index={this.index} app={this.app}>
                 <div className="tree-search-modal-container">
                     <div className="workspace-leaf-content">
-                        <SearchContainer refresh={true}/>
+                        <SearchModalContainer refresh={true}/>
                     </div>
                 </div>
             </GraphContextProvider>
