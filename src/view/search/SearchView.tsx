@@ -104,7 +104,7 @@ export const SearchView = ({
         setDefaultExpandLevel(search.length >= 3 ? renderedExpand : userSetExpandLevel)
     }, [search, version, context])
 
-    const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    const handleKeyDown = async (event: React.KeyboardEvent<HTMLInputElement>) => {
         if (event.key === 'ArrowUp') {
             setSelectedLine(prevLine => Math.max(prevLine - 1, 0));
             event.preventDefault();
@@ -112,7 +112,7 @@ export const SearchView = ({
             setSelectedLine(prevLine => Math.min(prevLine + 1, indexedResult.total - 1));
             event.preventDefault();
         } else if (event.key === 'Enter') {
-            handleCmdEnter(event);
+            await handleCmdEnter(event);
 
             // Dispatch custom event
             const customEvent = new CustomEvent(GraphEvents.RESULT_SELECTED, {detail: {type: "enter"}});
@@ -121,9 +121,9 @@ export const SearchView = ({
         } else if (event.key === 'c' && event.ctrlKey) {
             const node = findNode(selectedLine, indexedResult.nodes);
             if (node && app) {
-                let line = reverseMarkdownParsing(node.attrs.tokens)
+                const line = reverseMarkdownParsing(node.attrs.tokens)
 
-                navigator.clipboard.writeText(line)
+                await navigator.clipboard.writeText(line)
                 new Notice('Line copied to clipboard');
             }
             event.preventDefault();

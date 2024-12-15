@@ -20,13 +20,11 @@ export async function highlightLine(app: App, loc: Location) {
 }
 
 export async function openFileByName(app: App, basename: string) {
-	// let file = app.vault.getFiles().find(f => f.basename === basename);
-	let file = app.metadataCache.getFirstLinkpathDest(basename, basename)
+	const file = app.metadataCache.getFirstLinkpathDest(basename, basename)
 	const leaf = app.workspace.getLeaf();
 	if (file) {
 		await leaf.openFile(file, {active: false});
 	} else {
-		file = await app.vault.create(basename + ".md", '');
-		await leaf.openFile(file, {active: false});
+        await app.workspace.openLinkText(basename, basename)
 	}
 }

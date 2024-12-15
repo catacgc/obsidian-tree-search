@@ -11,7 +11,7 @@ import { GraphEvents } from "./view/obsidian-views/GraphEvents";
 import { SearchModal } from "./view/search-modal/SearchModal";
 import fs from 'fs';
 
-import http, { IncomingMessage, RequestListener, ServerResponse } from 'http'
+import http, { IncomingMessage, ServerResponse } from 'http'
 import { searchIndex } from './search';
 import { highlightLine } from './obsidian-utils';
 
@@ -144,8 +144,6 @@ export default class TreeSearchPlugin extends Plugin {
 
             // decode the url
             const decodedQuery = decodeURIComponent(query || "");
-
-            console.log("Search from raycast " + decodedQuery);
 
             if (!decodedQuery) {
                 res.end("No query provided  ");

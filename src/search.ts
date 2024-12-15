@@ -237,19 +237,13 @@ export function searchIndex(graph: DirectedGraphOfNotes, qs: string, separator =
 
     const filtered: ResultNode[] = []
 
-    const pageNodes = graph.filterNodes((_, attrs) =>
-        attrs.nodeType == "page" &&
+    const firstPageCandidates = graph.filterNodes((_, attrs) =>
         matchQuery(attrs, expressions[0]))
         .sort((a, b) => a.length - b.length)
 
-    const textNodes = graph.filterNodes((_, attrs) =>
-        attrs.nodeType != "page" &&
-        matchQuery(attrs, expressions[0]))
-        .sort((a, b) => a.length - b.length) // always favour traversal of shorter matches first
-
     const traversed = new Set<string>()
 
-    for (const node of [...pageNodes, ...textNodes]) {
+    for (const node of firstPageCandidates) {
         const attrs = graph.getNodeAttributes(node)
         const newNode = {
             value: node,

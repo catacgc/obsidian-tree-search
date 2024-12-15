@@ -12,23 +12,27 @@ export const useUrlOpener = () => {
 
         for (const it of children) {
             let url = '';
+
+            if (it.type === 'obsidian_link') {
+                await openFileByName(app, it.content);
+                return;
+            }
+
             if (it.type === 'text') {
                 url = extractFirstUrl(it.content);
             } else if (it.type === 'link_open') {
                 url = extractFirstUrl(it.attrs?.[0]?.[1] || '');
-            } else if (it.type === 'obsidian_link') {
-                await openFileByName(app, it.content.split('|')[0].split('#')[0]);
-                break;
             }
 
             if (url) {
                 linkRef.current.href = url;
                 linkRef.current.click();
-                break;
-            } else {
-                await highlightLine(app, node.attrs.location);
+                return;
             }
         }
+
+        await highlightLine(app, node.attrs.location);
+        return;
     };
 
     return { linkRef, tryOpenUrl };
