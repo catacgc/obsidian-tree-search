@@ -46,9 +46,8 @@ function filterDown(results: ResultNode[], search: SearchExpr[]): ResultNode[] {
     return filterDown(filtered, search.slice(1))
 }
 
-function traverseChildren(graph: DirectedGraphOfNotes, node: ResultNode, depth: number, traversedAlready: Set<string>, maxDepth = 4) {
+function traverseChildren(graph: DirectedGraphOfNotes, node: ResultNode, depth: number, traversedAlready: Set<string>, maxDepth = 4, maxResult: {current: number, max: number}) {
     if (depth >= maxDepth) return
-
     if (traversedAlready.has(node.value)) return
 
     if (graph.outDegree(node.value) > 0)
@@ -70,9 +69,17 @@ function traverseChildren(graph: DirectedGraphOfNotes, node: ResultNode, depth: 
         }
 
         node.children.push(newNode)
+        maxResult.current += 1
 
-        traverseChildren(graph, newNode, depth + 1, traversedAlready, maxDepth)
+        if (maxResult.current > maxResult.max) {
+            console.log("Hit max search limit")
+            return;
+        }
+
+        traverseChildren(graph, newNode, depth + 1, traversedAlready, maxDepth, maxResult)
     }
+
+    maxResult.current += 1
 }
 
 function getParents(graph: Graph, node: string) {
@@ -159,7 +166,8 @@ export function advancedSearch(graph: DirectedGraphOfNotes,
 export function searchChildren(graph: DirectedGraphOfNotes,
                                file: TFile,
                                maxDepth = 3,
-                               heading?: string): ResultNode[] {
+                               heading?: string,
+                               maxResult = 3000): ResultNode[] {
 
     const filtered: ResultNode[] = []
 
@@ -184,7 +192,7 @@ export function searchChildren(graph: DirectedGraphOfNotes,
         }
 
         filtered.push(newNode)
-        traverseChildren(graph, newNode, 0, traversed, maxDepth)
+        traverseChildren(graph, newNode, 0, traversed, maxDepth, {current: 0, max: maxResult})
     }
 
     return filtered
@@ -228,7 +236,7 @@ export function flattenTasks(nodes: ResultNode[]): IndexedResult {
 
 export type IndexedResult = { nodes: ResultNode[], total: number }
 
-export function searchIndex(graph: DirectedGraphOfNotes, qs: string, separator = ">", maxDepth = 3): IndexedResult {
+export function searchIndex(graph: DirectedGraphOfNotes, qs: string, separator = ">", maxDepth = 4, maxResult = 3000): IndexedResult {
     if (qs.length < 3) return {nodes: [], total: 0}
 
     const expressions = qs.split(separator)
@@ -242,6 +250,7 @@ export function searchIndex(graph: DirectedGraphOfNotes, qs: string, separator =
         .sort((a, b) => a.length - b.length)
 
     const traversed = new Set<string>()
+    const limit = {current: 0, max: maxResult}
 
     for (const node of firstPageCandidates) {
         const attrs = graph.getNodeAttributes(node)
@@ -254,7 +263,7 @@ export function searchIndex(graph: DirectedGraphOfNotes, qs: string, separator =
         }
 
         filtered.push(newNode)
-        traverseChildren(graph, newNode, 0, traversed, maxDepth)
+        traverseChildren(graph, newNode, 0, traversed, maxDepth, limit)
     }
 
     const sorted = filterDown(filtered, expressions.slice(1))

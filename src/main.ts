@@ -149,7 +149,7 @@ export default class TreeSearchPlugin extends Plugin {
                 res.end("No query provided  ");
             }
 
-            const result = searchIndex(this.index.getState().graph, decodedQuery, ".", 5);
+            const result = searchIndex(this.index.getState().graph, decodedQuery, ".", 5, 2000);
 
             const jsonContent = JSON.stringify(result);
             res.end(jsonContent);
