@@ -261,12 +261,20 @@ class SettingsTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
+        const socketPath = this.plugin.context.settings.socketPath.replace("{vaultname}", this.app.vault.getName())
         new Setting(containerEl)
             .setName('Raycast API socket path')
             .setDesc('Copy this when configuring the companion Raycast extension')
+            .addExtraButton((component) => {
+                component.setIcon("copy")
+                component.onClick(() => {
+                    navigator.clipboard.writeText(socketPath)
+                    new Notice("Copied to clipboard")
+                })
+            })
             .addText(text => text
                 .setPlaceholder('socket')
-                .setValue(this.plugin.context.settings.socketPath.replace("{vaultname}", this.app.vault.getName()))
+                .setValue(socketPath)
                 .setDisabled(true));
 
         // no need so far to do this configurable
