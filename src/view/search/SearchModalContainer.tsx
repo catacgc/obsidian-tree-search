@@ -46,6 +46,10 @@ export const SearchModalContainer = ({refresh = true}: {refresh?: boolean}) => {
             <div className="tree-search-modal-instructions-enter"><span
                 className="tree-search-modal-instructions-key">Shift+↵</span><span
                 className="tree-search-modal-instructions-text">Highlight Source</span></div>
+
+            <div className="tree-search-modal-instructions-enter"><span
+                className="tree-search-modal-instructions-key">Ctrl+C</span><span
+                className="tree-search-modal-instructions-text">Copy to Clipboard</span></div>
         </div>}
     </div>
 }

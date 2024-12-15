@@ -1,8 +1,7 @@
-import {Token} from "markdown-it";
-import {useApp} from "./react-context/AppContext";
-import {openFileByName} from "../obsidian-utils";
-import {useState} from "react";
-import Tooltip from "./Tooltip";
+import { Token } from "markdown-it";
+import { useState } from "react";
+import { openFileByName } from "../obsidian-utils";
+import { useApp } from "./react-context/AppContext";
 
 export const NodeRenderer = (props: { tokens: Token[] }) => {
     const {tokens} = props

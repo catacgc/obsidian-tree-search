@@ -8,6 +8,8 @@ import { useApp } from "../react-context/AppContext";
 import { useGraph } from "../react-context/GraphContext";
 import { useIsLoading } from "../react-context/GraphContextProvider";
 import { useUrlOpener } from "./useUrlOpener";
+import { reverseMarkdownParsing } from "src/copy";
+import { Notice } from "obsidian";
 
 export type SearchViewProps = {
     searchFunction: (query: SearchQuery) => IndexedResult
@@ -115,6 +117,15 @@ export const SearchView = ({
             // Dispatch custom event
             const customEvent = new CustomEvent(GraphEvents.RESULT_SELECTED, {detail: {type: "enter"}});
             window.dispatchEvent(customEvent);
+            event.preventDefault();
+        } else if (event.key === 'c' && event.ctrlKey) {
+            const node = findNode(selectedLine, indexedResult.nodes);
+            if (node && app) {
+                let line = reverseMarkdownParsing(node.attrs.tokens)
+
+                navigator.clipboard.writeText(line)
+                new Notice('Line copied to clipboard');
+            }
             event.preventDefault();
         }
     };
