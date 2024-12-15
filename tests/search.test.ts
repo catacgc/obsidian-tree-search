@@ -1,15 +1,20 @@
 import {describe, expect, it} from "@jest/globals";
-import {buildIndexFromFixture, fixture, testParentOf, testSearchContains, testSearchEquals} from "./fixtures";
+import {
+    buildIndexFromFixture,
+    expectSearch,
+    fixture, result,
+    testParentOf,
+} from "./fixtures";
 import {NotesGraph} from "../src/graph";
 
 
-async function printGraph(graph: Promise<NotesGraph>) {
-	const data = (await graph).graph.export();
+async function printGraph(graph: NotesGraph) {
+	const data = graph.graph.export();
 	console.log(data)
 }
 
 describe('index and search operators', () => {
-	it('should index the sample vault correctly', () => {
+	it('should index the sample vault correctly', async () => {
 		const graph1 = buildIndexFromFixture('ImportantProjects.md', `
 		- [[Project1]]
 		- [[Project2]]
@@ -19,8 +24,8 @@ describe('index and search operators', () => {
 		expect(graph1.graph.nodes()).toContain('[[project2]]');
 	});
 
-	it('should search filenames', () => {
-		const nestedGraph = fixture(`
+	it('should search filenames', async () => {
+		const nestedGraph = await fixture(`
 		ImportantProjects.md
 		- [[Project1]]
 			- [[Task1]]
@@ -28,31 +33,32 @@ describe('index and search operators', () => {
 			- [[Task2]]
 		`);
 
-		testSearchEquals(nestedGraph, 'Important', `
+
+		expectSearch(nestedGraph, 'Important').toEqual(result(`
 		[[ImportantProjects]]
 		 [[Project1]]
 		  [[Task1]]
 		 [[Project2]]
 		  [[Task2]]
-		`);
+		`));
 	});
 
-	it('should search nested', () => {
-		const nestedGraph = fixture(`
+	it('should search nested', async () => {
+		const nestedGraph = await fixture(`
 		ImportantProjects.md
 		- [[Project1]]
 			- [[Task1]]
 		- [[Project2]]
 			- [[Task2]]
 		`);
-		testSearchEquals(nestedGraph, 'Important > Project2', `
+		expectSearch(nestedGraph, 'Important > Project2').toEqual(result(`
 		[[ImportantProjects]]
 		 [[Project2]]
 		  [[Task2]]
-		`);
+		`));
 	});
 
-// 	it('should exclude nested', () => {
+// 	it('should exclude nested', async () => {
 // 		testGraphSearch(nestedGraph, 'Important > -Project1', `
 // [[ImportantProjects]]
 //  [[Project2]]
@@ -61,8 +67,8 @@ describe('index and search operators', () => {
 // 	})
 
 
-	it('inline mentions', () => {
-		const inlineMentions = fixture(`Topic1.md`, `
+	it('inline mentions', async () => {
+		const inlineMentions = await fixture(`Topic1.md`, `
 			ImportantProjects.md
 			- [[Project1]]
 			- [[Project1]] with an inline mention
@@ -70,23 +76,23 @@ describe('index and search operators', () => {
 			- [[Project2]] with a mention of a few topics [[Topic1]] [[Topic2]]
 			`);
 
-		testSearchEquals(inlineMentions, 'Topic1 -topic2', `
+		expectSearch(inlineMentions, 'Topic1 -topic2').toEqual(result(`
 			[[Topic1]]
 			 Task1 related to [[Topic1]]
 			 [[Project2]] with a mention of a few topics [[Topic1]] [[Topic2]]
 			Task1 related to [[Topic1]]
-			`);
+			`));
 
-		testSearchEquals(inlineMentions, 'Project1', `
+		expectSearch(inlineMentions, 'Project1').toEqual(result(`
 			[[Project1]]
 			 [[Project1]] with an inline mention
 			  Task1 related to [[Topic1]]
 			[[Project1]] with an inline mention
-			`);
+			`));
 	})
 
-	it('references', () => {
-		const inlineMentions = fixture(`
+	it('references', async () => {
+		const inlineMentions = await fixture(`
 		ImportantProjects.md
 		- [[Project1]]
 		- [[Project1]] with an inline mention
@@ -94,17 +100,17 @@ describe('index and search operators', () => {
 		- [[Project2]] with a mention of a few topics [[Topic1]] [[Topic2]]
 		`);
 
-		testSearchEquals(inlineMentions, 'important', `
+		expectSearch(inlineMentions, 'important').toEqual(result(`
 		[[ImportantProjects]]
 		 [[Project1]]
 		  [[Project1]] with an inline mention
 		   Task1 related to [[Topic1]]
 		 [[Project2]] with a mention of a few topics [[Topic1]] [[Topic2]]
-		`);
+		`));
 	})
 
-	it('find nested references', () => {
-		const graph = fixture(`
+	it('find nested references', async () => {
+		const graph = await fixture(`
 		DailyNote.md
 		- [[Project1]]
 		- [[Project1]] with an inline mention
@@ -112,36 +118,36 @@ describe('index and search operators', () => {
 		- [[Project2]] with a mention of a few topics [[Topic1]] [[Topic2]]
 `);
 
-		testSearchEquals(graph, 'topic1', `
+		expectSearch(graph, 'topic1').toEqual(result(`
 		[[Topic1]]
 		 Task1 related to [[Topic1]]
 		 [[Project2]] with a mention of a few topics [[Topic1]] [[Topic2]]
 		Task1 related to [[Topic1]]
 		[[Project2]] with a mention of a few topics [[Topic1]] [[Topic2]]
-		`);
+		`));
 
-		testSearchEquals(graph, 'topic2', `
+		expectSearch(graph, 'topic2').toEqual(result(`
 		[[Topic2]]
 		 [[Project2]] with a mention of a few topics [[Topic1]] [[Topic2]]
 		[[Project2]] with a mention of a few topics [[Topic1]] [[Topic2]]
-		`);
+		`));
 	})
 
-	it('index books reference as its own tree ', () => {
-		const graph = fixture(`
+	it('index books reference as its own tree ', async () => {
+		const graph = await fixture(`
 		Random.md
 		- Getting things done [[Books]]
 		`)
 
-		testSearchEquals(graph, 'Books', `
+		expectSearch(graph, 'Books').toEqual(result(`
 		[[Books]]
 		 Getting things done [[Books]]
 		Getting things done [[Books]]
-		`);
+		`));
 	});
 
-	it('check for circular references', () => {
-		const graph = fixture(`
+	it('check for circular references', async () => {
+		const graph = await fixture(`
 		Project1.md
 		- [[Task1]]
 			- [[Note1]]
@@ -152,22 +158,22 @@ describe('index and search operators', () => {
 		`)
 
 
-		testSearchEquals(graph, 'project1', `
+		expectSearch(graph, 'project1').toEqual(result(`
 		[[Project1]]
 		 [[Task1]]
 		  [[Note1]]
 		  [[Note2]]
-		`);
-		testSearchEquals(graph, 'task1', `
+		`));
+		expectSearch(graph, 'task1').toEqual(result(`
 		[[Task1]]
 		 [[Note1]]
 		 [[Note2]]
 		  [[Project1]]
-		`);
+		`));
 	})
 
-	it('aliases support', () => {
-		const graph = fixture(`
+	it('aliases support', async () => {
+		const graph = await fixture(`
 			Note.md
 			- [[Project|Alias]]
 				 - [[Task2]]
@@ -176,51 +182,51 @@ describe('index and search operators', () => {
 			- [[Task1]]
 			`);
 
-		testSearchEquals(graph, 'alias', `
+		expectSearch(graph, 'alias').toEqual(result(`
 			[[Project]] Alias
 			 [[Task2]]
 			 [[Task1]]
 			[[Project|Alias]]
-			`);
+			`));
 	})
 
-	it('related notes dont appear in the graph', () => {
-		const graph = fixture(`RelatedNote.md`, `
+	it('related notes dont appear in the graph', async () => {
+		const graph = await fixture(`RelatedNote.md`, `
 		Project.md
 		- A related note about [[RelatedNote]]
 		- [[DirectChild]]
 		`)
 
-		testSearchEquals(graph, 'Project', `
+		expectSearch(graph, 'Project').toEqual(result(`
 		[[Project]]
 		 A related note about [[RelatedNote]]
 		 [[DirectChild]]
-		`);
-		testSearchEquals(graph, 'Related', `
+		`));
+		expectSearch(graph, 'Related').toEqual(result(`
 		[[RelatedNote]]
 		 A related note about [[RelatedNote]]
 		A related note about [[RelatedNote]]
-		`);
+		`));
 	})
 
-	it('tasks test', () => {
-		const graph = fixture(`
+	it('tasks test', async () => {
+		const graph = await fixture(`
 		Project1.md
 		- [ ] Task1
 		- [x] Task2
 		`)
 
 
-		testSearchEquals(graph, 'project1', `
+		expectSearch(graph, 'project1').toEqual(result(`
 		[[Project1]]
 		 [ ] Task1
 		 [x] Task2
-		`);
+		`));
 	})
 
 
-	it('header refs support', () => {
-		const graph = fixture(`
+	it('header refs support', async () => {
+		const graph = await fixture(`
 			Note.md
 			- [[Project#TaskList]]
 				 - [[Task2]]
@@ -235,17 +241,17 @@ describe('index and search operators', () => {
 
 		testParentOf(graph, '[[Note]]', '[[Project]]');
 
-		testSearchContains(graph, 'TaskList', `
+		expectSearch(graph, 'TaskList').toContain(result(`
 			[[Project]] > TaskList
 			 [[Task2]]
 			 Inline Ref [[Project#TaskList]]
 			 [[Task1]]
 			[[Project#TaskList]]
-			`);
+			`));
 	})
 
 	it('header refs with parent search', async () => {
-		const graph = fixture(`
+		const graph = await fixture(`
 			AnotherNote.md
 			- Inline Ref [[Project#TaskList]]
 			`, `
@@ -256,11 +262,11 @@ describe('index and search operators', () => {
 
 		// await printGraph(graph);
 
-		testSearchContains(graph, 'project > tasklist', `
+		expectSearch(graph, 'project > tasklist').toContain(result(`
 			[[Project]]
 			 [[Project]] > TaskList
 			  Inline Ref [[Project#TaskList]]
 			  [[Task1]]
-			`);
+			`));
 	})
 });

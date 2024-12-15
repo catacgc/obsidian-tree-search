@@ -1,36 +1,36 @@
 import {describe, it} from "@jest/globals";
-import {fixture, testSearchEquals} from "./fixtures";
+import {expectSearch, fixture, result} from "./fixtures";
 
 describe('archive support', () => {
-	it('removes entire file archive', () => {
-		const graph = fixture(
+	it('removes entire file archive', async () => {
+		const graph = await fixture(
 	`File1.md,{"tags":["archive"]}
 	- [[File2]]
 	`,
 			`File2.md,{"tags":["document"]}`,
 		);
 
-		testSearchEquals(graph, 'file', `
+		expectSearch(graph, 'file').toEqual(result(`
 		[[File2]]
-		`)
+		`))
 	})
 
-	it('excludes lines', () => {
-		const graph = fixture(
+	it('excludes lines', async () => {
+		const graph = await fixture(
 			`File.md
 	- http://example.com
 	- http://example.com #archive
 	`
 		);
 
-		testSearchEquals(graph, 'file', `
+		expectSearch(graph, 'file').toEqual(result(`
 		[[File]]
 		 http://example.com
-		`)
+		`))
 	})
 
-	it('excludes marked headers / sections', () => {
-		const graph = fixture(
+	it('excludes marked headers / sections', async () => {
+		const graph = await fixture(
 			`File.md
 	- http://example.com
 	# -- Archived --
@@ -41,13 +41,13 @@ describe('archive support', () => {
 	`
 		);
 
-		testSearchEquals(graph, 'file', `
+		expectSearch(graph, 'file').toEqual(result(`
 		[[File]]
 		 File > -- Archived --
 		 File > Not Archived
 		  http://example4.com
 		 http://example.com
-		`)
+		`))
 	})
 
 });

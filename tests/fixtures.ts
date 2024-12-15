@@ -26,25 +26,19 @@ export function renderResult(result: ResultNode[], indent = ""): string[] {
 	])
 }
 
-export async function testSearchContains(promiseGraph: Promise<NotesGraph>, qs: string, expected: string) {
-	const graph = await promiseGraph;
-	const resultNodes = searchIndex(graph.graph, qs).nodes;
-	const result = renderTextResult(resultNodes);
-	const exp = trimIndent(expected.split("\n")).join("\n");
-	expect(result).toContain(exp)
-}
 
-export async function testParentOf(promiseGraph: Promise<NotesGraph>, parent: string, child: string) {
-	const graph = await promiseGraph;
+export async function testParentOf(graph: NotesGraph, parent: string, child: string) {
 	expect(graph.graph.edge(parent.toLowerCase(), child.toLowerCase())).toBeTruthy()
 }
 
-export async function testSearchEquals(promiseGraph: Promise<NotesGraph>, qs: string, expected: string) {
-	const graph = await promiseGraph;
-	const resultNodes = searchIndex(graph.graph, qs).nodes;
-	const result = renderTextResult(resultNodes);
-	const exp = trimIndent(expected.split("\n")).join("\n");
-	expect(result).toEqual(exp)
+export function expectSearch(graph: NotesGraph, qs: string) {
+    const resultNodes = searchIndex(graph.graph, qs).nodes;
+    const result = renderTextResult(resultNodes);
+    return expect(result)
+}
+
+export function result(expected: string) {
+    return trimIndent(expected.split("\n")).join("\n");
 }
 
 /**

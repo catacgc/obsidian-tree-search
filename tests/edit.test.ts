@@ -1,9 +1,9 @@
 import {describe, it} from "@jest/globals";
-import {fixture, testSearchEquals} from "./fixtures";
+import {expectSearch, fixture, result} from "./fixtures";
 
 describe('edit capabilities, graph updates', () => {
-	it('should delete an edge and a node from page', () => {
-		const graph = fixture(`
+	it('should delete an edge and a node from page', async () => {
+		const graph = await fixture(`
 		File.md
 		- [[Node]]
 			- [[ChildNode]]`,`
@@ -12,13 +12,13 @@ describe('edit capabilities, graph updates', () => {
 		`
 	);
 
-		testSearchEquals(graph, 'node', `
+		expectSearch(graph, 'node').toEqual(result(`
 		[[Node1]]
-		`)
+		`))
 	})
 
-	it('should keep the node if it is present in another page', () => {
-		const graph = fixture(`
+	it('should keep the node if it is present in another page', async () => {
+		const graph = await fixture(`
 		File.md
 		- [[Node]]
 			- [[ChildNode]]`,`
@@ -29,14 +29,14 @@ describe('edit capabilities, graph updates', () => {
 		`
 		);
 
-		testSearchEquals(graph, 'node', `
+		expectSearch(graph, 'node').toEqual(result(`
 		[[Node]]
 		[[Node1]]
-		`)
+		`))
 	})
 
-	it('should not delete nodes from parent', () => {
-		const graph = fixture(`
+	it('should not delete nodes from parent', async () => {
+		const graph = await fixture(`
 		File.md
 		- [[Node]]`,`
 		Child.md,{"parent": ["[[File]]"]}
@@ -45,11 +45,11 @@ describe('edit capabilities, graph updates', () => {
 		- [[Node3]]`
 		);
 
-		testSearchEquals(graph, 'File', `
+		expectSearch(graph, 'File').toEqual(result(`
 		[[File]]
 		 [[Node]]
 		 [[Child]]
 		  [[Node3]]
-		`)
+		`))
 	})
 });

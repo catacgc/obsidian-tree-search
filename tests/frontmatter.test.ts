@@ -1,18 +1,18 @@
 import {describe, it} from "@jest/globals";
-import {fixture, testSearchEquals} from "./fixtures";
+import {expectSearch, fixture, result} from "./fixtures";
 
 describe('frontmatter relations', () => {
-	it('parent relations', () => {
-		const graph = fixture(`
+	it('parent relations', async () => {
+		const graph = await fixture(`
 		File.md`, `
 		Child.md,{"parent":["[[File]]"]}
 		`
 		);
 
-		testSearchEquals(graph, 'file', `
+		expectSearch(graph, 'file').toEqual(result(`
 		[[File]]
 		 [[Child]]
-		`)
+		`))
 	})
 
 });
