@@ -136,7 +136,7 @@ export default class TreeSearchPlugin extends Plugin {
     }
 
     createRaycastSocket() {
-        if (!Platform.isMacOS) return;
+        if (!Platform.isDesktopApp || Platform.isMobileApp || Platform.isMobile) return;
 
         const requestListener = (req: IncomingMessage, res: ServerResponse) => {
             // get query parameter
