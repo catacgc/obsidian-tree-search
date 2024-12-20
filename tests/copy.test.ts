@@ -14,7 +14,7 @@ describe('copy operation for search results', () => {
 		`);
 
 		const qs = "Important";
-		const resultNodes = searchIndex(nestedGraph.graph, qs).nodes;
+		const resultNodes = searchIndex(nestedGraph.graph, qs);
         const line = reverseMarkdownParsing(resultNodes[0].attrs.tokens)
         expect(line).toEqual("[[Project]] http://ImportantLink.com #tag `snippet` [Test](http://test)")
 	});
@@ -25,7 +25,7 @@ describe('copy operation for search results', () => {
 		- [[Project#Header]]
 		`);
 
-		const resultNodes = searchIndex(nestedGraph.graph, "header").nodes;
+		const resultNodes = searchIndex(nestedGraph.graph, "header");
         const line = reverseMarkdownParsing(resultNodes[0].attrs.tokens)
         expect(line).toEqual("[[Project]] > Header")
 	});

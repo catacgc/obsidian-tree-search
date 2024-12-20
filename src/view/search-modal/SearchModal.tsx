@@ -17,7 +17,7 @@ export class SearchModal extends Modal {
 
         this.root = createRoot(this.contentEl);
         this.root.render(
-            <GraphContextProvider index={this.index} app={this.app}>
+            <GraphContextProvider app={this.app}>
                 <div className="tree-search-modal-container">
                     <div className="workspace-leaf-content">
                         <SearchModalContainer refresh={true}/>

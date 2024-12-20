@@ -1,6 +1,6 @@
 // import {Notice} from "obsidian";
 import {NotesGraph} from "./graph";
-import {TreeSearchSettings} from "./view/react-context/PluginContext";
+import {TreeSearchSettings} from "./view/react-context/settings";
 import {HeadingCache} from "obsidian";
 
 export type DvList = {

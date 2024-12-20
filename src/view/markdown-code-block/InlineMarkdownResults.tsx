@@ -1,9 +1,10 @@
-import React, {useCallback, useEffect, useState} from "react";
-import {advancedSearch, index, SearchQuery} from "../../search";
-import {TFile} from "obsidian";
-import {useGraph} from "../react-context/GraphContext";
-import {MarkdownContextSettings} from "./ContextCodeBlock";
-import {SearchView} from "../search/SearchView";
+import { TFile } from "obsidian";
+import React, { useCallback } from "react";
+import { advancedSearch } from "../../search";
+import SearchPage from "../SearchPage";
+import { MarkdownContextSettings } from "./ContextCodeBlock";
+import { getDefaultStore, useAtomValue } from "jotai";
+import { graphAtom, graphVersionAtom } from "../react-context/state";
 
 export type InlineMarkdownResultsProps = {
     activeFile: TFile;
@@ -12,32 +13,25 @@ export type InlineMarkdownResultsProps = {
 }
 
 export const InlineMarkdownResults: React.FC<InlineMarkdownResultsProps> = (props) => {
-    const {graph, version} = useGraph()
+    const graph = useAtomValue(graphAtom, {store: getDefaultStore()})
+    const version = useAtomValue(graphVersionAtom, {store: getDefaultStore()})
+
     const children = props.heading ? props.activeFile.basename + ' > ' + props.heading : props.activeFile.basename;
 
-    const [showSearch, setShowSearch] = useState(false)
-
-    const search = useCallback((query: SearchQuery) => {
+    const search = useCallback((query: string) => {
         const searchResults = advancedSearch(graph.graph, props.activeFile,
-            props.settings.depth,
+            1000,
             props.heading,
-            query.query)
+            query)
 
-        return index(searchResults)
-    }, [version, props.activeFile, props.heading, showSearch])
-
-    // useEffect(() => {
-    //     // trigger rerender
-    // }, [showSearch, props.activeFile]);
+        return searchResults
+    }, [version, props.activeFile, props.heading])
 
     return <>
-        <div className="tree-search-header-container" onClick={() => setShowSearch(!showSearch)}>
-            <div className="tree-search-header">{children} Children</div>
-        </div>
-
-        <SearchView searchFunction={search} showSearch={showSearch} minExpand={props.settings.depth}></SearchView>
+        <SearchPage searchFn={search} maxExpand={props.settings.depth} sectionName={children + " Children"}/>
     </>
 };
+
 
 
 

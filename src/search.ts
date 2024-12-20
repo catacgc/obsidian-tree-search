@@ -3,9 +3,7 @@ import Graph from "graphology";
 import {matchQuery, parseQuery, SearchExpr} from "./query";
 import {TFile} from "obsidian";
 
-
 export type ResultNode = {
-    index: number,
     value: string,
     attrs: NodeAttributes,
     children: ResultNode[],
@@ -46,40 +44,40 @@ function filterDown(results: ResultNode[], search: SearchExpr[]): ResultNode[] {
     return filterDown(filtered, search.slice(1))
 }
 
-function traverseChildren(graph: DirectedGraphOfNotes, node: ResultNode, depth: number, traversedAlready: Set<string>, maxDepth = 4, maxResult: {current: number, max: number}) {
-    if (depth >= maxDepth) return
-    if (traversedAlready.has(node.value)) return
 
-    if (graph.outDegree(node.value) > 0)
-        traversedAlready.add(node.value); // add only tree nodes to the traversed set
+function buildTree(node: string, graph: DirectedGraphOfNotes, roots: Map<string, ResultNode>, traversedAlready: Set<string>): ResultNode {
+    traversedAlready.add(node); 
 
-    const neighbours = graph.outboundEdgeEntries(node.value)
+    const newNode: ResultNode = {
+        value: node,
+        children: [],
+        attrs: graph.getNodeAttributes(node),
+        parents: []
+    };
+
+    const neighbours = graph.outboundEdgeEntries(node)
 
     for (const edge of neighbours) {
-
-        if (traversedAlready.has(edge.target)) continue
-
-        // const attrs = graph.getNodeAttributes(edge.target)
-        const newNode = {
-            value: edge.target,
-            children: [],
-            attrs: {...edge.targetAttributes, ...{location: edge.attributes.location}}, // always point where the edge was discovered
-            parents: getParents(graph, edge.target),
-			index: 0
+        // return existing tree built from root and add it as a child to the current node
+        let childNode: ResultNode | null = null
+        if (roots.has(edge.target)) {
+            childNode = roots.get(edge.target)!
+            roots.delete(edge.target)
         }
 
-        node.children.push(newNode)
-        maxResult.current += 1
+        if (traversedAlready.has(edge.edge)) continue
+        traversedAlready.add(edge.edge)
 
-        if (maxResult.current > maxResult.max) {
-            console.log("Hit max search limit")
-            return;
+        if (!childNode) {
+            childNode = buildTree(edge.target, graph, roots, traversedAlready)
         }
 
-        traverseChildren(graph, newNode, depth + 1, traversedAlready, maxDepth, maxResult)
+        childNode.attrs = {...childNode.attrs, ...{location: edge.attributes.location}}
+
+        newNode.children.push(childNode)
     }
 
-    maxResult.current += 1
+    return newNode
 }
 
 function getParents(graph: Graph, node: string) {
@@ -107,7 +105,7 @@ export function searchParents(graph: DirectedGraphOfNotes, file: TFile): ResultN
             children: [],
             attrs: {...attrs, ...{location: edge.attributes.location}},
             parents: [],
-			index: 0
+            index: 0
         }
         filtered.push(newNode)
     }
@@ -115,62 +113,13 @@ export function searchParents(graph: DirectedGraphOfNotes, file: TFile): ResultN
     return filtered
 }
 
-export function dfs(query: SearchExpr, graph: DirectedGraphOfNotes, node: string, traversed: Set<string>, maxCount = 300): [ResultNode | null, "has" | "not"] {
-    if (traversed.size > maxCount || traversed.has(node)) return [null, "not"];
-
-    if (!graph.hasNode(node)) return [null, "not"];
-
-    traversed.add(node);
-
-    const newNode: ResultNode = {
-        value: node,
-        children: [],
-        attrs: graph.getNodeAttributes(node),
-        parents: [],
-        index: 0
-    };
-
-    const nodeMatchesQuery = matchQuery(newNode.attrs, query);
-    let childHas = false;
-
-    for (const edge of graph.outboundEdgeEntries(node)) {
-        const [childNode, childStatus] = dfs(query, graph, edge.target, traversed, maxCount);
-        if ((childStatus === "has" || nodeMatchesQuery) && childNode) {
-            newNode.children.push(childNode);
-            childHas = true;
-        }
-    }
-
-    return [newNode, nodeMatchesQuery || childHas ? "has" : "not"];
-}
 
 export function advancedSearch(graph: DirectedGraphOfNotes,
                                file: TFile,
                                maxDepth = 3,
-                               heading?: string, query?: string): ResultNode[] {
-    let node = `[[${file.basename}]]`.toLowerCase();
-    if (heading) {
-        node = `${file.basename}#${heading}`.toLowerCase();
-    }
-
-    if (query) {
-        const expr = parseQuery(query)
-        const results = dfs(expr, graph, node, new Set<string>(), 30000)
-        return results[0] ? results[0].children : []
-    }
-
-    return searchChildren(graph, file, maxDepth, heading)
-}
-
-
-export function searchChildren(graph: DirectedGraphOfNotes,
-                               file: TFile,
-                               maxDepth = 3,
-                               heading?: string,
-                               maxResult = 3000): ResultNode[] {
-
-    const filtered: ResultNode[] = []
-
+                               heading?: string, 
+                               query?: string,
+                               separator = '.'): ResultNode[] {
     let node = `[[${file.basename}]]`.toLowerCase();
     if (heading) {
         node = `${file.basename}#${heading}`.toLowerCase();
@@ -178,44 +127,21 @@ export function searchChildren(graph: DirectedGraphOfNotes,
 
     if (!graph.hasNode(node)) return []
 
-    const pageEdges = graph.outboundEdgeEntries(node)
-    const traversed = new Set<string>()
+    const tree = buildTree(node, graph, new Map<string, ResultNode>(), new Set<string>())
 
-    for (const edge of [...pageEdges]) {
-        const attrs = graph.getNodeAttributes(edge.target)
-        const newNode = {
-            value: edge.target,
-            children: [],
-            attrs: {...attrs, ...{location: edge.attributes.location}},
-            parents: [],
-			index: 0
-        }
-
-        filtered.push(newNode)
-        traverseChildren(graph, newNode, 0, traversed, maxDepth, {current: 0, max: maxResult})
+    if (query) {
+        const expressions = query.split(separator)
+            .map(w => w.toLowerCase().trim())
+            .map(it => parseQuery(it))
+        return filterDown(tree.children, expressions)
     }
 
-    return filtered
+    return tree.children
 }
 
-function indexResultsInline(nodes: ResultNode[], index = 0): number {
-    let i = index
-    for (const node of nodes) {
-        node.index = i
-        i++
-        i = indexResultsInline(node.children, i)
-    }
-    return i
-}
-
-export function index(nodes: ResultNode[]): IndexedResult  {
-    const total = indexResultsInline(nodes)
-
-    return {nodes: nodes, total: total}
-}
 
 export function flattenTasks(nodes: ResultNode[]): IndexedResult {
-    
+
     function search(children: ResultNode[], result: ResultNode[], parent?: ResultNode) {
         for (const node of children) {
             if (node.attrs.nodeType == "task") {
@@ -229,47 +155,40 @@ export function flattenTasks(nodes: ResultNode[]): IndexedResult {
 
     const result: ResultNode[] = []
     search(nodes, result)
-    const total = indexResultsInline(result)
 
-    return {nodes: result, total: total}
+    return {nodes: result, total: 0}
 }
 
 export type IndexedResult = { nodes: ResultNode[], total: number }
 
-export function searchIndex(graph: DirectedGraphOfNotes, qs: string, separator = ">", maxDepth = 4, maxResult = 3000): IndexedResult {
-    if (qs.length < 3) return {nodes: [], total: 0}
+
+export function searchIndex(graph: DirectedGraphOfNotes, qs: string, separator = ">"): ResultNode[] {
+    if (qs.length < 3) return []
 
     const expressions = qs.split(separator)
         .map(w => w.toLowerCase().trim())
         .map(it => parseQuery(it))
 
-    const filtered: ResultNode[] = []
+    const roots = new Map<string, ResultNode>()
 
-    const firstPageCandidates = graph.filterNodes((_, attrs) =>
-        matchQuery(attrs, expressions[0]))
+    const firstPageCandidates = graph
+        .filterNodes((_, attrs) => matchQuery(attrs, expressions[0]))
         .sort((a, b) => a.length - b.length)
 
     const traversed = new Set<string>()
-    const limit = {current: 0, max: maxResult}
 
     for (const node of firstPageCandidates) {
-        const attrs = graph.getNodeAttributes(node)
-        const newNode = {
-            value: node,
-            children: [],
-            attrs: attrs,
-            parents: getParents(graph, node),
-			index: 0
-        }
+        if (roots.has(node) || traversed.has(node)) continue
 
-        filtered.push(newNode)
-        traverseChildren(graph, newNode, 0, traversed, maxDepth, limit)
+        const newNode = buildTree(node, graph, roots, traversed)
+
+        roots.set(node, newNode)
     }
 
-    const sorted = filterDown(filtered, expressions.slice(1))
+    const sorted = filterDown(Array.from(roots.values()), expressions.slice(1))
         .sort((a, b) => b.children.length - a.children.length);
 
-    return index(sorted)
+    return sorted
 }
 
 export type SearchQuery = {

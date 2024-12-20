@@ -2,12 +2,12 @@ import {DvList, indexSinglePage} from "../src/tree-builder";
 import {ResultNode, searchIndex} from "../src/search";
 import {expect} from "@jest/globals";
 import {NotesGraph} from "../src/graph";
-import {REACT_PLUGIN_CONTEXT} from "../src/view/react-context/PluginContext";
+import { getSettings } from "src/view/react-context/settings";
 
 export function buildIndexFromFixture(page: string, lines: string, aliases: string[] = []) {
 	const graph = new NotesGraph()
 	const pageFixture = createFixture(page, lines, aliases);
-	indexSinglePage(pageFixture, graph, REACT_PLUGIN_CONTEXT.settings);
+	indexSinglePage(pageFixture, graph, getSettings());
 	return graph;
 }
 
@@ -32,7 +32,7 @@ export async function testParentOf(graph: NotesGraph, parent: string, child: str
 }
 
 export function expectSearch(graph: NotesGraph, qs: string) {
-    const resultNodes = searchIndex(graph.graph, qs).nodes;
+    const resultNodes = searchIndex(graph.graph, qs);
     const result = renderTextResult(resultNodes);
     return expect(result)
 }
@@ -57,7 +57,7 @@ export async function fixture(...fixtures: string[]): Promise<NotesGraph> {
 		const trimmed = trimIndent(lines.slice(1));
 
 		const pageFixture = createFixture(pagename, trimmed.join("\n"), frontMatter);
-		await indexSinglePage(pageFixture, graph, REACT_PLUGIN_CONTEXT.settings);
+		await indexSinglePage(pageFixture, graph, getSettings());
 	}
 
 	return graph

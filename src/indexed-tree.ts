@@ -2,22 +2,17 @@ import {NotesGraph} from "./graph";
 import {DvAPIInterface} from "obsidian-dataview/lib/typings/api";
 import {App, TFile} from "obsidian";
 import {DvPage, indexSinglePage} from "./tree-builder";
-import {REACT_PLUGIN_CONTEXT, TreeSearchSettings} from "./view/react-context/PluginContext";
+import {getSettings, TreeSearchSettings} from "./view/react-context/settings";
+import { getDefaultStore } from "jotai";
+import { graphAtom, graphVersionAtom, isGraphLoadingAtom } from "./view/react-context/state";
 
 export class IndexedTree {
 	private graph: NotesGraph;
     private isLoading = false;
 	private version = 0;
-	private changeHandlers: Array<(props: { graph: NotesGraph, version: number }) => void> = [];
-	private settings: TreeSearchSettings;
 
     constructor(private dv: DvAPIInterface, private app: App) {
 		this.graph = new NotesGraph();
-		this.settings = REACT_PLUGIN_CONTEXT.settings
-	}
-
-	setSettings(settings: TreeSearchSettings) {
-		this.settings = settings;
 	}
 
 	async refreshPage(file: TFile) {
@@ -27,7 +22,8 @@ export class IndexedTree {
         const cache = this.app.metadataCache.getCache(page.file.path);
         page.headers = cache?.headings ?? [];
 
-		await indexSinglePage(page as DvPage, this.graph, this.settings);
+		await indexSinglePage(page as DvPage, this.graph, getSettings());
+		console.debug(`indexed ${file.basename}`)
 		this.setState(this.graph)
 	}
 
@@ -35,12 +31,9 @@ export class IndexedTree {
         if (this.isLoading) return;
         this.isLoading = true;
 		const newGraph = await this.rebuildEntireGraph()
+		console.debug(`built new graph with ${newGraph.graph.size} nodes` )
 		this.setState(newGraph)
         this.isLoading = false
-	}
-
-	onChange(handler: (props: { graph: NotesGraph, version: number }) => void) {
-		this.changeHandlers.push(handler);
 	}
 
 	getState() {
@@ -48,9 +41,10 @@ export class IndexedTree {
 	}
 
 	private setState(graph: NotesGraph) {
-		this.graph = graph;
-		const version = ++this.version
-		this.changeHandlers.forEach(handler => handler({graph, version}));
+		this.graph = graph
+		getDefaultStore().set(graphAtom, graph)
+		getDefaultStore().set(graphVersionAtom, ++this.version)
+		getDefaultStore().set(isGraphLoadingAtom, false)
 	}
 
 	// index all pages in async batches to not block the main thread
@@ -94,10 +88,11 @@ export class IndexedTree {
 	}
 
 	private indexBatch(batch: DvPage[], graph: NotesGraph) : Promise<boolean> {
+		const settings = getSettings()
 		return new Promise((resolve) => {
 			setTimeout(async () => {
 				for (const page of batch) {
-					await indexSinglePage(page, graph, this.settings);
+					await indexSinglePage(page, graph, settings);
 					resolve(true)
 				}
 			}, 0)

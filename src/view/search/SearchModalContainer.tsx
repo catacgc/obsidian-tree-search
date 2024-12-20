@@ -1,94 +1,44 @@
-import { useGraph } from "../react-context/GraphContext";
-import { SearchView } from "./SearchView";
-import { useSettings } from "../react-context/PluginContext";
-import { searchIndex, SearchQuery } from "../../search";
-import { useCallback, useEffect } from "react";
-import { GraphEvents } from "../obsidian-views/GraphEvents";
-import { useApp } from "../react-context/AppContext";
-import { Platform } from "obsidian";
-import { AArrowDown, ArrowDown, ArrowUp, Camera, Copy, ListEnd } from "lucide-react";
+import { getDefaultStore, useAtomValue, useSetAtom } from "jotai";
+import { useEffect } from "react";
+import { searchIndex } from "../../search";
+import { actualQueryAtom, graphAtom, graphVersionAtom, isGraphLoadingAtom, updateSearchResultsAtom } from "../react-context/state";
+import { SearchInstructionsAndNav } from "./SearchInstructionsAndNav";
+import { SearchViewFlatten } from "./SearchViewFlatten";
+import { settingsAtom } from "../react-context/settings";
 
 
 export const SearchModalContainer = ({ refresh = true }: { refresh?: boolean }) => {
 
-    const { graph, version } = useGraph();
-    const { searchSeparator } = useSettings();
-    const app = useApp();
-    const isDesktop = Platform.isDesktop;
-    const isMobile = Platform.isMobile;
+    const graph = useAtomValue(graphAtom, {store: getDefaultStore()})
+    const version = useAtomValue(graphVersionAtom, {store: getDefaultStore()})
+
+    const { searchSeparator } = useAtomValue(settingsAtom);
+    const setIsLoading = useSetAtom(isGraphLoadingAtom, {store: getDefaultStore()})
+
+    const setResult = useSetAtom(updateSearchResultsAtom)
+    const searchQuery = useAtomValue(actualQueryAtom)
 
     useEffect(() => {
         // try refreshing the graph; nodes count is a good proxy
         if (graph.graph.nodes().length > 0 || !refresh) return;
 
         const interval = setInterval(() => {
-            graph.graph.nodes().length === 0 && app.workspace.trigger(GraphEvents.REFRESH_GRAPH);
+            if (graph.graph.nodes().length === 0) setIsLoading(true)
         }, 2000, 5);
 
         return () => clearInterval(interval);
     }, [version, refresh]);
 
-    const searchFunction = useCallback((query: SearchQuery) => {
-        return searchIndex(graph.graph, query.query, searchSeparator, 5);
-    }, [version, searchSeparator]);
+    useEffect(() => {
+        const results = searchIndex(graph.graph, searchQuery, searchSeparator)
+        setResult(results)
+    }, [searchQuery, version, searchSeparator])
 
     return <div className="search-container-modal">
-        <div className="search-container-modal-middle">
-            <SearchView minExpand={5} searchFunction={searchFunction} mode={"launcher"} />
-        </div>
-
-        {!isMobile && <div className="search-container-modal-instructions tree-search-modal-instructions">
-            <div className="mobile-toolbar">
-                <div className="mobile-toolbar-options-container">
-                    <div className="mobile-toolbar-options-list">
-                        <div className="mobile-toolbar-option">
-                            <div className="mobile-toolbar-options-item">
-                                <button>
-                                    <ArrowDown />
-                                </button>
-                            </div>
-                            <div className="mobile-toolbar-options-item">
-                                <button>
-                                    <ArrowUp />
-                                </button>
-                            </div>
-                            <div className="mobile-toolbar-options-item">
-                                <button>
-                                    <Copy /> Copy
-                                </button>
-                            </div>
-                            <div className="mobile-toolbar-options-item">
-                                <button>
-                                    <ListEnd /> Insert
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <div className="search-container-modal-middle">
+                <SearchViewFlatten/>
             </div>
-        </div>
-        }
 
-        {isDesktop && <div className="search-container-modal-instructions tree-search-modal-instructions">
-            <div className="tree-search-modal-instructions-navigate"><span
-                className="tree-search-modal-instructions-key">↑↓</span><span
-                className="tree-search-modal-instructions-text">Navigate</span></div>
-
-            <div className="tree-search-modal-instructions-enter"><span
-                className="tree-search-modal-instructions-key">↵</span><span
-                className="tree-search-modal-instructions-text">Open Url or Note</span></div>
-
-            <div className="tree-search-modal-instructions-enter"><span
-                className="tree-search-modal-instructions-key">Shift+↵</span><span
-                className="tree-search-modal-instructions-text">Highlight Source</span></div>
-
-            <div className="tree-search-modal-instructions-enter"><span
-                className="tree-search-modal-instructions-key">Ctrl+C</span><span
-                className="tree-search-modal-instructions-text">Copy to Clipboard</span></div>
-
-            <div className="tree-search-modal-instructions-enter"><span
-                className="tree-search-modal-instructions-key">Ctrl+I</span><span
-                className="tree-search-modal-instructions-text">Insert After</span></div>
-        </div>}
-    </div>;
+            <SearchInstructionsAndNav />
+        </div>;
 };

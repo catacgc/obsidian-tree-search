@@ -1,50 +1,54 @@
-import {useEffect, useState} from "react";
+import {useCallback, useEffect, useState} from "react";
 import {FileContextResults} from "./FileContextResults";
 import {useApp} from "../react-context/AppContext";
 import {TFile} from "obsidian";
 import {openFileByName} from "../../obsidian-utils";
-import {useGraph} from "../react-context/GraphContext";
+import { atom, useAtom } from "jotai";
 
-type FileContextComponentProps = {
-	query?: string
-};
+export const pinAtom = atom<boolean>(false)
+export const activeFileAtom = atom<TFile>()
 
-export const FileContextComponent = (props: FileContextComponentProps) => {
-	const [activeFile, setActiveFile] = useState<TFile | null>(null);
-	const [pin, setPin] = useState<TFile>();
+export const FileContextComponent = () => {
+	const [activeFile, setActiveFile] = useAtom(activeFileAtom);
+	const [pin, setPin] = useAtom(pinAtom);
 	const app = useApp();
+
+	const updateActiveFile = useCallback(() => {
+		if (pin && activeFile) {
+			return
+		}
+
+		const file = app.workspace.getActiveFile();
+		file && setActiveFile(file);
+	}, [pin, activeFile, app, setActiveFile]);
 
 	useEffect(() => {
 		if (!app) return
 
-		const updateActiveFile = () => {
-			const file = app.workspace.getActiveFile();
-			setActiveFile(file);
-		};
+		// Get initial state without explicit call
+		const file = app.workspace.getActiveFile();
+		file && setActiveFile(file);
 
+		// Set up event listener for future changes
 		app.workspace.on('active-leaf-change', updateActiveFile);
 
-		// Initial update
-		updateActiveFile();
-
-		// Cleanup listener on unmount
 		return () => {
 			app.workspace.off('active-leaf-change', updateActiveFile);
 		};
-	}, [app]);
+	}, [app, updateActiveFile]);
 
 	async function openActiveFile() {
 		if (app == undefined) return
 		if (activeFile == undefined) return
-		await openFileByName(app, (pin || activeFile).basename)
+		await openFileByName(app, activeFile.basename)
 	}
 
+	if (activeFile == undefined) return <></>
 
-
-	return activeFile && <>
-		<h4><a href='#' onClick={ev => {openActiveFile(); ev.preventDefault() }}>{(pin || activeFile).basename}</a></h4>
-		<button onClick={() => setPin(pin ? undefined : activeFile)}>{pin ? `Unpin` : "Pin"}</button>
-
-		<FileContextResults activeFile={pin || activeFile}/>
-	</>
+	return <>
+			<h4><a href='#' onClick={ev => {openActiveFile(); ev.preventDefault() }}>{activeFile.basename}</a></h4>
+			{!pin && <button onClick={() => setPin(true)}>Pin</button>}
+			{pin && <button onClick={() => setPin(false)}>Unpin</button>}
+			<FileContextResults/>
+		</>
 }

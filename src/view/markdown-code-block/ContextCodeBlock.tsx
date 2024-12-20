@@ -61,7 +61,7 @@ export class ContextCodeBlock extends MarkdownRenderChild {
         }
 
         root.render(
-            <GraphContextProvider app={this.app} index={this.index}>
+            <GraphContextProvider app={this.app}>
                 <InlineMarkdownResults activeFile={file} heading={heading} settings={settings}/>
             </GraphContextProvider>
         );

@@ -46,6 +46,11 @@
 	},
 	"dependencies": {
 		"graphology": "^0.25.4",
+		"immer": "^10.1.1",
+		"jotai": "^2.11.0",
+		"jotai-devtools": "^0.10.1",
+		"jotai-immer": "^0.4.1",
+		"jotai-scope": "^0.7.3",
 		"js-yaml": "^4.1.0",
 		"lucide-react": "^0.468.0",
 		"luxon": "^3.5.0",
@@ -53,6 +58,7 @@
 		"promise-worker": "^2.0.1",
 		"react": "^18.3.1",
 		"react-dom": "^18.3.1",
-		"react-markdown": "^9.0.1"
+		"react-markdown": "^9.0.1",
+		"zustand": "^5.0.3"
 	}
 }

@@ -6,8 +6,8 @@ import {ResultNode} from "../../search";
 export const useUrlOpener = () => {
     const linkRef = useRef<HTMLAnchorElement>(null);
 
-    const tryOpenUrl = async (app: App, node: ResultNode) => {
-        const children = node.attrs.tokens[0]?.children;
+    const tryOpenUrl = async (app: App, attrs: ResultNode['attrs']) => {
+        const children = attrs.tokens[0]?.children;
         if (!children || !linkRef.current) return;
 
         for (const it of children) {
@@ -31,7 +31,7 @@ export const useUrlOpener = () => {
             }
         }
 
-        await highlightLine(app, node.attrs.location);
+        await highlightLine(app, attrs.location);
         return;
     };
 

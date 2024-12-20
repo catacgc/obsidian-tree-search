@@ -4,7 +4,6 @@ import { SEARCH_VIEW, SearchModalComponent } from './view/search/SearchModalComp
 import { getAPI } from "obsidian-dataview";
 
 import { IndexedTree } from "./indexed-tree";
-import { PluginContextContainer, REACT_PLUGIN_CONTEXT } from "./view/react-context/PluginContext";
 import { FILE_CONTEXT, FileContextView } from "./view/file-context/file-context";
 import { ContextCodeBlock } from "./view/markdown-code-block/ContextCodeBlock";
 import { GraphEvents } from "./view/obsidian-views/GraphEvents";
@@ -14,13 +13,16 @@ import fs from 'fs';
 import http, { IncomingMessage, ServerResponse } from 'http'
 import { searchIndex } from './search';
 import { highlightLine, insertLine } from './obsidian-utils';
+import { getDefaultStore } from 'jotai';
+import { flattenIndex, isGraphLoadingAtom } from './view/react-context/state';
+import { getSettings, updateSettings } from './view/react-context/settings';
 
 export default class TreeSearchPlugin extends Plugin {
     index: IndexedTree
     private changedRef: EventRef
     private finishedRef: EventRef;
     private server: http.Server | null = null;
-    context: PluginContextContainer = REACT_PLUGIN_CONTEXT
+    
 
     async onunload() {
         this.changedRef && this.app.metadataCache.offref(this.changedRef)
@@ -41,7 +43,7 @@ export default class TreeSearchPlugin extends Plugin {
             return false
         }
 
-        console.log("Enabling tree search; dataview index ready")
+        console.debug("Enabling tree search; dataview index ready")
 
         this.index = new IndexedTree(api, this.app);
 
@@ -100,14 +102,16 @@ export default class TreeSearchPlugin extends Plugin {
         this.addSettingTab(new SettingsTab(this.app, this));
         await this.loadSettings();
 
-        // @ts-ignore
-        this.registerEvent(this.app.workspace.on(GraphEvents.REFRESH_GRAPH, async () => {
-            await this.index.refresh()
-        }))
+        const store = getDefaultStore()
+        store.sub(isGraphLoadingAtom, async () => {
+            const reload = store.get(isGraphLoadingAtom)
+            console.debug("Graph refresh requested")
+            if (reload) await this.index.refresh()
+        })
 
         const debouncer = debounce(async (file: TFile) => {
             await this.index.refreshPage(file)
-        }, 500, true);
+        }, 200, true);
 
         this.registerEvent(this.app.metadataCache.on('changed', async (file) => {
             debouncer(file);
@@ -146,8 +150,9 @@ export default class TreeSearchPlugin extends Plugin {
         if (!Platform.isDesktopApp || Platform.isMobileApp || Platform.isMobile) return;
 
         const requestListener = (req: IncomingMessage, res: ServerResponse) => {
-            // get query parameter
-            const query = req.url?.split('?')[1]?.split('=')[1];
+            // parse query parameters from url
+            const query = new URL(req.url || "", "http://localhost").searchParams.get("query");
+            const limit = parseInt(new URL(req.url || "", "http://localhost").searchParams.get("limit") || "100");
 
             // decode the url
             const decodedQuery = decodeURIComponent(query || "");
@@ -156,14 +161,14 @@ export default class TreeSearchPlugin extends Plugin {
                 res.end("No query provided  ");
             }
 
-            const result = searchIndex(this.index.getState().graph, decodedQuery, ".", 5, 2000);
-
-            const jsonContent = JSON.stringify(result);
+            const result = searchIndex(this.index.getState().graph, decodedQuery, ".");
+            const flattened = flattenIndex(result)
+            const jsonContent = JSON.stringify(flattened.slice(0, limit));
             res.end(jsonContent);
         };
 
         this.server = http.createServer(requestListener);
-        const socketFileName = this.context.settings.socketPath.replace("{vaultname}", this.app.vault.getName());
+        const socketFileName = getSettings().socketPath.replace("{vaultname}", this.app.vault.getName());
 
         // delete socketFileName if it exists
         if (fs.existsSync(socketFileName)) {
@@ -209,13 +214,12 @@ export default class TreeSearchPlugin extends Plugin {
     }
 
     async loadSettings() {
-        this.context.settings = Object.assign({}, REACT_PLUGIN_CONTEXT.settings, await this.loadData());
-        this.index.setSettings(this.context.settings);
+        updateSettings(await this.loadData())
         await this.saveSettings(); // do this to make sure to create data.json
     }
 
     async saveSettings() {
-        await this.saveData(this.context.settings);
+        await this.saveData(getSettings());
     }
 }
 
@@ -228,6 +232,7 @@ class SettingsTab extends PluginSettingTab {
     }
 
     display(): void {
+        const settings = getSettings()
         const { containerEl } = this;
 
         containerEl.empty();
@@ -237,9 +242,9 @@ class SettingsTab extends PluginSettingTab {
             .setDesc('What you use to search between levels in the graph: e.g. `parent / child`')
             .addText(text => text
                 .setPlaceholder('Search Separator')
-                .setValue(this.plugin.context.settings.searchSeparator)
+                .setValue(settings.searchSeparator)
                 .onChange(async (value) => {
-                    this.plugin.context.settings.searchSeparator = value;
+                    settings.searchSeparator = value;
                     await this.plugin.saveSettings();
                 }));
 
@@ -248,9 +253,9 @@ class SettingsTab extends PluginSettingTab {
             .setDesc('Frontmatter key that defines the parent relation')
             .addText(text => text
                 .setPlaceholder('parent')
-                .setValue(this.plugin.context.settings.parentRelation)
+                .setValue(settings.parentRelation)
                 .onChange(async (value) => {
-                    this.plugin.context.settings.parentRelation = value;
+                    settings.parentRelation = value;
                     await this.plugin.saveSettings();
                 }));
 
@@ -260,13 +265,13 @@ class SettingsTab extends PluginSettingTab {
             .setDesc('Archive tag to ignore notes, lines or sections / headers')
             .addText(text => text
                 .setPlaceholder('archive')
-                .setValue(this.plugin.context.settings.archiveTag)
+                .setValue(settings.archiveTag)
                 .onChange(async (value) => {
-                    this.plugin.context.settings.archiveTag = value;
+                    settings.archiveTag = value;
                     await this.plugin.saveSettings();
                 }));
 
-        const socketPath = this.plugin.context.settings.socketPath.replace("{vaultname}", this.app.vault.getName())
+        const socketPath = settings.socketPath.replace("{vaultname}", this.app.vault.getName())
         new Setting(containerEl)
             .setName('Raycast API socket path')
             .setDesc('Copy this when configuring the companion Raycast extension')

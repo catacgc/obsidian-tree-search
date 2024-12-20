@@ -19,7 +19,9 @@ export async function highlightLine(app: App, loc: Location) {
 	}
 }
 
-export async function openFileByName(app: App, basename: string) {
+export async function openFileByName(app: App, basenameAndAliases: string) {
+    const basename = basenameAndAliases.split("|")[0]
+
 	const file = app.metadataCache.getFirstLinkpathDest(basename, basename)
 	const leaf = app.workspace.getLeaf();
 	if (file) {

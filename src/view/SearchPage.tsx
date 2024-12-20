@@ -1,31 +1,40 @@
-import { useEffect, useState } from "react";
-import { ResultNode } from "../search";
-import { SearchTreeList } from "./SearchTreeList";
+import { createStore, Provider, useAtomValue, useSetAtom } from "jotai";
+import { useEffect, useMemo, useState } from "react";
+import { ResultNode } from "src/search";
+import { activeFileAtom } from "./file-context/FileContextComponent";
+import { actualQueryAtom, graphVersionAtom, setDefaultExpandLevelAtom, updateSearchResultsAtom } from "./react-context/state";
+import { SearchViewFlatten } from "./search/SearchViewFlatten";
 
 type SearchPageProps = {
-	searchResult: ResultNode[],
-	page: number,
-	pageSize: number,
-	selectedLine: number,
-	minExpand: number,
-	selectHoveredLine?: (line: number) => void
-};
-
-export const NO_OP = (_: number) => {
-};
-
-export const SearchPage = (props: SearchPageProps) => {
-	return <>
-		<div className="cm-content tree-search-page">
-			<div className="markdown-source-view mod-cm6 is-live-preview">
-				{props.searchResult.slice(props.page * props.pageSize, (props.page + 1) * props.pageSize).map((tree, index) =>
-					<SearchTreeList node={tree} level={0} key={`${index}/${props.minExpand}`}
-						minExpand={props.minExpand}
-						selectedLine={props.selectedLine}
-						selectHoveredLine={props.selectHoveredLine || NO_OP} />
-				)
-				}
-			</div>
-		</div>
-	</>
+    sectionName: string
+    showSearch?: boolean
+    maxExpand?: number
+    searchFn: (q: string) => ResultNode[]
 }
+
+const SearchPage = (props: SearchPageProps) => {
+    const childItemSearchStore = useMemo(() => createStore(), [])
+    const [showSearch, setShowSearch] = useState(false)
+    const updateSearchResults = useSetAtom(updateSearchResultsAtom, {store: childItemSearchStore})
+    const actualQuery = useAtomValue(actualQueryAtom, {store: childItemSearchStore})
+    const setDefaultExpand = useSetAtom(setDefaultExpandLevelAtom, {store: childItemSearchStore})
+
+    useEffect(() => {
+        setDefaultExpand(props.maxExpand || 0)
+    }, [])
+
+    const activeFile = useAtomValue(activeFileAtom)
+    const version = useAtomValue(graphVersionAtom)
+
+    useEffect(() => {
+        const results = props.searchFn(actualQuery)
+        updateSearchResults(results)
+    }, [version, activeFile, actualQuery])
+
+    return <Provider store={childItemSearchStore}>
+        <h5 onClick={() => setShowSearch(!showSearch)}>{props.sectionName}</h5>
+        <SearchViewFlatten showSearch={showSearch}></SearchViewFlatten>
+    </Provider>
+}
+
+export default SearchPage

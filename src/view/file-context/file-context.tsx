@@ -1,8 +1,9 @@
 import {ItemView, WorkspaceLeaf} from "obsidian";
 import {createRoot, Root} from "react-dom/client";
 import {IndexedTree} from "../../indexed-tree";
-import {FileContextComponent} from "./FileContextComponent";
+import {activeFileAtom, FileContextComponent, pinAtom} from "./FileContextComponent";
 import {GraphContextProvider} from "../react-context/GraphContextProvider";
+import { ScopeProvider } from "jotai-scope";
 
 export const FILE_CONTEXT = "file-context";
 
@@ -30,8 +31,10 @@ export class FileContextView extends ItemView {
 	async onOpen() {
 		this.root = createRoot(this.containerEl.children[1]);
 		this.root.render(
-            <GraphContextProvider app={this.app} index={this.index}>
-                <FileContextComponent />
+            <GraphContextProvider app={this.app}>
+				<ScopeProvider atoms={[pinAtom, activeFileAtom]} debugName="FileContext">
+                	<FileContextComponent />
+				</ScopeProvider>
             </GraphContextProvider>
 		);
 	}
