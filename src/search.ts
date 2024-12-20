@@ -46,7 +46,10 @@ function filterDown(results: ResultNode[], search: SearchExpr[]): ResultNode[] {
     return filterDown(filtered, search.slice(1))
 }
 
-function traverseChildren(graph: DirectedGraphOfNotes, node: ResultNode, depth: number, traversedAlready: Set<string>, maxDepth = 4, maxResult: {current: number, max: number}) {
+function traverseChildren(graph: DirectedGraphOfNotes, node: ResultNode, depth: number, traversedAlready: Set<string>, maxDepth = 4, maxResult: {
+    current: number,
+    max: number
+}) {
     if (depth >= maxDepth) return
     if (traversedAlready.has(node.value)) return
 
@@ -65,7 +68,7 @@ function traverseChildren(graph: DirectedGraphOfNotes, node: ResultNode, depth: 
             children: [],
             attrs: {...edge.targetAttributes, ...{location: edge.attributes.location}}, // always point where the edge was discovered
             parents: getParents(graph, edge.target),
-			index: 0
+            index: 0
         }
 
         node.children.push(newNode)
@@ -107,7 +110,7 @@ export function searchParents(graph: DirectedGraphOfNotes, file: TFile): ResultN
             children: [],
             attrs: {...attrs, ...{location: edge.attributes.location}},
             parents: [],
-			index: 0
+            index: 0
         }
         filtered.push(newNode)
     }
@@ -188,7 +191,7 @@ export function searchChildren(graph: DirectedGraphOfNotes,
             children: [],
             attrs: {...attrs, ...{location: edge.attributes.location}},
             parents: [],
-			index: 0
+            index: 0
         }
 
         filtered.push(newNode)
@@ -208,14 +211,14 @@ function indexResultsInline(nodes: ResultNode[], index = 0): number {
     return i
 }
 
-export function index(nodes: ResultNode[]): IndexedResult  {
+export function index(nodes: ResultNode[]): IndexedResult {
     const total = indexResultsInline(nodes)
 
     return {nodes: nodes, total: total}
 }
 
 export function flattenTasks(nodes: ResultNode[]): IndexedResult {
-    
+
     function search(children: ResultNode[], result: ResultNode[], parent?: ResultNode) {
         for (const node of children) {
             if (node.attrs.nodeType == "task") {
@@ -235,6 +238,7 @@ export function flattenTasks(nodes: ResultNode[]): IndexedResult {
 }
 
 export type IndexedResult = { nodes: ResultNode[], total: number }
+
 
 export function searchIndex(graph: DirectedGraphOfNotes, qs: string, separator = ">", maxDepth = 4, maxResult = 3000): IndexedResult {
     if (qs.length < 3) return {nodes: [], total: 0}
@@ -259,7 +263,7 @@ export function searchIndex(graph: DirectedGraphOfNotes, qs: string, separator =
             children: [],
             attrs: attrs,
             parents: getParents(graph, node),
-			index: 0
+            index: 0
         }
 
         filtered.push(newNode)

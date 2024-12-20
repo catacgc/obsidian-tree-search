@@ -59,6 +59,26 @@ export const SearchTreeList = (props: SearchTreeListProps) => {
         ev.preventDefault();
     }
 
+    const children = props.node.children.sort((a, b) => {
+        const priority = {
+            "page": 1,
+            "virtual-page": 2,
+            "header": 3,
+            "task": 4,
+            "text": 5,
+            "completed-task": 6
+        };
+
+        const priorityA = priority[a.attrs.nodeType] || 7;
+        const priorityB = priority[b.attrs.nodeType] || 7;
+
+        if (priorityA === priorityB) {
+            return b.children.length - a.children.length;
+        }
+
+        return priorityA - priorityB;
+    });
+
     return (
         <>
             <div className="tree-node"
@@ -83,7 +103,7 @@ export const SearchTreeList = (props: SearchTreeListProps) => {
                 </div>
             </div>
 
-            {expanded && props.node.children.map((child) => (
+            {expanded && children.map((child) => (
                 <SearchTreeList
                     node={child}
                     level={props.level + 1}

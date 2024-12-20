@@ -6,6 +6,7 @@ import {useCallback, useEffect} from "react";
 import {GraphEvents} from "../obsidian-views/GraphEvents";
 import {useApp} from "../react-context/AppContext";
 import { Platform } from "obsidian";
+import {SearchViewFlatten} from "./SearchViewFlatten";
 
 
 export const SearchModalContainer = ({refresh = true}: {refresh?: boolean}) => {
@@ -27,12 +28,12 @@ export const SearchModalContainer = ({refresh = true}: {refresh?: boolean}) => {
     }, [version, refresh]);
 
     const searchFunction = useCallback((query: SearchQuery) => {
-        return searchIndex(graph.graph, query.query, searchSeparator, 5)
+        return searchIndex(graph.graph, query.query, searchSeparator, 20)
     }, [version, searchSeparator])
 
     return <div className="search-container-modal">
         <div className="search-container-modal-middle">
-            <SearchView minExpand={5} searchFunction={searchFunction} mode={"launcher"}/>
+            <SearchViewFlatten minExpand={5} searchFunction={searchFunction} mode={"launcher"}/>
         </div>
         {isDesktop && <div className="search-container-modal-instructions tree-search-modal-instructions">
             <div className="tree-search-modal-instructions-navigate"><span
