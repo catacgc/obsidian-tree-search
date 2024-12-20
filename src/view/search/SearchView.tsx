@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SEARCH_ICON } from "src/view/icons";
-import { highlightLine } from "../../obsidian-utils";
+import { highlightLine, insertLine } from "../../obsidian-utils";
 import { IndexedResult, ResultNode, SearchQuery } from "../../search";
 import { SearchPage } from "../SearchPage";
 import { GraphEvents } from "../obsidian-views/GraphEvents";
@@ -36,28 +36,15 @@ export const SearchView = ({
     const app = useApp()
     const [defaultExpandLevel, setDefaultExpandLevel] = useState(minExpand)
     const [userSetExpandLevel, setUserSetExpandLevel] = useState(minExpand)
+    const searchInputRef = useRef<HTMLInputElement>(null)
 
     const [selectedLine, setSelectedLine] = useState(0);
 
-    const {linkRef, tryOpenUrl} = useUrlOpener()
+    useEffect(() => {
+        searchInputRef.current?.focus();
+    }, []); // Empty dependency array means this runs once on mount
 
-    // useEffect(() => {
-    //     const handleHighlightOpen = async (event: CustomEvent) => {
-    //         const node = findNode(selectedLine, indexedResult.nodes);
-    //         console.log(event, node);
-    //
-    //         if (node && app) {
-    //             await highlightLine(app, node.attrs.location)
-    //         }
-    //         // Handle the event (e.g., update state, trigger UI changes, etc.)
-    //     };
-    //
-    //     window.addEventListener('highlight-open', handleHighlightOpen);
-    //
-    //     return () => {
-    //         window.removeEventListener('highlight-open', handleHighlightOpen);
-    //     };
-    // }, [selectedLine, indexedResult.nodes]);
+    const {linkRef, tryOpenUrl} = useUrlOpener()
 
     const handleCmdEnter = async (event: React.KeyboardEvent<HTMLInputElement>) => {
         const node = findNode(selectedLine, indexedResult.nodes);
@@ -104,12 +91,15 @@ export const SearchView = ({
         setDefaultExpandLevel(search.length >= 3 ? renderedExpand : userSetExpandLevel)
     }, [search, version, context])
 
+    const keyUp = () => setSelectedLine(prevLine => Math.max(prevLine - 1, 0));
+    const keyDown = () => setSelectedLine(prevLine => Math.min(prevLine + 1, indexedResult.total - 1));
+
     const handleKeyDown = async (event: React.KeyboardEvent<HTMLInputElement>) => {
         if (event.key === 'ArrowUp') {
-            setSelectedLine(prevLine => Math.max(prevLine - 1, 0));
+            keyUp()
             event.preventDefault();
         } else if (event.key === 'ArrowDown') {
-            setSelectedLine(prevLine => Math.min(prevLine + 1, indexedResult.total - 1));
+            keyDown()
             event.preventDefault();
         } else if (event.key === 'Enter') {
             await handleCmdEnter(event);
@@ -127,6 +117,14 @@ export const SearchView = ({
                 new Notice('Line copied to clipboard');
             }
             event.preventDefault();
+        } else if (event.key === 'i' && event.ctrlKey) {
+            const node = findNode(selectedLine, indexedResult.nodes);
+            if (node && app) {
+                await insertLine(app, node.attrs.location)
+                const customEvent = new CustomEvent(GraphEvents.RESULT_SELECTED, {detail: {type: "insert"}});
+                window.dispatchEvent(customEvent);
+                event.preventDefault();
+            }
         }
     };
 
@@ -141,6 +139,7 @@ export const SearchView = ({
                     <a style={{display: "none"}} target="_blank" ref={linkRef} href="#"></a>
                     <div className="search-input-container global-search-input-container">
                         <input enterKeyHint="search"
+                               ref={searchInputRef}
                                type="search"
                                spellCheck="false"
                                onChange={ev => setSearch(ev.target.value)}

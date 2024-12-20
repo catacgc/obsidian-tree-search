@@ -17,6 +17,17 @@
     right: 0
 }
 
+.search-container-modal-instructions .mobile-toolbar-option {
+    display: flex;
+    flex-direction: row;
+    justify-content: center; /* center horizontally */
+    align-items: center;
+    width: 100%;
+}
+
+.search-container-modal-instructions .mobile-toolbar-option .mobile-toolbar-options-item {
+    padding: 0em 1em 0em 1em;
+}
 
 .tree-search-modal-instructions {
     border-top: 1px solid var(--background-secondary);

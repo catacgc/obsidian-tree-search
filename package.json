@@ -47,6 +47,7 @@
 	"dependencies": {
 		"graphology": "^0.25.4",
 		"js-yaml": "^4.1.0",
+		"lucide-react": "^0.468.0",
 		"luxon": "^3.5.0",
 		"markdown-it": "^14.1.0",
 		"promise-worker": "^2.0.1",

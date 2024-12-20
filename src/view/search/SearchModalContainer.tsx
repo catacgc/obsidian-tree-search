@@ -1,19 +1,21 @@
-import {useGraph} from "../react-context/GraphContext";
-import {SearchView} from "./SearchView";
-import {useSettings} from "../react-context/PluginContext";
-import {searchIndex, SearchQuery} from "../../search";
-import {useCallback, useEffect} from "react";
-import {GraphEvents} from "../obsidian-views/GraphEvents";
-import {useApp} from "../react-context/AppContext";
+import { useGraph } from "../react-context/GraphContext";
+import { SearchView } from "./SearchView";
+import { useSettings } from "../react-context/PluginContext";
+import { searchIndex, SearchQuery } from "../../search";
+import { useCallback, useEffect } from "react";
+import { GraphEvents } from "../obsidian-views/GraphEvents";
+import { useApp } from "../react-context/AppContext";
 import { Platform } from "obsidian";
+import { AArrowDown, ArrowDown, ArrowUp, Camera, Copy, ListEnd } from "lucide-react";
 
 
-export const SearchModalContainer = ({refresh = true}: {refresh?: boolean}) => {
+export const SearchModalContainer = ({ refresh = true }: { refresh?: boolean }) => {
 
-    const {graph, version} = useGraph()
-    const {searchSeparator} = useSettings()
-    const app = useApp()
-    const isDesktop = Platform.isDesktop
+    const { graph, version } = useGraph();
+    const { searchSeparator } = useSettings();
+    const app = useApp();
+    const isDesktop = Platform.isDesktop;
+    const isMobile = Platform.isMobile;
 
     useEffect(() => {
         // try refreshing the graph; nodes count is a good proxy
@@ -27,13 +29,46 @@ export const SearchModalContainer = ({refresh = true}: {refresh?: boolean}) => {
     }, [version, refresh]);
 
     const searchFunction = useCallback((query: SearchQuery) => {
-        return searchIndex(graph.graph, query.query, searchSeparator, 5)
-    }, [version, searchSeparator])
+        return searchIndex(graph.graph, query.query, searchSeparator, 5);
+    }, [version, searchSeparator]);
 
     return <div className="search-container-modal">
         <div className="search-container-modal-middle">
-            <SearchView minExpand={5} searchFunction={searchFunction} mode={"launcher"}/>
+            <SearchView minExpand={5} searchFunction={searchFunction} mode={"launcher"} />
         </div>
+
+        {!isMobile && <div className="search-container-modal-instructions tree-search-modal-instructions">
+            <div className="mobile-toolbar">
+                <div className="mobile-toolbar-options-container">
+                    <div className="mobile-toolbar-options-list">
+                        <div className="mobile-toolbar-option">
+                            <div className="mobile-toolbar-options-item">
+                                <button>
+                                    <ArrowDown />
+                                </button>
+                            </div>
+                            <div className="mobile-toolbar-options-item">
+                                <button>
+                                    <ArrowUp />
+                                </button>
+                            </div>
+                            <div className="mobile-toolbar-options-item">
+                                <button>
+                                    <Copy /> Copy
+                                </button>
+                            </div>
+                            <div className="mobile-toolbar-options-item">
+                                <button>
+                                    <ListEnd /> Insert
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        }
+
         {isDesktop && <div className="search-container-modal-instructions tree-search-modal-instructions">
             <div className="tree-search-modal-instructions-navigate"><span
                 className="tree-search-modal-instructions-key">↑↓</span><span
@@ -50,6 +85,10 @@ export const SearchModalContainer = ({refresh = true}: {refresh?: boolean}) => {
             <div className="tree-search-modal-instructions-enter"><span
                 className="tree-search-modal-instructions-key">Ctrl+C</span><span
                 className="tree-search-modal-instructions-text">Copy to Clipboard</span></div>
+
+            <div className="tree-search-modal-instructions-enter"><span
+                className="tree-search-modal-instructions-key">Ctrl+I</span><span
+                className="tree-search-modal-instructions-text">Insert After</span></div>
         </div>}
-    </div>
-}
+    </div>;
+};

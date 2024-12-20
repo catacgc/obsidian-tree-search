@@ -28,3 +28,22 @@ export async function openFileByName(app: App, basename: string) {
         await app.workspace.openLinkText(basename, basename)
 	}
 }
+
+export async function insertLine(app: App, loc: Location) {
+    const file = app.vault.getFileByPath(loc.path);
+    if (file) {
+        const leaf = app.workspace.getLeaf();
+        await leaf.openFile(file, {active: true});
+
+        setTimeout(() => {
+            const view = app.workspace?.activeEditor?.editor
+            if (view) {
+                view.addHighlights([{from: loc.position.start, to: loc.position.end}], "is-flashing", true)
+                view.setCursor(loc.position.end.line, loc.position.end.ch)
+                view.newlineAndIndentContinueMarkdownList()
+                // view.insertText("\n- ")
+            }
+
+        }, 100);
+    }
+}

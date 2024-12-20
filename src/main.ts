@@ -13,7 +13,7 @@ import fs from 'fs';
 
 import http, { IncomingMessage, ServerResponse } from 'http'
 import { searchIndex } from './search';
-import { highlightLine } from './obsidian-utils';
+import { highlightLine, insertLine } from './obsidian-utils';
 
 export default class TreeSearchPlugin extends Plugin {
     index: IndexedTree
@@ -120,14 +120,21 @@ export default class TreeSearchPlugin extends Plugin {
         });
 
         // this will handle the tree-search-uri protocol coming from raycast
-        this.registerObsidianProtocolHandler("tree-search-uri", (uri) => {
-            highlightLine(this.app, {
+        this.registerObsidianProtocolHandler("tree-search-uri", async (uri) => {
+            const location = {
                 path: uri.filepath,
                 position: {
                     start: { line: parseInt(uri.sl), ch: parseInt(uri.sc) },
                     end: { line: parseInt(uri.el), ch: parseInt(uri.ec) }
                 }
-            })
+            }
+            
+            if (uri.raycastaction === "insert") {
+                await insertLine(this.app, location)
+            } else {
+
+                await highlightLine(this.app, location)
+            }
         })
 
         this.createRaycastSocket()
