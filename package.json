@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-tree-search",
-	"version": "0.10.0",
+	"version": "0.10.1",
 	"description": "All in one graph search, quick switcher, bookmark manager and MOC manager",
 	"main": "main.js",
 	"scripts": {
