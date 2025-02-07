@@ -2,7 +2,7 @@ import {DvList, indexSinglePage} from "../src/tree-builder";
 import {ResultNode, searchIndex} from "../src/search";
 import {expect} from "@jest/globals";
 import {NotesGraph} from "../src/graph";
-import { getSettings } from "src/view/react-context/settings";
+import { getSettings } from "../src/view/react-context/settings";
 
 export function buildIndexFromFixture(page: string, lines: string, aliases: string[] = []) {
 	const graph = new NotesGraph()

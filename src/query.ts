@@ -1,76 +1,149 @@
 import {NodeAttributes} from "./graph";
 
-export type SearchExpr = {
-	operator: "and" | "or" | "not" | "value",
-	children: SearchExpr[],
-	value: string
-};
+type QueryModifier = ':task' | ':emoji' | ':page' | ':header';
 
-function matchesExpr(attrs: NodeAttributes, expr: SearchExpr): boolean {
-	if (expr.operator === "and") {
-		return expr.children.every(c => matchesExpr(attrs, c));
-	} else if (expr.operator === "or") {
-		return expr.children.some(c => matchesExpr(attrs, c));
-	} else if (expr.operator === "not") {
-		return !matchesExpr(attrs, expr.children[0]);
-	} else {
-		return matchNode(attrs, expr);
-	}
+export type QueryExpr = 
+    | { type: 'contains'; value: string }
+	| { type: 'empty' }
+    | { type: 'equals'; value: string }
+    | { type: 'startsWith'; value: string }
+    | { type: 'not'; expr: QueryExpr }
+    | { type: 'and'; exprs: QueryExpr[] }
+    | { type: 'or'; exprs: QueryExpr[] }
+    | { type: 'modifier'; value: QueryModifier };
+
+function tokenize(query: string): string[] {
+    return query.trim()
+        .split(/\s+/)
+        .filter(token => token.length > 0);
 }
 
+export function parseQuery(query: string): QueryExpr {
+    if (!query.trim()) {
+        return { type: 'empty' };
+    }
 
-function matchNode(attrs: NodeAttributes, expr: SearchExpr) {
-    if (expr.operator === "value" && expr.value.startsWith(":")) {
-        if (expr.value == ":task" && attrs.nodeType == "task") {
-            return true
-        }
+    const tokens = tokenize(query);
+    return parseOrGroups(tokens);
+}
 
-        if (expr.value == ":page" && (attrs.nodeType == "page" || attrs.nodeType == "virtual-page")) {
-            return true
-        }
+function parseOrGroups(tokens: string[]): QueryExpr {
+    const groups = splitByOr(tokens);
+    
+    if (groups.length === 1) {
+        return parseAndGroup(groups[0]);
+    }
 
-        if (expr.value == ":header" && (attrs.nodeType == "header")) {
-            return true
+    return {
+        type: 'or',
+        exprs: groups.map(group => parseAndGroup(group))
+    };
+}
+
+function parseAndGroup(tokens: string[]): QueryExpr {
+    if (tokens.length === 1) {
+        return parseToken(tokens[0]);
+    }
+
+    return {
+        type: 'and',
+        exprs: tokens.map(token => parseToken(token))
+    };
+}
+
+function splitByOr(tokens: string[]): string[][] {
+    const groups: string[][] = [];
+    let currentGroup: string[] = [];
+
+    for (const token of tokens) {
+        if (token === '|') {
+            if (currentGroup.length > 0) {
+                groups.push(currentGroup);
+                currentGroup = [];
+            }
+        } else {
+            currentGroup.push(token);
         }
     }
 
-    return attrs.searchKey.includes(expr.value)
+    if (currentGroup.length > 0) {
+        groups.push(currentGroup);
+    }
+
+    return groups;
 }
 
-export function parseQuery(query: string): SearchExpr {
-	const words = query.toLowerCase().split(" ")
-		.map(it => it.trim())
-		.filter(it => it.length > 0);
-	const stack: SearchExpr[] = [];
+function parseToken(token: string): QueryExpr {
+    // Handle modifiers
+    if (token.startsWith(':')) {
+        const modifier = token as QueryModifier;
+        if ([':task', ':emoji', ':page', ':header'].includes(modifier)) {
+            return { type: 'modifier', value: modifier };
+        }
+    }
 
-	for (const word of words) {
-		if (word === "and") {
-			stack.push({ operator: "and", children: [], value: "" });
-		} else if (word === "or") {
-			stack.push({ operator: "or", children: [], value: "" });
-		} else if (word.startsWith("-")) {
-			stack.push({ operator: "not", children: [{ operator: "value", children: [], value: word.substring(1) }], value: "" });
-		} else {
-			stack.push({ operator: "value", children: [], value: word });
-		}
-	}
+    // Handle exact match
+    if (token.startsWith('"') && token.endsWith('"')) {
+        return { type: 'equals', value: token.slice(1, -1) };
+    }
 
-	const root: SearchExpr = { operator: "and", children: [], value: "" };
-	let current: SearchExpr = root;
+    // Handle starts with
+    if (token.startsWith('"')) {
+        return { type: 'startsWith', value: token.slice(1) };
+    }
 
-	for (const node of stack) {
-		if (node.operator === "and" || node.operator === "or") {
-			const newNode: SearchExpr = { operator: node.operator, children: [], value: "" };
-			current.children.push(newNode);
-			current = newNode;
-		} else {
-			current.children.push(node);
-		}
-	}
+    // Handle negation
+    if (token.startsWith('-')) {
+        return { type: 'not', expr: { type: 'contains', value: token.slice(1) } };
+    }
 
-	return root;
+    // Default to contains
+    return { type: 'contains', value: token };
 }
 
-export function matchQuery(attr: NodeAttributes, searchExpr: SearchExpr): boolean {
-	return matchesExpr(attr, searchExpr);
+export function matchExpr(attrs: NodeAttributes, expr: QueryExpr): boolean {
+    switch (expr.type) {
+		case 'empty':
+			return true;
+        case 'contains':
+            return attrs.searchKey.toLowerCase().includes(expr.value.toLowerCase());
+        case 'equals':
+            return attrs.searchKey.toLowerCase() === expr.value.toLowerCase();
+        case 'startsWith':
+            return attrs.searchKey.toLowerCase().startsWith(expr.value.toLowerCase());
+        case 'not':
+            return !matchExpr(attrs, expr.expr);
+        case 'and':
+            return expr.exprs.every(e => matchExpr(attrs, e));
+        case 'or':
+            return expr.exprs.some(e => matchExpr(attrs, e));
+        case 'modifier':
+            switch (expr.value) {
+                case ':task':
+                    return attrs.nodeType === 'task';
+                case ':emoji':
+                    return containsEmoji(attrs.searchKey);
+                case ':page':
+                    return attrs.nodeType === 'page' || attrs.nodeType === 'virtual-page';
+                case ':header':
+                    return attrs.nodeType === 'header';
+            }
+    }
+}
+
+const emojiRegex = /[\p{Emoji_Presentation}\p{Extended_Pictographic}]/u;
+export function containsEmoji(text: string): boolean {
+    return emojiRegex.test(text);
+}
+
+export function firstPassInclude(attrs: NodeAttributes, expr: QueryExpr) {
+	if (expr.type == "not") {
+		return !matchExpr(attrs, expr.expr)
+	}
+
+	return matchExpr(attrs, expr)
+}
+
+export function matchQuery(attrs: NodeAttributes, expr: QueryExpr): boolean {
+    return matchExpr(attrs, expr);
 }

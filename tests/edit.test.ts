@@ -30,8 +30,8 @@ describe('edit capabilities, graph updates', () => {
 		);
 
 		expectSearch(graph, 'node').toEqual(result(`
-		[[Node]]
 		[[Node1]]
+		[[Node]]
 		`))
 	})
 

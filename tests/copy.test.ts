@@ -27,6 +27,6 @@ describe('copy operation for search results', () => {
 
 		const resultNodes = searchIndex(nestedGraph.graph, "header");
         const line = reverseMarkdownParsing(resultNodes[0].attrs.tokens)
-        expect(line).toEqual("[[Project]] > Header")
+        expect(line).toEqual("[[Project#Header]]")
 	});
 });

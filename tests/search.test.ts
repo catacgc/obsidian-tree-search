@@ -6,6 +6,7 @@ import {
     testParentOf,
 } from "./fixtures";
 import {NotesGraph} from "../src/graph";
+import { containsEmoji } from "../src/query";
 
 
 async function printGraph(graph: NotesGraph) {
@@ -51,20 +52,37 @@ describe('index and search operators', () => {
 		- [[Project2]]
 			- [[Task2]]
 		`);
-		expectSearch(nestedGraph, 'Important > Project2').toEqual(result(`
+		expectSearch(nestedGraph, 'Important . Project2').toEqual(result(`
 		[[ImportantProjects]]
 		 [[Project2]]
 		  [[Task2]]
 		`));
 	});
 
-// 	it('should exclude nested', async () => {
-// 		testGraphSearch(nestedGraph, 'Important > -Project1', `
-// [[ImportantProjects]]
-//  [[Project2]]
-//   [[Task2]]
-// `);
-// 	})
+	it('not operator tree pruning', async () => {
+		const graph = await fixture(`
+			LessImportant.md
+			ImportantProjects.md
+			- [[Project1]]
+				- [[Task1]]
+			- [[Project2]]
+				- [[Task2]]
+			`);
+		
+		expectSearch(graph, '-project').toEqual(result(`
+				[[LessImportant]]
+				`));
+		
+		// expectSearch(graph, '-Project1').toEqual(result(`
+		// 	[[ImportantProjects]]
+		// 	 [[Project2]]
+		// 	  [[Task2]]
+		// 	`));
+
+		// expectSearch(graph, '-Project1 -Project2').toEqual(result(`
+		// 		[[ImportantProjects]]
+		// 		`));
+	})
 
 
 	it('inline mentions', async () => {
@@ -80,14 +98,12 @@ describe('index and search operators', () => {
 			[[Topic1]]
 			 Task1 related to [[Topic1]]
 			 [[Project2]] with a mention of a few topics [[Topic1]] [[Topic2]]
-			Task1 related to [[Topic1]]
 			`));
 
 		expectSearch(inlineMentions, 'Project1').toEqual(result(`
 			[[Project1]]
 			 [[Project1]] with an inline mention
 			  Task1 related to [[Topic1]]
-			[[Project1]] with an inline mention
 			`));
 	})
 
@@ -95,8 +111,8 @@ describe('index and search operators', () => {
 		const inlineMentions = await fixture(`
 		ImportantProjects.md
 		- [[Project1]]
-		- [[Project1]] with an inline mention
-			- Task1 related to [[Topic1]]
+			- [[Project1]] with an inline mention
+				- Task1 related to [[Topic1]]
 		- [[Project2]] with a mention of a few topics [[Topic1]] [[Topic2]]
 		`);
 
@@ -122,14 +138,11 @@ describe('index and search operators', () => {
 		[[Topic1]]
 		 Task1 related to [[Topic1]]
 		 [[Project2]] with a mention of a few topics [[Topic1]] [[Topic2]]
-		Task1 related to [[Topic1]]
-		[[Project2]] with a mention of a few topics [[Topic1]] [[Topic2]]
 		`));
 
 		expectSearch(graph, 'topic2').toEqual(result(`
 		[[Topic2]]
 		 [[Project2]] with a mention of a few topics [[Topic1]] [[Topic2]]
-		[[Project2]] with a mention of a few topics [[Topic1]] [[Topic2]]
 		`));
 	})
 
@@ -142,7 +155,6 @@ describe('index and search operators', () => {
 		expectSearch(graph, 'Books').toEqual(result(`
 		[[Books]]
 		 Getting things done [[Books]]
-		Getting things done [[Books]]
 		`));
 	});
 
@@ -163,14 +175,30 @@ describe('index and search operators', () => {
 		 [[Task1]]
 		  [[Note1]]
 		  [[Note2]]
+		   [[Project1]]
 		`));
 		expectSearch(graph, 'task1').toEqual(result(`
 		[[Task1]]
 		 [[Note1]]
 		 [[Note2]]
 		  [[Project1]]
+		   [[Task1]]
 		`));
 	})
+
+	it('emoji search', async () => {
+		const graph = await fixture(`
+			Note.md
+			- [[Project]]
+				 - test 🪴 https://www.evergreen.com
+			`);
+
+		expect(containsEmoji('test 🪴')).toBe(true);
+
+		expectSearch(graph, ':emoji').toEqual(result(`
+			test 🪴 https://www.evergreen.com
+			`));
+	});
 
 	it('aliases support', async () => {
 		const graph = await fixture(`
@@ -205,7 +233,6 @@ describe('index and search operators', () => {
 		expectSearch(graph, 'Related').toEqual(result(`
 		[[RelatedNote]]
 		 A related note about [[RelatedNote]]
-		A related note about [[RelatedNote]]
 		`));
 	})
 
@@ -262,11 +289,28 @@ describe('index and search operators', () => {
 
 		// await printGraph(graph);
 
-		expectSearch(graph, 'project > tasklist').toContain(result(`
+		expectSearch(graph, 'project . tasklist').toContain(result(`
 			[[Project]]
 			 [[Project]] > TaskList
 			  Inline Ref [[Project#TaskList]]
 			  [[Task1]]
+			`));
+	})
+
+	it('search only pages', async () => {
+		const graph = await fixture(`
+			Note1.md
+			- [[Note2]]
+				- http://www.example.com
+			- [[Note3]]
+			`);
+
+		// await printGraph(graph);
+
+		expectSearch(graph, 'note1 :page . :page').toContain(result(`
+			[[Note1]]
+			 [[Note2]]
+			 [[Note3]]
 			`));
 	})
 });

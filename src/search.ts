@@ -1,6 +1,6 @@
 import {DirectedGraphOfNotes, NodeAttributes} from "./graph";
 import Graph from "graphology";
-import {matchQuery, parseQuery, SearchExpr} from "./query";
+import {firstPassInclude, matchQuery, parseQuery, QueryExpr} from "./query";
 import {TFile} from "obsidian";
 
 export type ResultNode = {
@@ -10,8 +10,11 @@ export type ResultNode = {
     parents: string[]
 }
 
-function filterTreeByWord(node: ResultNode, expr: SearchExpr): ResultNode | null {
+function filterTreeByWord(node: ResultNode, expr: QueryExpr): ResultNode | null {
     if (matchQuery(node.attrs, expr)) {
+        // if (expr.type == "modifier" && expr.value == ":page") {
+        //     return {...node, ...{children: []}}
+        // }
         return node
     }
 
@@ -32,7 +35,7 @@ function filterTreeByWord(node: ResultNode, expr: SearchExpr): ResultNode | null
     };
 }
 
-function filterDown(results: ResultNode[], search: SearchExpr[]): ResultNode[] {
+function filterDown(results: ResultNode[], search: QueryExpr[]): ResultNode[] {
     if (search.length === 0) return results
 
     const expr = search[0]
@@ -44,9 +47,8 @@ function filterDown(results: ResultNode[], search: SearchExpr[]): ResultNode[] {
     return filterDown(filtered, search.slice(1))
 }
 
-
 function buildTree(node: string, graph: DirectedGraphOfNotes, roots: Map<string, ResultNode>, traversedAlready: Set<string>): ResultNode {
-    traversedAlready.add(node); 
+    traversedAlready.add(node);
 
     const newNode: ResultNode = {
         value: node,
@@ -78,14 +80,6 @@ function buildTree(node: string, graph: DirectedGraphOfNotes, roots: Map<string,
     }
 
     return newNode
-}
-
-function getParents(graph: Graph, node: string) {
-    const parents = []
-    for (const parent of graph.inboundNeighborEntries(node)) {
-        parents.push(parent.neighbor)
-    }
-    return parents;
 }
 
 export function searchParents(graph: DirectedGraphOfNotes, file: TFile): ResultNode[] {
@@ -161,8 +155,7 @@ export function flattenTasks(nodes: ResultNode[]): IndexedResult {
 
 export type IndexedResult = { nodes: ResultNode[], total: number }
 
-
-export function searchIndex(graph: DirectedGraphOfNotes, qs: string, separator = ">"): ResultNode[] {
+export function searchIndex(graph: DirectedGraphOfNotes, qs: string, separator = "."): ResultNode[] {
     if (qs.length < 3) return []
 
     const expressions = qs.split(separator)
@@ -171,9 +164,11 @@ export function searchIndex(graph: DirectedGraphOfNotes, qs: string, separator =
 
     const roots = new Map<string, ResultNode>()
 
-    const firstPageCandidates = graph
-        .filterNodes((_, attrs) => matchQuery(attrs, expressions[0]))
-        .sort((a, b) => a.length - b.length)
+    const firstPass = expressions[0]
+
+    let firstPageCandidates =  graph
+            .filterNodes((_, attrs) => firstPassInclude(attrs, firstPass))
+            .sort((a, b) => b.length - a.length);
 
     const traversed = new Set<string>()
 
@@ -189,6 +184,54 @@ export function searchIndex(graph: DirectedGraphOfNotes, qs: string, separator =
         .sort((a, b) => b.children.length - a.children.length);
 
     return sorted
+}
+
+/**
+ * Recursively prune the graph for each not operator in the expression
+ */
+function prune(graph: DirectedGraphOfNotes, expr: QueryExpr): Set<string> {
+    // if (expr.type == "not") {
+    //     const matches = new Set<string>();
+    //     for (const child of expr.expr) {
+    //         const pruned = prune(graph, child)
+    //         pruned.forEach(node => matches.add(node))
+    //     }
+    //     return matches
+    // }
+
+    if (expr.type != "not") {
+        return new Set<string>()
+    }
+
+    const matches = new Set<string>();
+    const visited = new Set<string>();
+
+    // Find initial matching nodes
+    const initialNodes = graph.filterNodes((node, attrs) => !matchQuery(attrs, expr));
+
+    // For each matching node, traverse the graph to find all reachable nodes
+    for (const node of initialNodes) {
+        if (visited.has(node)) continue;
+        traverseAndCollect(node, graph, matches, visited);
+    }
+
+    return matches;
+}
+
+function traverseAndCollect(
+    node: string, 
+    graph: DirectedGraphOfNotes, 
+    matches: Set<string>,
+    visited: Set<string>
+) {
+    if (visited.has(node)) return;
+    visited.add(node);
+    matches.add(node);
+
+    // Traverse outbound edges
+    for (const neighbor of graph.outNeighbors(node)) {
+        traverseAndCollect(neighbor, graph, matches, visited);
+    }
 }
 
 export type SearchQuery = {
