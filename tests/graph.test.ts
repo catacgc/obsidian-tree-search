@@ -49,6 +49,24 @@ ImportantProjects.md,{"aliases":["alias"]}
 		expect(graph.graph.hasEdge('note3#header', '[[note4]]')).toBeTruthy()
 	})
 
+	test("page and virtual-page support", async () => {
+		const graph = await fixture(`
+		File.md
+		-    [[Note]]
+		  -  [[Note2]]
+		`,`
+		Note2.md
+		- [[Note3]]
+		`)
+
+		expect(graph.graph.hasEdge('[[file]]', '[[note]]')).toBeTruthy()
+		expect(graph.graph.hasEdge('[[note]]', '[[note2]]')).toBeTruthy()
+		expect(graph.graph.hasEdge('[[note2]]', '[[note3]]')).toBeTruthy()
+		expect(graph.graph.getNodeAttributes('[[file]]').nodeType).toBe('page')
+		expect(graph.graph.getNodeAttributes('[[note]]').nodeType).toBe('virtual-page')
+		expect(graph.graph.getNodeAttributes('[[note2]]').nodeType).toBe('page')
+	})
+
 	test("aliases support", async () => {
 		const graph = await fixture(`
 		File.md

@@ -84,7 +84,7 @@ export class NotesGraph {
 		}
 
 		const pageAttribute = this.createPageNodeAttribute(page);
-		this.addNode(pageRef, pageAttribute)
+		this.addOrUpdateNodeAlias(pageRef, pageAttribute)
 
 		let parents = page.file.frontmatter[parentRelation] || [];
 		if (typeof (parents) == "string") {
@@ -113,18 +113,18 @@ export class NotesGraph {
 		const ref = refs[0]
 
 		if (ref.headerKey) {
-			this.addNode(ref.pageTarget, attrs)
-			this.addNode(ref.headerKey, attrs)
+			this.addOrUpdateNodeAlias(ref.pageTarget, attrs)
+			this.addOrUpdateNodeAlias(ref.headerKey, attrs)
 			this.addChild(ref.pageTarget, ref.headerKey, page.file.mtime.ts, pageAttribute.location)
 			this.addChild(ref.headerKey, pageRef, page.file.mtime.ts, pageAttribute.location)
 		} else {
-			this.addNode(ref.pageTarget, attrs)
+			this.addOrUpdateNodeAlias(ref.pageTarget, attrs)
 			this.addChild(ref.pageTarget, pageRef, page.file.mtime.ts, pageAttribute.location)
 		}
 	}
 
 	addItemNode(page: DvPage, item: DvList) {
-		this.addNode(item.text, this.createItemNodeAttributes(page, item))
+		this.addOrUpdateNodeAlias(item.text, this.createItemNodeAttributes(page, item))
 	}
 
 	addChild(parent: string, child: string, mtime: number, location: NodeAttributes['location']) {
@@ -197,7 +197,10 @@ export class NotesGraph {
 	 */
 	createNodes(page: DvPage, item: DvList): CreatedNodes {
 		const attributes = this.createItemNodeAttributes(page, item);
-		this.addNode(item.text, attributes)
+		const obsidianLinkReference = this.getObsidianLinkReference(attributes.tokens);
+
+		this.createRefsNodes(obsidianLinkReference, attributes);
+		this.addOrUpdateNodeAlias(item.text.trim(), attributes)
 
 		let headerKey = ""
 		// create header nodes
@@ -205,14 +208,9 @@ export class NotesGraph {
 			const trimmedHeaderName = item.section.subpath.replace(/#/g, " ").trim();
 			const header = this.createHeaderNode(page.file.name, trimmedHeaderName, attributes.location)
 			headerKey = page.file.name + "#" + trimmedHeaderName
-			this.addNode(page.file.name + "#" + trimmedHeaderName, header)
+			this.addOrUpdateNodeAlias(page.file.name + "#" + trimmedHeaderName, header)
 		}
-
-		// create refs
-		const obsidianLinkReference = this.getObsidianLinkReference(attributes.tokens);
-
-		this.createRefsNodes(obsidianLinkReference, attributes);
-
+		
 		return {
 			textLine: item.text,
 			header: headerKey,
@@ -233,7 +231,7 @@ export class NotesGraph {
                 position: position
             };
             const headerNode = this.createHeaderNode(page.file.name, header.heading, location)
-            this.addNode(page.file.name + "#" + header.heading, headerNode)
+            this.addOrUpdateNodeAlias(page.file.name + "#" + header.heading, headerNode)
             this.addEdge(pageRef, page.file.name + "#" + header.heading, {
                 mtime: page.file.mtime.ts,
                 type: "parent",
@@ -245,11 +243,11 @@ export class NotesGraph {
 	private createRefsNodes(obsidianLinkReference: ObsidianRef[], attributes: NodeAttributes) {
 		for (const ref of obsidianLinkReference) {
 			const virtualPage = this.createVirtualPageNodeAttribute(ref.pageTarget, attributes.location)
-			this.addNode(ref.pageTarget, virtualPage)
+			this.addOrUpdateNodeAlias(ref.pageTarget, virtualPage)
 
 			if (ref.headerKey && ref.headerName) {
 				const header = this.createHeaderNode(ref.pageTarget, ref.headerName, attributes.location)
-				this.addNode(ref.headerKey, header)
+				this.addOrUpdateNodeAlias(ref.headerKey, header)
 			}
 		}
 	}
@@ -297,12 +295,11 @@ export class NotesGraph {
 		return created.textLine
 	}
 
-	private addNode(key: string, attrs: NodeAttributes) {
+	private addOrUpdateNodeAlias(key: string, attrs: NodeAttributes) {
 		const nodeKey = key.toLowerCase();
 		if (!this.graph.hasNode(nodeKey)) {
 			this.graph.addNode(nodeKey, attrs)
-		} else if (attrs.aliases.length > 0) {
-			// const existing = this.graph.getNodeAttributes(nodeKey)
+		} else if (attrs.aliases.length > 0 || attrs.nodeType == "page") {
 			this.graph.mergeNodeAttributes(nodeKey, attrs)
 		}
 	}

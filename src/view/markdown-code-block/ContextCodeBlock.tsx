@@ -6,6 +6,10 @@ import {InlineMarkdownResults} from "./InlineMarkdownResults";
 
 export class MarkdownContextSettings {
     depth: number
+    query: string
+    file?: TFile
+    heading?: string
+    inferredFile: TFile
 }
 
 export class ContextCodeBlock extends MarkdownRenderChild {
@@ -39,13 +43,11 @@ export class ContextCodeBlock extends MarkdownRenderChild {
         }
 
         let heading = findHeading();
-        let file = this.app.vault.getAbstractFileByPath(this.context.sourcePath) as TFile
+        const inferredFile = this.app.vault.getAbstractFileByPath(this.context.sourcePath) as TFile
+        let userProvidedFile = undefined
 
         const yaml = parseYaml(this.source);
-        const settings: MarkdownContextSettings = {
-            depth: yaml?.depth == undefined ? 1 : yaml.depth
-        }
-
+        
         const yamlFile = yaml?.file
         if (yamlFile) {
             const justRef = yamlFile.replace("[[", "").replace("]]", "").split("|")[0]
@@ -53,16 +55,25 @@ export class ContextCodeBlock extends MarkdownRenderChild {
             const impliedRef = fileAndHeading[0]
 
             const found = this.app.vault.getFiles().find(it => it.basename == impliedRef)
-            if (found) file = found;
+            if (found) userProvidedFile = found;
 
             if (fileAndHeading.length > 1) {
                 heading = fileAndHeading[1]
             }
         }
 
+
+        const settings: MarkdownContextSettings = {
+            depth: yaml?.depth == undefined ? 1 : yaml.depth,
+            query: yaml?.query || "",
+            file: userProvidedFile,
+            heading: heading,
+            inferredFile: inferredFile,
+        }
+
         root.render(
             <GraphContextProvider app={this.app}>
-                <InlineMarkdownResults activeFile={file} heading={heading} settings={settings}/>
+                <InlineMarkdownResults settings={settings}/>
             </GraphContextProvider>
         );
     }

@@ -10,41 +10,60 @@ export type ResultNode = {
     parents: string[]
 }
 
-function filterTreeByWord(node: ResultNode, expr: QueryExpr): ResultNode | null {
-    if (matchQuery(node.attrs, expr)) {
-        // if (expr.type == "modifier" && expr.value == ":page") {
-        //     return {...node, ...{children: []}}
-        // }
+function filterTreeByWord(
+    node: ResultNode, 
+    expr: QueryExpr, 
+    showOnlyMatchingChildren = false,
+    pruneMatchingTree = false): ResultNode | null {
+    
+    const nodeMatches = matchQuery(node.attrs, expr)
+    if (!nodeMatches && pruneMatchingTree) {
+        return null
+    }
+
+    if (nodeMatches && !showOnlyMatchingChildren && !pruneMatchingTree) {
         return node
     }
 
     // Recursively filter the children
-    const filteredChildren = node.children
-        .map(child => filterTreeByWord(child, expr))
+    const matchingChildren = node.children
+        .map(child => filterTreeByWord(child, expr, showOnlyMatchingChildren, pruneMatchingTree))
         .filter(child => child !== null) as ResultNode[];
 
-    // If no children contain the expr, return null
-    if (filteredChildren.length === 0) {
-        return null;
+    // If no children contain the expr and the node itself does not match, return null
+    if (!nodeMatches && matchingChildren.length === 0) {
+        return null
     }
 
     // Return a new node with the filtered children
     return {
         ...node,
-        children: filteredChildren
+        children: matchingChildren
     };
 }
 
-function filterDown(results: ResultNode[], search: QueryExpr[]): ResultNode[] {
+function isPageOrHeader(expr: QueryExpr): boolean {
+    return (expr.type == "modifier" && (expr.value == ":page" || expr.value == ":header"))
+    || (expr.type == "or" && expr.exprs.every(e => isPageOrHeader(e)))
+}
+
+function isNegation(expr: QueryExpr): boolean {
+    return expr.type == "not" || (expr.type == "and" && expr.exprs.every(e => isNegation(e)))
+}
+
+function filterDown(results: ResultNode[], search: QueryExpr[], showOnlyMatchingChildren = false): ResultNode[] {
     if (search.length === 0) return results
 
     const expr = search[0]
 
-    const filtered = results
-        .map(r => filterTreeByWord(r, expr))
-        .filter(child => child !== null) as ResultNode[]
+    showOnlyMatchingChildren = isPageOrHeader(expr)
+    const pruneMatchingTree = isNegation(expr)
 
-    return filterDown(filtered, search.slice(1))
+    const filtered = results
+        .map(r => filterTreeByWord(r, expr, showOnlyMatchingChildren, pruneMatchingTree))
+        .filter(r => r !== null) as ResultNode[]
+
+    return filterDown(filtered, search.slice(1), showOnlyMatchingChildren)
 }
 
 function buildTree(node: string, graph: DirectedGraphOfNotes, roots: Map<string, ResultNode>, traversedAlready: Set<string>): ResultNode {

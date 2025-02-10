@@ -4,16 +4,11 @@
 	cursor: pointer !important;
 }
 
-.is-collapsed .list-bullet:after {
-    background-color: var(--list-marker-color-collapsed);
-    box-shadow: 0 0 0 4px var(--background-modifier-active-hover);
-}
-
 .tree-node:hover {
 	background-color: var(--color-base-30);
 }
 
-.tree-search-page .cm-formatting-list-ul {
+.tree-search-page .ts-formatting-list-ul {
 	padding-right: 10px;
 }
 
@@ -28,4 +23,121 @@
 .h1 .h2 .h3 .h4 .h5 .h6 {
 	margin: 0;
 	padding: 0;
+}
+
+.tree-node {
+    position: relative;
+}
+
+/* Base list line styles */
+.ts-list-line {
+    display: flex;
+    align-items: center;
+    padding: 2px 0;
+    position: relative;
+}
+
+/* Dynamic indentation - base indent is 20px per level, first level at 0px */
+.ts-list-line {
+    --indent-size: 20px;
+    padding-left: calc(var(--indent-level, 0) * var(--indent-size));
+}
+
+/* Guide lines container */
+.ts-list-guides {
+    display: flex;
+    position: relative;
+    align-items: center;
+    min-width: 18px;
+    height: calc(100% + 4px);
+    margin: -2px 0;
+}
+
+/* Individual guide line */
+.ts-guide-line {
+    width: 1px;
+    height: 100%;
+    background-color: var(--list-marker-color);
+    opacity: 0.3;
+    position: absolute;
+    top: 0;
+}
+
+/* Dynamic guide line positioning */
+.ts-guide-line:nth-child(1) { left: calc(-1 * var(--indent-size) + 8px); }
+.ts-guide-line:nth-child(2) { left: calc(-2 * var(--indent-size) + 8px); }
+.ts-guide-line:nth-child(3) { left: calc(-3 * var(--indent-size) + 8px); }
+.ts-guide-line:nth-child(4) { left: calc(-4 * var(--indent-size) + 8px); }
+.ts-guide-line:nth-child(5) { left: calc(-5 * var(--indent-size) + 8px); }
+.ts-guide-line:nth-child(6) { left: calc(-6 * var(--indent-size) + 8px); }
+.ts-guide-line:nth-child(7) { left: calc(-7 * var(--indent-size) + 8px); }
+.ts-guide-line:nth-child(8) { left: calc(-8 * var(--indent-size) + 8px); }
+.ts-guide-line:nth-child(9) { left: calc(-9 * var(--indent-size) + 8px); }
+.ts-guide-line:nth-child(10) { left: calc(-10 * var(--indent-size) + 8px); }
+.ts-guide-line:nth-child(11) { left: calc(-11 * var(--indent-size) + 8px); }
+.ts-guide-line:nth-child(12) { left: calc(-12 * var(--indent-size) + 8px); }
+.ts-guide-line:nth-child(13) { left: calc(-13 * var(--indent-size) + 8px); }
+.ts-guide-line:nth-child(14) { left: calc(-14 * var(--indent-size) + 8px); }
+.ts-guide-line:nth-child(15) { left: calc(-15 * var(--indent-size) + 8px); }	
+/* ... and so on for as many levels as needed */
+
+/* Bullet point container */
+.ts-list-bullet {
+    color: transparent;
+    position: relative;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    width: 18px;
+    height: 18px;
+}
+
+/* Bullet point */
+.ts-list-bullet::after {
+    position: absolute;
+    content: '\200B';
+    pointer-events: none;
+    color: var(--list-marker-color);
+    border-radius: var(--list-bullet-radius);
+    width: 6px;
+    height: 6px;
+    border: var(--list-bullet-border);
+    background-color: var(--list-marker-color);
+    transition: transform 0.15s, box-shadow 0.15s;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1;
+}
+
+/* Collapsed state styles */
+.is-collapsed .ts-list-bullet {
+    position: relative;
+}
+
+.is-collapsed .ts-list-bullet::before {
+    content: '';
+    position: absolute;
+    width: 12px;          /* Smaller circle */
+    height: 12px;         /* Smaller circle */
+    border-radius: 50%;   /* Make it perfectly circular */
+    background-color: rgba(59, 130, 246, 0.1); /* Subtle blue background */
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 4px rgba(59, 130, 246, 0.2); /* Smaller, softer glow */
+}
+
+.is-collapsed .ts-list-bullet::after {
+    transform: translate(-50%, -50%) rotate(-45deg);
+    background-color: #3b82f6; /* Make bullet blue when collapsed */
+}
+
+/* List content styling */
+.ts-list-content {
+    flex: 1;
+}
+
+.ts-list-text {
+    margin-left: 4px;
 }

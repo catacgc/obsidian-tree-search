@@ -61,16 +61,17 @@ describe('index and search operators', () => {
 
 	it('not operator tree pruning', async () => {
 		const graph = await fixture(`
-			LessImportant.md
-			ImportantProjects.md
+			Projects.md
 			- [[Project1]]
 				- [[Task1]]
 			- [[Project2]]
 				- [[Task2]]
 			`);
 		
-		expectSearch(graph, '-project').toEqual(result(`
-				[[LessImportant]]
+		expectSearch(graph, 'projects . -project1').toEqual(result(`
+				[[Projects]]
+				 [[Project2]]
+				  [[Task2]]
 				`));
 		
 		// expectSearch(graph, '-Project1').toEqual(result(`
@@ -297,19 +298,33 @@ describe('index and search operators', () => {
 			`));
 	})
 
-	it('search only pages', async () => {
+	it('search header and page modifiers', async () => {
 		const graph = await fixture(`
 			Note1.md
 			- [[Note2]]
 				- http://www.example.com
 			- [[Note3]]
+			`, `
+			Note2.md
+			# Header1
 			`);
 
-		// await printGraph(graph);
-
-		expectSearch(graph, 'note1 :page . :page').toContain(result(`
+		expectSearch(graph, 'note1 . :page').toContain(result(`
 			[[Note1]]
 			 [[Note2]]
+			 [[Note3]]
+			`));
+		
+		expectSearch(graph, 'note1 . :header').toContain(result(`
+			[[Note1]]
+			 [[Note2]]
+			  Note2 > Header1
+			`));
+
+		expectSearch(graph, 'note1 . :header | :page').toContain(result(`
+			[[Note1]]
+			 [[Note2]]
+			  Note2 > Header1
 			 [[Note3]]
 			`));
 	})

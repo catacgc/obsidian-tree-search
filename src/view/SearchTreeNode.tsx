@@ -22,10 +22,9 @@ export const SearchTreeNode = (props: SearchTreeListPropsFlatten) => {
 
     const expandableClass = props.node.hasChildren ? "is-collapsed " : ""
     const highlighted = selectedLine == props.node.index ? "highlight" : "";
-    const className = `HyperMD-list-line HyperMD-list-line-${props.node.indent + 1} 
-        cm-line ${highlighted} tree-node ${expandableClass}`;
+    const className = `ts-list-line ts-list-line-${props.node.indent + 1} ${highlighted} ${expandableClass}`;
 
-    const indent = `${24 + 34 * props.node.indent}px`;
+    const indentLevel = props.node.indent + 1;
 
     // Scroll to the selected line
     useEffect(() => {
@@ -61,27 +60,30 @@ export const SearchTreeNode = (props: SearchTreeListPropsFlatten) => {
         ev.preventDefault();
     }
 
+    // return <TreeNodeExperiment/>
+
     return (
         <>
-            <div className="cm-content tree-search-page">
-                <div className="markdown-source-view mod-cm6 is-live-preview">
-                    <div className="tree-node"
-                         onMouseMove={(ev) => handleMouseMove(ev)}
-                         onClick={handleTreeNodeClick}
+            
+            <div className="tree-search-page">
+                <div className="tree-node"
+                        onMouseMove={(ev) => handleMouseMove(ev)}
+                        onClick={handleTreeNodeClick}
+                >
+                    <div
+                        ref={nodeRef}
+                        className={`ts-list-line ${highlighted} ${expandableClass}`}
+                        dir="ltr"
+                        style={{ '--indent-level': indentLevel } as React.CSSProperties}
                     >
-                        <div
-                            ref={nodeRef}
-                            className={className}
-                            dir="ltr"
-                            style={{textIndent: "-" + indent, paddingInlineStart: indent}}
-                        >
-                    <span onClick={handleUserExpandClicked}>
-                        <CmListIndent indent={props.node.indent + 1}/>
-                        <BulletOrTask
-                            indent={props.node.indent + 1}
-                            type={props.node.attrs.nodeType}
-                        />
-                    </span>
+                        <div className="ts-list-guides" onClick={handleUserExpandClicked}>
+                            <GuideLines indent={indentLevel}/>
+                            <BulletOrTask
+                                indent={indentLevel}
+                                type={props.node.attrs.nodeType}
+                            />
+                        </div>
+                        <div className="ts-list-content">
                             <NodeRenderer tokens={props.node.attrs.tokens}/>
                             {props.node.attrs.aliases.length > 0 && `(${props.node.attrs.aliases.join(", ")})`}
                         </div>
@@ -109,19 +111,72 @@ const BulletOrTask = ({indent, type}: BulletOrTaskProps) => {
         </label>;
     }
 
-    return <span className={"cm-formatting cm-formatting-list cm-formatting-list-ul cm-list-" + indent}>
-        <span className="list-bullet">-</span>
+    return <span className={"ts-formatting ts-formatting-list ts-formatting-list-ul ts-list-" + indent}>
+        <span className="ts-list-bullet">-</span>
     </span>;
 };
 
-const CmListIndent = ({indent}: { indent: number }) => {
+const GuideLines = ({indent}: { indent: number }) => {
     if (indent === 1) return <></>;
 
-    return (
-        <span className={`cm-hmd-list-indent cm-hmd-list-indent-${indent}`}>
-            {Array.from({length: indent - 1}, (_, i) => (
-                <span key={i} className="cm-indent"></span>
-            ))}
-        </span>
-    );
+    // Create guide lines for all levels up to current indent
+    return <>
+        {Array.from({length: indent - 1}, (_, i) => (
+            <div 
+                key={i} 
+                className="ts-guide-line"
+                style={{ '--guide-index': i + 1 } as React.CSSProperties}
+            />
+        ))}
+    </>;
 };
+
+const TreeNodeExperiment = () => {
+    return <div className="tree-node">
+        <div className="ts-list-line ts-list-line-1">
+            <div className="ts-list-guides">
+                <div className="ts-list-bullet"></div>
+            </div>
+            <div className="ts-list-content">
+                <div className="ts-list-text">Node1</div>
+            </div>
+        </div>
+        <div className="ts-list-line ts-list-line-2">
+            <div className="ts-list-guides">
+                <div className="ts-guide-line"></div>
+                <div className="ts-list-bullet"></div>
+            </div>
+            <div className="ts-list-content">
+                <div className="ts-list-text">Node2</div>
+            </div>
+        </div>
+        <div className="ts-list-line ts-list-line-3 is-collapsed">
+            <div className="ts-list-guides">
+                <div className="ts-guide-line"></div>
+                <div className="ts-guide-line"></div>
+                <div className="ts-list-bullet"></div>
+            </div>
+            <div className="ts-list-content">
+                <div className="ts-list-text">Node3</div>
+            </div>
+        </div>
+        <div className="ts-list-line ts-list-line-3 is-collapsed">
+            <div className="ts-list-guides">
+                <div className="ts-guide-line"></div>
+                <div className="ts-guide-line"></div>
+                <div className="ts-list-bullet"></div>
+            </div>
+            <div className="ts-list-content">
+                <div className="ts-list-text">Node4</div>
+            </div>
+        </div>
+        <div className="ts-list-line ts-list-line-1">
+            <div className="ts-list-guides">
+                <div className="ts-list-bullet"></div>
+            </div>
+            <div className="ts-list-content">
+                <div className="ts-list-text">Node5</div>
+            </div>
+        </div>
+    </div>
+}

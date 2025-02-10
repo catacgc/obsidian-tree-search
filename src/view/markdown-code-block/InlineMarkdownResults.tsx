@@ -7,25 +7,25 @@ import { getDefaultStore, useAtomValue } from "jotai";
 import { graphAtom, graphVersionAtom } from "../react-context/state";
 
 export type InlineMarkdownResultsProps = {
-    activeFile: TFile;
-    heading?: string;
     settings: MarkdownContextSettings
 }
 
 export const InlineMarkdownResults: React.FC<InlineMarkdownResultsProps> = (props) => {
+    const {settings} = props
     const graph = useAtomValue(graphAtom, {store: getDefaultStore()})
     const version = useAtomValue(graphVersionAtom, {store: getDefaultStore()})
+    const file = settings.file || settings.inferredFile
 
-    const children = props.heading ? props.activeFile.basename + ' > ' + props.heading : props.activeFile.basename;
+    const children = settings.heading ? file.basename + ' > ' + settings.heading : file.basename;
 
     const search = useCallback((query: string) => {
-        const searchResults = advancedSearch(graph.graph, props.activeFile,
+        const searchResults = advancedSearch(graph.graph, file,
             1000,
-            props.heading,
-            query)
+            settings.heading,
+            settings.query || query)
 
         return searchResults
-    }, [version, props.activeFile, props.heading])
+    }, [version, file, settings.heading, settings.query])
 
     return <>
         <SearchPage searchFn={search} maxExpand={props.settings.depth} sectionName={children + " Children"}/>
