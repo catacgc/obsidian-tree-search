@@ -23,7 +23,7 @@ export const InlineMarkdownResults: React.FC<InlineMarkdownResultsProps> = (prop
         const searchResults = advancedSearch(graph.graph, file,
             1000,
             settings.heading,
-            settings.query || query)
+            `${settings.query} . ${query}`)
 
         return searchResults
     }, [version, file, settings.heading, settings.query])
@@ -31,7 +31,7 @@ export const InlineMarkdownResults: React.FC<InlineMarkdownResultsProps> = (prop
     if (settings.query && !settings.file) {
         sectionName = "Search Results: " + settings.query
         search = useCallback((query: string) => {
-            const searchResults = searchIndex(graph.graph, settings.query || query)
+            const searchResults = searchIndex(graph.graph, `${settings.query} . ${query}`)
     
             return searchResults
         }, [version, settings.query])
