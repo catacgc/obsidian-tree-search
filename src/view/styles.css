@@ -4,7 +4,7 @@
 
 @import "./markdown-code-block/styles.css";
 @import "./SearchPage.css";
-@import "./SearchTreeList.css";
+@import "./SearchTreeNode.css";
 @import "./search/SearchView.css";
 @import "./search/SearchModalContainer.css";
 

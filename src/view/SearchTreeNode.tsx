@@ -8,11 +8,11 @@ import {TreeNode} from "./search/SearchViewFlatten";
 import { selectedLineAtom, expandVisibleNodesAtom, selectHoveredLineAtom, expandNodeAtom } from "./react-context/state";
 import { useAtomValue, useSetAtom } from "jotai";
 
-type SearchTreeListPropsFlatten = {
+type SearchTreeNodePropsFlatten = {
     node: TreeNode;
 };
 
-export const SearchTreeNode = (props: SearchTreeListPropsFlatten) => {
+export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
     const nodeRef = useRef<HTMLDivElement>(null);
     const app = useApp();
     const selectedLine = useAtomValue(selectedLineAtom);
@@ -63,34 +63,29 @@ export const SearchTreeNode = (props: SearchTreeListPropsFlatten) => {
     // return <TreeNodeExperiment/>
 
     return (
-        <>
-            
-            <div className="tree-search-page">
-                <div className="tree-node"
-                        onMouseMove={(ev) => handleMouseMove(ev)}
-                        onClick={handleTreeNodeClick}
+            <div className="tree-node"
+                    onMouseMove={(ev) => handleMouseMove(ev)}
+                    onClick={handleTreeNodeClick}
+            >
+                <div
+                    ref={nodeRef}
+                    className={`ts-list-line ${highlighted} ${expandableClass}`}
+                    dir="ltr"
+                    style={{ '--indent-level': indentLevel } as React.CSSProperties}
                 >
-                    <div
-                        ref={nodeRef}
-                        className={`ts-list-line ${highlighted} ${expandableClass}`}
-                        dir="ltr"
-                        style={{ '--indent-level': indentLevel } as React.CSSProperties}
-                    >
-                        <div className="ts-list-guides" onClick={handleUserExpandClicked}>
-                            <GuideLines indent={indentLevel}/>
-                            <BulletOrTask
-                                indent={indentLevel}
-                                type={props.node.attrs.nodeType}
-                            />
-                        </div>
-                        <div className="ts-list-content">
-                            <NodeRenderer tokens={props.node.attrs.tokens}/>
-                            {props.node.attrs.aliases.length > 0 && `(${props.node.attrs.aliases.join(", ")})`}
-                        </div>
+                    <div className="ts-list-guides" onClick={handleUserExpandClicked}>
+                        <GuideLines indent={indentLevel}/>
+                        <BulletOrTask
+                            indent={indentLevel}
+                            type={props.node.attrs.nodeType}
+                        />
+                    </div>
+                    <div className="ts-list-content">
+                        <NodeRenderer tokens={props.node.attrs.tokens}/>
+                        {props.node.attrs.aliases.length > 0 && `(${props.node.attrs.aliases.join(", ")})`}
                     </div>
                 </div>
             </div>
-        </>
     );
 };
 
@@ -130,53 +125,3 @@ const GuideLines = ({indent}: { indent: number }) => {
         ))}
     </>;
 };
-
-const TreeNodeExperiment = () => {
-    return <div className="tree-node">
-        <div className="ts-list-line ts-list-line-1">
-            <div className="ts-list-guides">
-                <div className="ts-list-bullet"></div>
-            </div>
-            <div className="ts-list-content">
-                <div className="ts-list-text">Node1</div>
-            </div>
-        </div>
-        <div className="ts-list-line ts-list-line-2">
-            <div className="ts-list-guides">
-                <div className="ts-guide-line"></div>
-                <div className="ts-list-bullet"></div>
-            </div>
-            <div className="ts-list-content">
-                <div className="ts-list-text">Node2</div>
-            </div>
-        </div>
-        <div className="ts-list-line ts-list-line-3 is-collapsed">
-            <div className="ts-list-guides">
-                <div className="ts-guide-line"></div>
-                <div className="ts-guide-line"></div>
-                <div className="ts-list-bullet"></div>
-            </div>
-            <div className="ts-list-content">
-                <div className="ts-list-text">Node3</div>
-            </div>
-        </div>
-        <div className="ts-list-line ts-list-line-3 is-collapsed">
-            <div className="ts-list-guides">
-                <div className="ts-guide-line"></div>
-                <div className="ts-guide-line"></div>
-                <div className="ts-list-bullet"></div>
-            </div>
-            <div className="ts-list-content">
-                <div className="ts-list-text">Node4</div>
-            </div>
-        </div>
-        <div className="ts-list-line ts-list-line-1">
-            <div className="ts-list-guides">
-                <div className="ts-list-bullet"></div>
-            </div>
-            <div className="ts-list-content">
-                <div className="ts-list-text">Node5</div>
-            </div>
-        </div>
-    </div>
-}
