@@ -9,6 +9,7 @@ export class MarkdownContextSettings {
     query: string
     file?: TFile
     heading?: string
+    name?: string
     inferredFile: TFile
 }
 
@@ -66,6 +67,7 @@ export class ContextCodeBlock extends MarkdownRenderChild {
         const settings: MarkdownContextSettings = {
             depth: yaml?.depth == undefined ? 1 : yaml.depth,
             query: yaml?.query || "",
+            name: yaml?.name || "",
             file: userProvidedFile,
             heading: heading,
             inferredFile: inferredFile,

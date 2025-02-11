@@ -37,6 +37,8 @@ export const InlineMarkdownResults: React.FC<InlineMarkdownResultsProps> = (prop
         }, [version, settings.query])
     }
 
+    sectionName = [props.settings.name, sectionName].filter(Boolean).join(" > ")
+
     return <>
         <SearchPage searchFn={search} maxExpand={props.settings.depth} sectionName={sectionName}/>
     </>
