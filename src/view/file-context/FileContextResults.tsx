@@ -4,14 +4,15 @@ import { advancedSearch, flattenTasks, searchParents } from "../../search";
 import { graphAtom, graphVersionAtom } from "../react-context/state";
 import SearchPage from "../SearchPage";
 import { activeFileAtom } from "./FileContextComponent";
-import { settingsAtom } from "../react-context/settings";
+import { separatorAtom } from "../react-context/settings";
+import { sep } from "path";
 
 
 export const FileContextResults = () => {
     const graph = useAtomValue(graphAtom, {store: getDefaultStore()})
     const version = useAtomValue(graphVersionAtom)
     const activeFile = useAtomValue(activeFileAtom)
-    const settings = useAtomValue(settingsAtom)
+    const separator = useAtomValue(separatorAtom)
 
 	const searchParentsFn = useCallback((q: string) => {
         if (activeFile === undefined) {
@@ -28,10 +29,9 @@ export const FileContextResults = () => {
 
         const searchResults = advancedSearch(
             graph.graph, 
-            activeFile,
-            1000,
-            "",
-            query
+            `[[${activeFile.basename}]]`.toLowerCase(),
+            query,
+            separator
         )
 
         return searchResults;
@@ -44,11 +44,9 @@ export const FileContextResults = () => {
 
         const searchResults = advancedSearch(
             graph.graph, 
-            activeFile,
-            1000,
-            "",
-            query 
-        )
+            `[[${activeFile.basename}]]`.toLowerCase(),
+            query,
+            separator)
 
         return flattenTasks(searchResults).nodes
     }, [graph, version, activeFile])

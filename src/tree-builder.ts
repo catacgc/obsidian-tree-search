@@ -1,5 +1,5 @@
 // import {Notice} from "obsidian";
-import {NotesGraph} from "./graph";
+import {NotesGraph, ParsedNode} from "./graph";
 import {TreeSearchSettings} from "./view/react-context/settings";
 import {HeadingCache} from "obsidian";
 
@@ -60,29 +60,25 @@ function shouldSkip(lst: DvList, archiveTag: string) {
 }
 
 export async function indexSinglePage(page: DvPage, graph: NotesGraph, settings: TreeSearchSettings) {
-	if ((page.file.frontmatter.tags || []).includes(settings.archiveTag)) return
 
-	const pageRef = graph.addPageNode(page, settings.parentRelation)
+	const isArchived = (page.file.frontmatter.tags || []).includes(settings.archiveTag)
+	
+	const pageRef = graph.addPageNode(page, settings.parentRelation, isArchived)
 
-	for (const item of page.file.lists.values) {
-		item.text = item.text.trim()
+	 if (isArchived) return
 
-		const lineArchiveTag = '#' + settings.archiveTag;
-		if (shouldSkip(item, lineArchiveTag)) continue
+	const lineArchiveTag = '#' + settings.archiveTag;
 
-		let childrenParent = item.text
+	createSubtree(pageRef, page.file.lists.values.filter(it => it.parent === undefined))
 
-		if (item.parent === undefined) {
-			childrenParent = graph.createSubtree(pageRef, page, item)
-		} else {
-			// just create the node and later handle the edges
-			graph.addItemNode(page, item)
-		}
+	function createSubtree(parent: ParsedNode, children: DvList[]) {
+		for (const child of children) {
+			child.text = child.text.trim()
 
-		for (const child of item.children) {
 			if (shouldSkip(child, lineArchiveTag)) continue
 
-			graph.createSubtree(childrenParent, page, child)
+			const created = graph.createTreeFromTextLine(parent, page, child)
+			createSubtree(created, child.children)
 		}
 	}
 }

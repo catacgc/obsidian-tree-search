@@ -1,18 +1,18 @@
 import { SEARCH_ICON } from "src/view/icons";
-import { highlightLine, insertLine } from "../../obsidian-utils";
+import { highlightLine, insertHere, insertLine } from "../../obsidian-utils";
 import { GraphEvents } from "../obsidian-views/GraphEvents";
 import { useApp } from "../react-context/AppContext";
 import { useUrlOpener } from "./useUrlOpener";
 import { reverseMarkdownParsing } from "src/copy";
 import { Notice } from "obsidian";
 import {SearchTreeNode} from "../SearchTreeNode";
-import {NodeAttributes} from "../../graph";
+import {ParsedNode} from "../../graph";
 import { arrowDownAtom, arrowUpAtom, decExpandAtom, graphAtom, incExpandAtom, isGraphLoadingAtom, resetCollapseAtom, searchQueryAtom, selectedNodeAtom, renderableTreeNodes, incrementPagesAtom, hasMoreTreeNodesAtom, getExpandLevel, searchPlaceholderAtom } from "../react-context/state";
 import { getDefaultStore, useAtom, useAtomValue } from "jotai";
 import { useSetAtom } from "jotai";
 
 export type TreeNode = {
-    attrs: NodeAttributes,
+    node: ParsedNode,
     indent: number,
     hasChildren: boolean
     visible: boolean
@@ -22,10 +22,12 @@ export type TreeNode = {
 
 export type SearchViewFlattenProps = {
     showSearch?: boolean,
+    isQuickLink?: boolean
 }
 
 export const SearchViewFlatten = ({
                                showSearch = true,
+                               isQuickLink = false
                            }: SearchViewFlattenProps) => {
     
     const treeNodes = useAtomValue(renderableTreeNodes)
@@ -55,9 +57,9 @@ export const SearchViewFlatten = ({
         const node = selectedNode
         if (node && app) {
             if (event.shiftKey) {
-                await highlightLine(app, node.attrs.location)
+                await highlightLine(app, node.node.location)
             } else {
-                await tryOpenUrl(app, node.attrs)
+                await tryOpenUrl(app, node.node)
             }
         }
     };
@@ -72,6 +74,16 @@ export const SearchViewFlatten = ({
             arrowDown()
             event.preventDefault();
         } else if (event.key === 'Enter') {
+            if (isQuickLink) {
+                if (!selectedNode) return
+
+                await insertHere(app, reverseMarkdownParsing(selectedNode?.node))
+                event.preventDefault();
+                const customEvent = new CustomEvent(GraphEvents.RESULT_SELECTED, {detail: {type: "enter"}});
+                window.dispatchEvent(customEvent);
+                return
+            }
+
             await handleCmdEnter(event);
 
             // Dispatch custom event
@@ -80,14 +92,14 @@ export const SearchViewFlatten = ({
             event.preventDefault();
         } else if (event.key === 'c' && event.ctrlKey) {
             if (selectedNode) {
-                const line = reverseMarkdownParsing(selectedNode.attrs.tokens)
+                const line = reverseMarkdownParsing(selectedNode.node)
                 await navigator.clipboard.writeText(line)
                 new Notice('Line copied to clipboard');
             }
             event.preventDefault();
         } else if (event.key === 'i' && event.ctrlKey) {
             if (selectedNode && app) {
-                await insertLine(app, selectedNode.attrs.location)
+                await insertLine(app, selectedNode.node.location)
                 const customEvent = new CustomEvent(GraphEvents.RESULT_SELECTED, {detail: {type: "insert"}});
                 window.dispatchEvent(customEvent);
                 event.preventDefault();

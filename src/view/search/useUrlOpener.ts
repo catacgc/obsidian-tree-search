@@ -2,11 +2,21 @@ import { useRef } from 'react';
 import { App } from 'obsidian';
 import {highlightLine, openFileByName} from '../../obsidian-utils';
 import {ResultNode} from "../../search";
+import { ParsedNode } from 'src/graph';
 
 export const useUrlOpener = () => {
     const linkRef = useRef<HTMLAnchorElement>(null);
 
-    const tryOpenUrl = async (app: App, attrs: ResultNode['attrs']) => {
+    const tryOpenUrl = async (app: App, attrs: ParsedNode) => {
+        if (attrs.nodeType == "page") {
+            await openFileByName(app, attrs.page);
+            return;
+        }
+        if (attrs.nodeType == "header") {
+            await openFileByName(app, attrs.page + "#" + attrs.header);
+            return;
+        }
+
         const children = attrs.tokens[0]?.children;
         if (!children || !linkRef.current) return;
 
