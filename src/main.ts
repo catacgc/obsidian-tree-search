@@ -1,6 +1,7 @@
 import { App, debounce, EventRef, Notice, Platform, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf } from 'obsidian';
 
 import { SEARCH_VIEW, SearchModalComponent } from './view/search/SearchModalComponent';
+import { QuickLinkModal } from './view/search-modal/link-selector/QuickLinkModal';
 import { getAPI } from "obsidian-dataview";
 
 import { IndexedTree } from "./indexed-tree";
@@ -12,22 +13,23 @@ import fs from 'fs';
 
 import http, { IncomingMessage, ServerResponse } from 'http'
 import { searchIndex } from './search';
-import { highlightLine, insertLine } from './obsidian-utils';
+import { highlightLine, insertLine, openFileByName } from './obsidian-utils';
 import { getDefaultStore } from 'jotai';
-import { flattenIndex, isGraphLoadingAtom } from './view/react-context/state';
+import { flattenIndex, graphAtom, isGraphLoadingAtom } from './view/react-context/state';
 import { getSettings, updateSettings } from './view/react-context/settings';
+import { RaycastServer } from './view/raycast/raycast-server';
 
 export default class TreeSearchPlugin extends Plugin {
     index: IndexedTree
     private changedRef: EventRef
     private finishedRef: EventRef;
-    private server: http.Server | null = null;
+    private server: RaycastServer | null = null;
     
 
     async onunload() {
         this.changedRef && this.app.metadataCache.offref(this.changedRef)
         this.finishedRef && this.app.metadataCache.offref(this.finishedRef)
-        this.server?.close()
+        this.server?.stop()
     }
 
     async onload() {
@@ -69,14 +71,25 @@ export default class TreeSearchPlugin extends Plugin {
             callback: () => this.activateView(FILE_CONTEXT)
         });
 
-        const quickAddModal = new SearchModal(this.app, this.index);
-        quickAddModal.setTitle("Search");
+        const quickLinkModal = new QuickLinkModal(this.app, this.index);
+        quickLinkModal.setTitle("Insert Link");
+
+        const searchModal = new SearchModal(this.app, this.index);
+        searchModal.setTitle("Search");
+
+        this.addCommand({
+            id: "quick-link-modal",
+            name: "Quick Link",
+            callback: () => {
+                quickLinkModal.open();
+            },
+        });
 
         this.addCommand({
             id: "search-modal",
             name: "Search",
             callback: () => {
-                quickAddModal.open();
+                searchModal.open();
             },
         });
 
@@ -102,12 +115,26 @@ export default class TreeSearchPlugin extends Plugin {
         this.addSettingTab(new SettingsTab(this.app, this));
         await this.loadSettings();
 
+        /**
+         * Load the graph when the plugin is loaded
+         */
         const store = getDefaultStore()
         store.sub(isGraphLoadingAtom, async () => {
             const reload = store.get(isGraphLoadingAtom)
-            console.debug("Graph refresh requested")
-            if (reload) await this.index.refresh()
+            
+            if (reload) {
+                console.debug("Graph refresh requested")
+                await this.index.refresh()
+            }
         })
+
+        setInterval(() => {
+            const loading = store.get(isGraphLoadingAtom)
+            const graph = store.get(graphAtom)
+            
+            if (!loading && graph.graph.nodes().length === 0) store.set(isGraphLoadingAtom, true)
+        }, 2000, 5);
+
 
         const debouncer = debounce(async (file: TFile) => {
             await this.index.refreshPage(file)
@@ -135,55 +162,19 @@ export default class TreeSearchPlugin extends Plugin {
             
             if (uri.raycastaction === "insert") {
                 await insertLine(this.app, location)
+            } if (uri.raycastaction == "open") {
+                await openFileByName(this.app, uri.filepath + (uri.hash ? `#${uri.hash}` : ""))
             } else {
-
                 await highlightLine(this.app, location)
             }
         })
 
-        this.createRaycastSocket()
+        this.server = new RaycastServer(this.app)
+        this.server.start()
 
         return true
     }
 
-    createRaycastSocket() {
-        if (!Platform.isDesktopApp || !Platform.isMacOS || Platform.isMobileApp || Platform.isMobile) return;
-
-        const requestListener = (req: IncomingMessage, res: ServerResponse) => {
-            // parse query parameters from url
-            const query = new URL(req.url || "", "http://localhost").searchParams.get("query");
-            const limit = parseInt(new URL(req.url || "", "http://localhost").searchParams.get("limit") || "100");
-
-            // decode the url
-            const decodedQuery = decodeURIComponent(query || "");
-
-            if (!decodedQuery) {
-                res.end("No query provided  ");
-            }
-
-            const result = searchIndex(this.index.getState().graph, decodedQuery, ".");
-            const flattened = flattenIndex(result)
-            const jsonContent = JSON.stringify(flattened.slice(0, limit));
-            res.end(jsonContent);
-        };
-
-        this.server = http.createServer(requestListener);
-        const socketFileName = getSettings().socketPath.replace("{vaultname}", this.app.vault.getName());
-
-        // delete socketFileName if it exists
-        if (fs.existsSync(socketFileName)) {
-            fs.unlink(socketFileName, (err: any) => {
-                if (err) {
-                    console.error(err)
-                }
-            });
-        }
-
-
-        this.server.listen(socketFileName, function () {
-            console.log("Server is Listening at Port " + socketFileName);
-        });
-    }
 
     async activateView(viewType = SEARCH_VIEW) {
         const { workspace } = this.app;

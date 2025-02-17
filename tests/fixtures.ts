@@ -1,8 +1,9 @@
 import {DvList, indexSinglePage} from "../src/tree-builder";
 import {ResultNode, searchIndex} from "../src/search";
 import {expect} from "@jest/globals";
-import {NotesGraph} from "../src/graph";
+import {NotesGraph, ParsedNode} from "../src/graph";
 import { getSettings } from "../src/view/react-context/settings";
+import Graph from "graphology";
 
 export function buildIndexFromFixture(page: string, lines: string, aliases: string[] = []) {
 	const graph = new NotesGraph()
@@ -15,13 +16,40 @@ export function renderTextResult(result: ResultNode[]): string {
 	return renderResult(result).join("\n")
 }
 
+function renderNode(node: ParsedNode): string {
+	if (node.nodeType == "text") {
+		return node.parsedTokens.map(t => {
+			switch (t.tokenType) {
+				case "obsidian_link":
+					return t.source
+				case "link":
+					return `[${t.content}](${t.href})`
+				case "image":
+					return `![${t.alt}](${t.src})`
+				case "text":
+					return t.text
+			}
+			}).join("")
+	}
+
+	if (node.nodeType == "header") {
+		return `${node.page}#${node.header}`
+	}
+
+	if (node.nodeType == "page") {
+		return `[[${node.page}]]${node.aliases.length > 0 ? ` ${node.aliases.join(" ")}` : ""}`
+	}
+
+	return ""
+}
+
 export function renderResult(result: ResultNode[], indent = ""): string[] {
 	if (result.length === 0) {
 		return []
 	}
 
 	return result.flatMap(it => [
-		indent + it.attrs.tokens.map(t => t.content) + (it.attrs.aliases.length > 0 ? " " + it.attrs.aliases : ""),
+		indent + renderNode(it.node),
 		...renderResult(it.children, indent + " ")
 	])
 }
@@ -31,9 +59,14 @@ export async function testParentOf(graph: NotesGraph, parent: string, child: str
 	expect(graph.graph.edge(parent.toLowerCase(), child.toLowerCase())).toBeTruthy()
 }
 
+export function search(graph: NotesGraph, qs: string) {
+	const resultNodes = searchIndex(graph.graph, qs, '.');
+    return renderTextResult(resultNodes);
+}
+
 export function expectSearch(graph: NotesGraph, qs: string) {
-    const resultNodes = searchIndex(graph.graph, qs);
-    const result = renderTextResult(resultNodes);
+    const result = search(graph, qs);
+	console.log("RESULT:\n", result)
     return expect(result)
 }
 
@@ -49,6 +82,10 @@ export function result(expected: string) {
  */
 export async function fixture(...fixtures: string[]): Promise<NotesGraph> {
 	const graph = new NotesGraph()
+	return edit(graph, ...fixtures)
+}
+
+export async function edit(graph: NotesGraph, ...fixtures: string[]): Promise<NotesGraph> {
 	for (const fixture of fixtures) {
 		const lines = fixture.trim().split("\n");
 		const pageAliasAndFrontmatter = lines[0].split(",");
@@ -96,16 +133,21 @@ export function createFixture(path: string, linesStr: string, frontMatter: any =
 	const lines = linesStr.trim().split("\n")
 	const name = path.replace(".md", "");
 
-    const headers = lines.filter(it => it.trim().startsWith("#"))
-        .map(((it, line) => {
-            return {
-                level: 1,
-                heading: it.trim().replace("#", "").trim(),
+    const headers = lines
+        .flatMap(((it, line) => {
+			if (!it.trim().startsWith("#")) {
+				return []
+			}
+
+			const headerLevel = it.trim().match(/^#+/)?.[0].length || 0;
+            return [{
+                level: headerLevel,
+                heading: it.replace(/^#+/, "").trim(),
                 position: {
-                    start: {line:0, col:0, offset:0},
-                    end: {line:0, col:0, offset:0}
+                    start: {line:line+1, col:0, offset:0},
+                    end: {line:line+1, col:0, offset:0}
                 }
-            }
+            }]
         }));
 
 	let header = ""

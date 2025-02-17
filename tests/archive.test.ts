@@ -5,12 +5,14 @@ describe('archive support', () => {
 	it('removes entire file archive', async () => {
 		const graph = await fixture(
 	`File1.md,{"tags":["archive"]}
+	  - [[Child]]
 	- [[File2]]
 	`,
 			`File2.md,{"tags":["document"]}`,
 		);
 
 		expectSearch(graph, 'file').toEqual(result(`
+		[[File1]]
 		[[File2]]
 		`))
 	})
@@ -43,8 +45,8 @@ describe('archive support', () => {
 
 		expectSearch(graph, 'file').toEqual(result(`
 		[[File]]
-		 File > -- Archived --
-		 File > Not Archived
+		 File#-- Archived --
+		 File#Not Archived
 		  http://example4.com
 		 http://example.com
 		`))

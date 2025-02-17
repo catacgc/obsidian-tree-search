@@ -14,6 +14,8 @@ export const settingsAtom = atom<TreeSearchSettings>({
 	socketPath: "/tmp/raycast-{vaultname}.sock"
 })
 
+export const separatorAtom = atom((get) => get(settingsAtom).searchSeparator)
+
 export function updateSettings(settings: TreeSearchSettings) {
 	getDefaultStore().set(settingsAtom, {...getSettings(), ...settings})
 }

@@ -2,29 +2,42 @@ import { useRef } from 'react';
 import { App } from 'obsidian';
 import {highlightLine, openFileByName} from '../../obsidian-utils';
 import {ResultNode} from "../../search";
+import { ParsedNode } from 'src/graph';
 
 export const useUrlOpener = () => {
     const linkRef = useRef<HTMLAnchorElement>(null);
 
-    const tryOpenUrl = async (app: App, attrs: ResultNode['attrs']) => {
-        const children = attrs.tokens[0]?.children;
-        if (!children || !linkRef.current) return;
+    const tryOpenUrl = async (app: App, attrs: ParsedNode) => {
+        if (attrs.nodeType == "page") {
+            await openFileByName(app, attrs.page);
+            return;
+        }
+        if (attrs.nodeType == "header") {
+            await openFileByName(app, attrs.page + "#" + attrs.header);
+            return;
+        }
+
+        const children = attrs.parsedTokens;
 
         for (const it of children) {
             let url = '';
 
-            if (it.type === 'obsidian_link') {
-                await openFileByName(app, it.content);
+            if (it.tokenType === 'obsidian_link') {
+                if (it.headerName) {
+                    await openFileByName(app, it.pageTarget + "#" + it.headerName);
+                } else {
+                    await openFileByName(app, it.pageTarget);
+                }
                 return;
             }
 
-            if (it.type === 'text') {
-                url = extractFirstUrl(it.content);
-            } else if (it.type === 'link_open') {
-                url = extractFirstUrl(it.attrs?.[0]?.[1] || '');
+            if (it.tokenType === 'text' && it.text.trim().contains("http")) {
+                url = extractFirstUrl(it.text);
+            } else if (it.tokenType === 'link') {
+                url = extractFirstUrl(it.href);
             }
 
-            if (url) {
+            if (url && linkRef.current) {
                 linkRef.current.href = url;
                 linkRef.current.click();
                 return;

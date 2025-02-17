@@ -1,90 +1,128 @@
 import Graph from "graphology";
 import {Token} from "markdown-it";
 import {DvList, DvPage} from "./tree-builder";
-import {parseMarkdown} from "./parser";
+import {parseTokens} from "./parser";
+import { HeadingCache } from "obsidian";
 
-export type NodeAttributes = {
-	location: Location
-	tokens: Token[]
-	tags: string[],
-	aliases: string[],
+export type BaseNode = {
 	searchKey: string,
-	nodeType: "page" | "text" | "task" | "completed-task" | "virtual-page" | "header"
+	location: Location,
 }
 
-export const EMPTY_NODE: NodeAttributes = {
-	location: {
-		path: "",
-		position: {
-			start: {line: 0, ch: 0},
-			end: {line: 0, ch: 0},
-		},
-	},
-	tokens: [],
-	tags: [],
-	aliases: [],
-	searchKey: "",
-	nodeType: "text"
+export type PageNode = BaseNode & {
+	nodeType: "page",
+	isReference: boolean,
+	page: string,
+	aliases: string[],
+	tags: string[],
 }
+
+export type TextToken = {
+	tokenType: "text",
+	text: string,
+	decoration: "italic" | "bold" | "underline" | "strikethrough" | "code" | "none",
+}
+
+export type ObsidianLinkToken = {
+	tokenType: "obsidian_link",
+	source: string,
+	pageTarget: string,
+	alias?: string,
+	headerName?: string,
+}
+
+export type LinkToken = {
+	tokenType: "link",
+	href: string,
+	content?: string,
+}
+
+export type ImageToken = {
+	tokenType: "image",
+	src: string,
+	alt?: string,
+}
+
+export type ParsedTextToken = TextToken | ObsidianLinkToken | LinkToken | ImageToken
+
+export type TextNode = BaseNode & {
+	nodeType: "text",
+	// tokens: Token[],
+	parsedTokens: ParsedTextToken[],
+	tags: string[],
+	isTask: boolean,
+	isCompleted: boolean,
+}
+
+export type HeaderNode = BaseNode & {
+	nodeType: "header",
+	page: string,
+	header: string,
+	isReference: boolean
+}
+
+export type ParsedNode = BaseNode & (PageNode | TextNode | HeaderNode)
+
+function getKey(node: ParsedNode): string {
+	switch(node.nodeType) {
+		case "page":
+			return `[[${node.page.toLowerCase()}]]`
+		case "header":
+			return (node.page + "#" + node.header).toLowerCase()
+		case "text":
+			return node.searchKey
+	}
+}
+
+
+export const EMPTY_NODE: ParsedNode = {
+		nodeType: "text",
+		// tokens: [],
+		parsedTokens: [],
+		tags: [],
+		location: {
+			path: "",
+			position: {start: {line: 0, ch: 0}, end: {line: 0, ch: 0}},
+		},
+		isTask: false,
+		isCompleted: false,
+		searchKey: ""
+	}
 
 export type EdgeAttributes = {
 	mtime: number;
 	type: "parent" | "related",
-	location: NodeAttributes['location']
+	location: ParsedNode['location']
 }
 
 export type GraphAttributes = {
 	name?: string;
 }
 
-export type DirectedGraphOfNotes = Graph<NodeAttributes, EdgeAttributes, GraphAttributes>
+export type DirectedGraphOfNotes = Graph<ParsedNode, EdgeAttributes, GraphAttributes>
 
 export type Location = {
 	path: string,
 	position: {
-		start: {
-			line: number,
-			ch: number
-		},
-		end: {
-			line: number,
-			ch: number
-		}
+		start: {line: number, ch: number},
+		end: {line: number, ch: number}
 	}
-}
-
-type CreatedNodes = {
-	textLine: string,
-	header?: string,
-	virtualReferences: ObsidianRef[],
-	alias?: string,
-	attributes: NodeAttributes
-}
-
-type ObsidianRef = {
-	pageTarget: string,
-	alias?: string,
-	headerKey?: string,
-	headerName?: string,
-	source: string
 }
 
 export class NotesGraph {
-	graph: Graph<NodeAttributes, EdgeAttributes, GraphAttributes>;
+	graph: Graph<ParsedNode, EdgeAttributes, GraphAttributes>;
 
 	constructor() {
-		this.graph = new Graph<NodeAttributes, EdgeAttributes, GraphAttributes>()
+		this.graph = new Graph<ParsedNode, EdgeAttributes, GraphAttributes>()
 	}
 
-	addPageNode(page: DvPage, parentRelation: string): string {
-		const pageRef = "[[" + page.file.name + "]]"
-
-		if (this.graph.hasNode(pageRef.toLowerCase())) {
+	addPageNode(page: DvPage, parentRelation: string, isArchived: boolean = false): PageNode {
+		// edit the existing page node, if it exists
+		if (this.graph.hasNode(`[[${page.file.name.toLowerCase()}]]`)) {
 			this.removeExistingPageEdges(page)
 		}
 
-		const pageAttribute = this.createPageNodeAttribute(page);
-		this.addOrUpdateNodeAlias(pageRef, pageAttribute)
+		const pageNode = this.createPageNode(page);
 
 		let parents = page.file.frontmatter[parentRelation] || [];
 		if (typeof (parents) == "string") {
@@ -92,65 +130,56 @@ export class NotesGraph {
 		}
 
 		for (const parent of parents) {
-			this.createParentFromRelation(parent, pageAttribute, pageRef, page);
+			this.createParentFromRelation(parent, pageNode);
 		}
 
-        this.createHeadersNodes(pageRef, page)
+        !isArchived && this.createHeadersNodes(pageNode, page)
 
-		return pageRef
+		return pageNode
 	}
 
 	// handles references like [[parent]] , [[parent#header]] , [[parent|alias]]
-	private createParentFromRelation(parent: string, pageAttribute: NodeAttributes, pageRef: string, page: DvPage) {
-		const attrs = this.createVirtualPageNodeAttribute(parent, pageAttribute.location);
-		const refs = this.getObsidianLinkReference(attrs.tokens)
-
+	private createParentFromRelation(parent: string, page: ParsedNode) {
+		const refs = this.getRefsFromString(parent)
 		// cannot add inexisting refs as parents
 		if (refs.length == 0) {
 			return
 		}
 
-		const ref = refs[0]
-
-		if (ref.headerKey) {
-			this.addOrUpdateNodeAlias(ref.pageTarget, attrs)
-			this.addOrUpdateNodeAlias(ref.headerKey, attrs)
-			this.addChild(ref.pageTarget, ref.headerKey, page.file.mtime.ts, pageAttribute.location)
-			this.addChild(ref.headerKey, pageRef, page.file.mtime.ts, pageAttribute.location)
-		} else {
-			this.addOrUpdateNodeAlias(ref.pageTarget, attrs)
-			this.addChild(ref.pageTarget, pageRef, page.file.mtime.ts, pageAttribute.location)
-		}
+		const ref = this.createVirtualPage(refs[0], page.location)
+		this.addChild(ref, page, page.location, 0)
 	}
 
-	addItemNode(page: DvPage, item: DvList) {
-		this.addOrUpdateNodeAlias(item.text, this.createItemNodeAttributes(page, item))
-	}
-
-	addChild(parent: string, child: string, mtime: number, location: NodeAttributes['location']) {
-		this.addEdge(parent, child, {
+	addChild(parent: ParsedNode, child: ParsedNode, location: BaseNode['location'], mtime: number) {
+		this.addEdge(getKey(parent), getKey(child), {
 			mtime: mtime,
 			type: "parent",
 			location: location
 		})
 	}
 
-	createHeaderNode(page: string, header: string, location: NodeAttributes['location']): NodeAttributes {
-		const tokens = [...parseMarkdown(`${page} > ${header}`, {})];
-
-		return {
+	private createHeaderNode(page: string, heading: string, location: BaseNode['location'], isReference: boolean = true): HeaderNode {
+		const node: HeaderNode = {	
+			page: page,
+			header: heading,
+			isReference: isReference,
+			nodeType: "header",
 			location: location,
-			tokens: tokens,
-			tags: [],
-			aliases: [],
-			searchKey: header.toLowerCase(),
-			nodeType: "header"
-		};
+			searchKey: `${page}#${heading}`.toLowerCase()
+		}
+
+		this.addOrUpdateNode(node)
+
+		return node
 	}
 
 	private pruneDanglingNodes(node: string) {
 		const attributes = this.graph.getNodeAttributes(node)
-		if (this.graph.degree(node) == 0 && attributes.nodeType != "page") {
+		if (this.graph.degree(node) == 0) {
+			if (attributes.nodeType == "page" && !attributes.isReference) {
+				return // do not remove real pages from the graph, even if nothing points to them
+			}
+
 			const outgoingRefs = this.graph.outNeighbors(node)
 			this.graph.dropNode(node)
 			for (const ref of outgoingRefs) {
@@ -162,7 +191,6 @@ export class NotesGraph {
 	/**
 	 * Gets rid of all edges that where created on this page and that need to be recreated after this
 	 * If a not was created in this page and no other edge points to it, then it will be removed
-	 * TODO: add some tests
 	 */
 	private removeExistingPageEdges(page: DvPage) {
 		const ref = "[[" + page.file.name.toLowerCase() + "]]"
@@ -187,6 +215,61 @@ export class NotesGraph {
 		})
 	}
 
+    private createHeadersNodes(pageRef: PageNode, page: DvPage) {
+		function findParent(headerIndex: number): HeadingCache | null {
+			const header = page.headers[headerIndex]
+			if (header.level == 1) {
+				return null
+			}
+	
+			for (let i = headerIndex - 1; i >= 0; i--) {
+				const candidate = page.headers[i]
+				if (candidate.level <= header.level - 1) {
+					return candidate
+				}
+			}
+	
+			return null
+		}
+
+		const createNode = (header: HeadingCache): HeaderNode => {
+			const position = {start: {line: header.position.start.line, ch: header.position.start.col},
+                end: {line: header.position.end.line, ch: header.position.end.col}};
+            const location = {
+                path: page.file.path,
+                position: position
+            };
+
+			return this.createHeaderNode(page.file.name, header.heading, location, false)
+		}
+
+        for (let i = 0; i < page.headers.length; i++) {
+			const header = createNode(page.headers[i])
+			const parent = findParent(i)
+
+			if (parent) {
+				const parentNode = createNode(parent)
+				this.addChild(parentNode, header, header.location, page.file.mtime.ts)
+			} else {
+				this.addChild(pageRef, header, header.location, page.file.mtime.ts)
+			}
+        }
+    }
+
+	private createRefsNodes(obsidianLinkReference: ObsidianLinkToken[], textNode: TextNode): ParsedNode[] {
+		return obsidianLinkReference.map(ref => this.createVirtualPage(ref, textNode.location))
+	}
+
+	private getClosestHeader(headers: HeadingCache[], line: number): HeadingCache | null {
+		for (let i = headers.length - 1; i >= 0; i--) {
+			if (headers[i].position.start.line <= line) {
+				return headers[i]
+			}
+		}
+
+		return null
+	}
+
 	/**
 	 * examples:
 	 *  - textLine (with #header) -> create "page#header" and "textLine"
@@ -195,112 +278,44 @@ export class NotesGraph {
 	 *  - [[Page#header]] -> create "[[page]]" and "page#header"
 	 *  - [ ] task -> create "task" with nodeType "task"
 	 */
-	createNodes(page: DvPage, item: DvList): CreatedNodes {
-		const attributes = this.createItemNodeAttributes(page, item);
-		const obsidianLinkReference = this.getObsidianLinkReference(attributes.tokens);
+	createTreeFromTextLine(parentNode: ParsedNode, page: DvPage, item: DvList): ParsedNode {
+		const createdNode = this.createNodeFromText(page, item);
 
-		this.createRefsNodes(obsidianLinkReference, attributes);
-		this.addOrUpdateNodeAlias(item.text.trim(), attributes)
+		const closestParentHeader = this.getClosestHeader(page.headers, item.position.start.line)
 
-		let headerKey = ""
-		// create header nodes
-		if (!item.parent && item.section.subpath) {
-			const trimmedHeaderName = item.section.subpath.replace(/#/g, " ").trim();
-			const header = this.createHeaderNode(page.file.name, trimmedHeaderName, attributes.location)
-			headerKey = page.file.name + "#" + trimmedHeaderName
-			this.addOrUpdateNodeAlias(page.file.name + "#" + trimmedHeaderName, header)
+		// if this item does not have a parent and it is in a subsection, then add it as child of the header node
+		if (!item.parent && closestParentHeader) {
+			const header = this.createHeaderNode(page.file.name, closestParentHeader.heading, createdNode.location, false)
+			this.addChild(header, createdNode, createdNode.location, 0)
+			// this.addChild(parentNode, header, createdNode.location, 0)
+		} else {
+			this.addChild(parentNode, createdNode, createdNode.location, page.file.mtime.ts)
 		}
 		
-		return {
-			textLine: item.text,
-			header: headerKey,
-			virtualReferences: obsidianLinkReference,
-			alias: item.section.subpath,
-			attributes: attributes
-		}
+		return createdNode
 	}
 
-    private createHeadersNodes(pageRef: string, page: DvPage) {
-        for (const header of page.headers) {
-            const position = {
-                start: {line: header.position.start.line, ch: header.position.start.col},
-                end: {line: header.position.end.line, ch: header.position.end.col}
-            };
-            const location = {
-                path: page.file.path,
-                position: position
-            };
-            const headerNode = this.createHeaderNode(page.file.name, header.heading, location)
-            this.addOrUpdateNodeAlias(page.file.name + "#" + header.heading, headerNode)
-            this.addEdge(pageRef, page.file.name + "#" + header.heading, {
-                mtime: page.file.mtime.ts,
-                type: "parent",
-                location: location
-            })
-        }
-    }
-
-	private createRefsNodes(obsidianLinkReference: ObsidianRef[], attributes: NodeAttributes) {
-		for (const ref of obsidianLinkReference) {
-			const virtualPage = this.createVirtualPageNodeAttribute(ref.pageTarget, attributes.location)
-			this.addOrUpdateNodeAlias(ref.pageTarget, virtualPage)
-
-			if (ref.headerKey && ref.headerName) {
-				const header = this.createHeaderNode(ref.pageTarget, ref.headerName, attributes.location)
-				this.addOrUpdateNodeAlias(ref.headerKey, header)
-			}
-		}
+	private mergePageNode(node1: PageNode, node2: PageNode): PageNode {
+		node1.aliases = [...new Set([...node1.aliases, ...node2.aliases])]
+		node1.isReference = node1.isReference && node2.isReference
+		node1.searchKey = (node1.page + "|" + node1.aliases.join(" ")).toLowerCase()
+		
+		return node1
 	}
 
-	/**
-	 * if this has a header then create /parent -> #header -> subtree(line)
-	 * if this has no parent then create /parent -> subtree(line)
-	 * if this has a reference to some other page [[ref]] then create
-	 * 		/parent -> subtree(line)
-	 * 		[[ref]] -> subtree(line)
-	 */
-	createSubtree(parentNode: string, page: DvPage, item: DvList): string {
-		const created = this.createNodes(page, item)
-
-		// create a header node
-		if (created.header) {
-			this.addChild(parentNode, created.header, page.file.mtime.ts, created.attributes.location)
-			parentNode = created.header
-		}
-
-		// if the line is the actual ref of the format [[ref]] , [[ref|alias]] or [[ref#header]]
-		if (created.virtualReferences.length == 1) {
-			const ref = created.virtualReferences[0]
-			if (ref.source.toLowerCase() == created.textLine.toLowerCase()) {
-				this.addChild(parentNode, ref.pageTarget, page.file.mtime.ts, created.attributes.location)
-				if (ref.headerKey) {
-					this.addChild(ref.pageTarget, ref.headerKey, page.file.mtime.ts, created.attributes.location)
-				}
-				return ref.headerKey || ref.pageTarget
-			}
-		}
-
-		for (const ref of created.virtualReferences) {
-
-			if (!ref.headerKey) {
-				this.addChild(ref.pageTarget, created.textLine, page.file.mtime.ts, created.attributes.location)
-			} else {
-				this.addChild(ref.pageTarget, ref.headerKey, page.file.mtime.ts, created.attributes.location)
-				this.addChild(ref.headerKey, created.textLine, page.file.mtime.ts, created.attributes.location)
-			}
-		}
-
-		this.addChild(parentNode, created.textLine, page.file.mtime.ts, created.attributes.location)
-
-		return created.textLine
+	private mergeHeaderNode(node1: HeaderNode, node2: HeaderNode): HeaderNode {
+		node1.isReference = node1.isReference && node2.isReference
+		return node1
 	}
-
-	private addOrUpdateNodeAlias(key: string, attrs: NodeAttributes) {
-		const nodeKey = key.toLowerCase();
+	
+	private addOrUpdateNode(node: ParsedNode) {
+		const nodeKey = getKey(node);
 		if (!this.graph.hasNode(nodeKey)) {
-			this.graph.addNode(nodeKey, attrs)
-		} else if (attrs.aliases.length > 0 || attrs.nodeType == "page") {
-			this.graph.mergeNodeAttributes(nodeKey, attrs)
+			this.graph.addNode(nodeKey, node)
+		} else if (node.nodeType == "page") {
+			this.graph.replaceNodeAttributes(nodeKey, this.mergePageNode(this.graph.getNodeAttributes(nodeKey) as PageNode, node))
+		} else if (node.nodeType == "header") {
+			this.graph.replaceNodeAttributes(nodeKey, this.mergeHeaderNode(this.graph.getNodeAttributes(nodeKey) as HeaderNode, node))
 		}
 	}
 
@@ -315,72 +330,108 @@ export class NotesGraph {
 		}
 	}
 
-	private createItemNodeAttributes(page: DvPage, item: DvList): NodeAttributes {
-		const tokens = [...parseMarkdown(item.text, {})];
+	private createNodeFromText(page: DvPage, item: DvList): TextNode | PageNode | HeaderNode {
+		const parsed = parseTokens(item.text)
+		const location = {path: page.file.path, position: {
+			start: {line: item.position.start.line, ch: item.position.start.col},
+			end: {line: item.position.end.line, ch: item.position.end.col}}}
 
-		return {
-			location: {path: page.file.path, position: {
-					start: {line: item.position.start.line, ch: item.position.start.col},
-					end: {line: item.position.end.line, ch: item.position.end.col}}},
-			tokens: tokens,
-			tags: item.tags,
-			aliases: [],
-			searchKey: item.text.toLowerCase(),
-			nodeType: item.task ? (item.completed ? "completed-task" : "task") : "text"
-		};
-	}
+		const obsidianLinkReference: ObsidianLinkToken[] = this.getObsidianLinkReference(parsed);
 
-	private getObsidianLinkReference(tokens: Token[]): ObsidianRef[] {
-		const refs: ObsidianRef[] = []
-
-		const obisidianLinks = tokens.flatMap(children => children.children).filter(it => it?.type == 'obsidian_link');
-		for (const token of obisidianLinks) {
-			const link = token?.content
-			if (!link) continue
-
-			const actualRef = `[[${link}]]`
-
-			if (link.includes('#'))  {
-				const parts = link.split('#')
-				refs.push({source: actualRef, pageTarget: '[[' + parts[0] + ']]', headerName: parts[1], headerKey: parts[0] + '#' + parts[1]})
-				continue
-			}
-
-			const parts = link.split("|")
-			if (parts.length == 1) {
-				refs.push({source: actualRef, pageTarget: '[[' + parts[0] + ']]'})
-			} else {
-				refs.push({source: actualRef, pageTarget: '[[' + parts[0] + ']]', alias: parts[1]})
-			}
+		// if this is just a page reference, then skip the text node
+		if (obsidianLinkReference.length == 1 && obsidianLinkReference[0].source == item.text) {
+			return this.createVirtualPage(obsidianLinkReference[0], location)
 		}
 
-		return refs
-	}
-
-	private createVirtualPageNodeAttribute(pageReference: string, location: NodeAttributes['location']): NodeAttributes {
-		const tokens = [...parseMarkdown(pageReference, {})];
-		return {
+		let textNode: TextNode = {
 			location: location,
-			tokens: tokens,
-			tags: [],
-			aliases: [],
-			searchKey: pageReference.toLowerCase(),
-			nodeType: "virtual-page"
+			searchKey: item.text.toLowerCase(),
+			parsedTokens: parsed,
+			nodeType: "text",
+			// tokens: tokens,
+			tags: item.tags,
+			isTask: item.task,
+			isCompleted: item.completed,
 		}
+
+		this.addOrUpdateNode(textNode)
+
+		// make all reference nodes, parents of the text node
+		const parentsFromRefs = this.createRefsNodes(obsidianLinkReference, textNode);
+		parentsFromRefs.forEach(it => this.addChild(it, textNode, textNode.location, 0))
+
+		return textNode;
 	}
 
-	private createPageNodeAttribute(page: DvPage): NodeAttributes {
-		const tokens = [...parseMarkdown(`[[${page.file.name}]]`, {})];
-		return {
+	/** This is very dump and probably needs the app context to get the actual reference */
+	private resolveReference(ref: string): string {
+		if (ref.includes("/")) {
+			return ref.split("/")[1]
+		}
+
+		return ref
+	}
+
+	private getRefsFromString(pageReference: string): ObsidianLinkToken[] {
+		return this.getObsidianLinkReference(parseTokens(pageReference))
+	}
+
+	private getObsidianLinkReference(tokens: ParsedTextToken[]): ObsidianLinkToken[] {
+
+		return tokens
+			.filter(it => it.tokenType == 'obsidian_link') as ObsidianLinkToken[]
+	}
+
+	private createHeader(pageReference: ObsidianLinkToken, location: BaseNode['location']): HeaderNode | null {
+		if (pageReference.headerName) {
+			return this.createHeaderNode(pageReference.pageTarget, pageReference.headerName, location, true)
+		}
+
+		return null
+	}
+
+	/**
+	 * [[ParsedNode|Alias#Header]]
+	 */
+	private createVirtualPage(pageReference: ObsidianLinkToken, location: BaseNode['location']): PageNode | HeaderNode {
+		const page: PageNode = {
+			nodeType: "page",
+			isReference: true,
+			page: pageReference.pageTarget,
+			aliases: pageReference.alias ? [pageReference.alias] : [],
+			tags: [],
+			location: location,
+			searchKey: pageReference.pageTarget.toLowerCase(),
+		}
+
+		this.addOrUpdateNode(page)
+
+		const header = this.createHeader(pageReference, location)
+		if (header) {
+			this.addOrUpdateNode(header)
+			this.addChild(page, header, location, 0)
+			return header
+		}
+
+		return page
+	}
+
+	private createPageNode(page: DvPage): PageNode {
+		const node: PageNode = {
+			nodeType: "page",
+			isReference: false,
+			page: page.file.name,
+			aliases: page.file.aliases.values,
+			tags: page.file.tags,
 			location: {
 				path: page.file.path,
 				position: {start: {line: 0, ch: 0}, end: {line: 0, ch: 0}}
 			},
-			tokens: tokens,
-			tags: page.file.tags,
-			aliases: page.file.aliases.values,
-			searchKey: `${page.file.name} ${page.file.aliases.values.join(" ")}`.toLowerCase(),
-			nodeType: "page"
+			searchKey: `${page.file.name}|${page.file.aliases.values.join(" ")}`.toLowerCase(),
 		}
+
+		this.addOrUpdateNode(node)
+
+		return node
 	}
 }

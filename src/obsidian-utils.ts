@@ -31,6 +31,18 @@ export async function openFileByName(app: App, basenameAndAliases: string) {
 	}
 }
 
+export async function insertHere(app: App, text: string) {
+
+    setTimeout(() => {
+        const view = app.workspace?.activeEditor?.editor
+        if (view) {
+            view.replaceRange(text, view.getCursor())
+            view.setCursor({line: view.getCursor().line, ch: view.getCursor().ch + text.length})
+        }
+
+    }, 100);
+}
+
 export async function insertLine(app: App, loc: Location) {
     const file = app.vault.getFileByPath(loc.path);
     if (file) {

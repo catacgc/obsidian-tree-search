@@ -3,6 +3,7 @@ import {
     buildIndexFromFixture,
     expectSearch,
     fixture, result,
+    search,
     testParentOf,
 } from "./fixtures";
 import {NotesGraph} from "../src/graph";
@@ -215,7 +216,6 @@ describe('index and search operators', () => {
 			[[Project]] Alias
 			 [[Task2]]
 			 [[Task1]]
-			[[Project|Alias]]
 			`));
 	})
 
@@ -267,15 +267,13 @@ describe('index and search operators', () => {
 			- [[Task1]]
 			`);
 
-		testParentOf(graph, '[[Note]]', '[[Project]]');
+		testParentOf(graph, '[[Note]]', 'Project#TaskList');
 
 		expectSearch(graph, 'TaskList').toContain(result(`
-			[[Project]] > TaskList
+			Project#TaskList
 			 [[Task2]]
 			 Inline Ref [[Project#TaskList]]
-			 [[Task1]]
-			[[Project#TaskList]]
-			`));
+			 [[Task1]]`));
 	})
 
 	it('header refs with parent search', async () => {
@@ -292,7 +290,7 @@ describe('index and search operators', () => {
 
 		expectSearch(graph, 'project . tasklist').toContain(result(`
 			[[Project]]
-			 [[Project]] > TaskList
+			 Project#TaskList
 			  Inline Ref [[Project#TaskList]]
 			  [[Task1]]
 			`));
@@ -318,14 +316,44 @@ describe('index and search operators', () => {
 		expectSearch(graph, 'note1 . :header').toContain(result(`
 			[[Note1]]
 			 [[Note2]]
-			  Note2 > Header1
+			  Note2#Header1
 			`));
 
 		expectSearch(graph, 'note1 . :header | :page').toContain(result(`
 			[[Note1]]
 			 [[Note2]]
-			  Note2 > Header1
+			  Note2#Header1
 			 [[Note3]]
 			`));
 	})
+
+
+	it("graph headers", async () => {
+        let graph = await fixture(`
+		Page
+		# Header
+		- [[TEST#H1|B]] with [[TEST#H1|C]]
+		`)
+
+        const res = search(graph, "TEST")
+		expect(res).toContain(result(`
+		[[TEST]] B C
+		 TEST#H1
+		  [[TEST#H1|B]] with [[TEST#H1|C]]
+		`))
+    })
+
+	it('search by file reference', async () => {
+		const graph = await fixture(`
+			Note.md
+			- [[A]]
+		`, `Note2.md
+			- [[B]]`)
+
+		expectSearch(graph, '"Note| :page').toEqual(result(`
+		[[Note]]
+		 [[A]]
+		`))
+	})
+
 });

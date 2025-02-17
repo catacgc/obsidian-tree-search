@@ -1,114 +1,74 @@
-import { Token } from "markdown-it";
-import { useState } from "react";
 import { openFileByName } from "../obsidian-utils";
 import { useApp } from "./react-context/AppContext";
+import { ParsedNode, ParsedTextToken } from "src/graph";
 
-export const NodeRenderer = (props: { tokens: Token[] }) => {
-    const {tokens} = props
+export const NodeRenderer = (
+    props: { node: ParsedNode }
+) => {
+    
     const app = useApp()
 
-    if (tokens.length == 0) return <></>
+    async function openFile(name: string) {
+        if (app == undefined) return
+        await openFileByName(app, name)
+    }
+    
+    switch (props.node.nodeType) {
+        case "page":
+            const page = props.node.page
+            const isRef = props.node.isReference
+            const aliases = props.node.aliases.join(",")
+            return <span className={isRef ? "is-unresolved" : ""}>
+                <a className={"obsidian-link " + (isRef ? "cm-underline" : "")} href="#" onClick={async ev => {
+                    await openFile(page)
+                    ev.preventDefault()
+                }
+                }>{page}{aliases ? ` (${aliases})` : ""}</a>
+            </span>
+        case "header":
+            return <span>{`${props.node.page} > ${props.node.header}`}</span>
+        case "text":
+            return <TextNodeRenderer parsedTokens={props.node.parsedTokens}/>
+    }
+    
+}
 
-    const token = tokens[0]
+export const TextNodeRenderer = (props: { parsedTokens: ParsedTextToken[] }) => {
+    const app = useApp()
 
     async function openFile(name: string) {
         if (app == undefined) return
         await openFileByName(app, name)
     }
 
-    if (token.type == "inline" && token.children) {
-        return <NodeRenderer tokens={token.children}/>
-    }
-    
-    if (token.type == "obsidian_link") {
-        return <>
-            <a className={"obsidian-link"} href="#" onClick={async ev => {
-                let fileName = token.content.split("|")[0]
-                fileName = fileName.split("#")[0]
-                await openFile(fileName) // TODO: this only opens markdown references
+    if (props.parsedTokens.length == 0) return <></>
+    const token = props.parsedTokens[0]
+
+    switch (token.tokenType) {
+        case "obsidian_link":
+            return <>
+            <a className={"obsidian-link " + (false ? "cm-underline" : "")} href="#" onClick={async ev => {
+                await openFile(token.pageTarget)
                 ev.preventDefault()
-            }
-            }>{token.content}</a>
-            <NodeRenderer tokens={tokens.slice(1)}/>
-        </>
+            }}>
+                {token.alias || token.pageTarget}
+            </a>
+            <TextNodeRenderer parsedTokens={props.parsedTokens.slice(1)}/>
+            </>
+        case "link":
+            return <>
+                <a className={"external-link"} href={token.href}>{token.content}</a>
+                <TextNodeRenderer parsedTokens={props.parsedTokens.slice(1)}/>
+            </>
+        case "image":
+            return <>
+                <img className={"tree-search-tooltip"} style={{maxWidth: "100px"}} src={token.src} alt={token.alt || ""}/>
+                <TextNodeRenderer parsedTokens={props.parsedTokens.slice(1)}/>
+            </>
+        case "text":
+            return <>
+                <span>{token.text}</span>
+                <TextNodeRenderer parsedTokens={props.parsedTokens.slice(1)}/>
+            </>
     }
-
-    if (token.type == "link_open") {
-        const href = token.attrs?.[0]?.[1] || "#"
-        const content = tokens[1]?.content
-        return <>
-            <a className={"external-link"} href={href}>{content}</a>
-            <NodeRenderer tokens={tokens.slice(2)}/>
-        </>
-    }
-
-    if (token.type == "link_close") {
-        return <NodeRenderer tokens={tokens.slice(1)}/>
-    }
-
-    if (token.type == "text") {
-        return <>
-            <span>{token.content}</span>
-            <NodeRenderer tokens={tokens.slice(1)}/>
-        </>
-    }
-
-    if (token.type == "strong_open") {
-        return <b>
-            <NodeRenderer tokens={tokens.slice(1)}/>
-        </b>
-    }
-
-    if (token.type == "strong_close") {
-        return <NodeRenderer tokens={tokens.slice(1)}/>
-    }
-
-    if (token.type == "em_open") {
-        return <em><NodeRenderer tokens={tokens.slice(1)}/></em>
-    }
-
-    if (token.type == "softbreak") {
-        return <NodeRenderer tokens={tokens.slice(1)}/>
-    }
-
-    if (token.type == "s_open") {
-        return <s><NodeRenderer tokens={tokens.slice(1)}/></s>
-    }
-
-    if (token.type == "image") {
-        return <>
-            <NodeRendererImage token={token}/>
-            <NodeRenderer tokens={tokens.slice(1)}/>
-        </>
-    }
-
-    if (token.type == "code_inline") {
-        return <>
-            <code>{token.content}</code>
-            <NodeRenderer tokens={tokens.slice(1)}/>
-        </>
-    }
-
-    if (!token.type.includes("_close")) console.log("tokens not rendered: ", tokens)
-
-    return <NodeRenderer tokens={tokens.slice(1)}/>
-}
-
-const NodeRendererImage = (props: { token: Token }) => {
-    const [show, setShow] = useState(false)
-
-    return <>
-        <span
-            onMouseEnter={(ev) => {
-                setShow(true);
-                ev.preventDefault();
-            }}
-            onMouseLeave={(ev) => {
-                setShow(false);
-                ev.preventDefault()
-            }}
-        >![{props.token.content}]</span>
-        {show &&
-            <img className={"tree-search-tooltip"} style={{maxWidth: "100px"}} src={props.token.attrs?.[0]?.[1] || ""} alt={props.token.content || ""}/>}
-    </>
 }
