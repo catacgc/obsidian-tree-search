@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from "react";
-import {NodeAttributes} from "src/graph";
+import {ParsedNode} from "src/graph";
 import {highlightLine} from "src/obsidian-utils";
 import {NodeRenderer} from "./NodeRenderer";
 import {GraphEvents} from "./obsidian-views/GraphEvents";
@@ -36,7 +36,7 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
         }
     }, [selectedLine, props.node.index]);
 
-    async function openFile(attrs: NodeAttributes) {
+    async function openFile(attrs: ParsedNode) {
         await highlightLine(app, attrs.location);
         const customEvent = new CustomEvent(GraphEvents.RESULT_SELECTED, {detail: {type: "mouse"}});
         window.dispatchEvent(customEvent);
@@ -52,7 +52,7 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
         if (ev.isDefaultPrevented()) {
             return;
         }
-        await openFile(props.node.attrs);
+        await openFile(props.node.node);
     }
 
     function handleUserExpandClicked(ev: any) {
@@ -63,44 +63,44 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
     // return <TreeNodeExperiment/>
 
     return (
-            <div className="tree-node"
-                    onMouseMove={(ev) => handleMouseMove(ev)}
-                    onClick={handleTreeNodeClick}
+        <div className="tree-node"
+                onMouseMove={(ev) => handleMouseMove(ev)}
+                onClick={handleTreeNodeClick}
+        >
+            <div
+                ref={nodeRef}
+                className={`ts-list-line ${highlighted} ${expandableClass}`}
+                dir="ltr"
+                style={{ '--indent-level': indentLevel } as React.CSSProperties}
             >
-                <div
-                    ref={nodeRef}
-                    className={`ts-list-line ${highlighted} ${expandableClass}`}
-                    dir="ltr"
-                    style={{ '--indent-level': indentLevel } as React.CSSProperties}
-                >
-                    <div className="ts-list-guides" onClick={handleUserExpandClicked}>
-                        <GuideLines indent={indentLevel}/>
-                        <BulletOrTask
-                            indent={indentLevel}
-                            type={props.node.attrs.nodeType}
-                        />
-                    </div>
-                    <div className="ts-list-content">
-                        <NodeRenderer tokens={props.node.attrs.tokens}/>
-                        {props.node.attrs.aliases.length > 0 && `(${props.node.attrs.aliases.join(", ")})`}
-                    </div>
+                <div className="ts-list-guides" onClick={handleUserExpandClicked}>
+                    <GuideLines indent={indentLevel}/>
+                    <BulletOrTask
+                        indent={indentLevel}
+                        node={props.node.node}
+                    />
+                </div>
+                <div className="ts-list-content">
+                    <NodeRenderer node={props.node.node}/>
+                    {/* {props.node.node.aliases.length > 0 && `(${props.node.node.aliases.join(", ")})`} */}
                 </div>
             </div>
+        </div>
     );
 };
 
 type BulletOrTaskProps = {
     indent: number;
-    type: string;
+    node: ParsedNode;
 }
 
-const BulletOrTask = ({indent, type}: BulletOrTaskProps) => {
+const BulletOrTask = ({indent, node}: BulletOrTaskProps) => {
 
-    if (type === "task") {
+    if (node.nodeType === "text" && node.isTask && !node.isCompleted) {
         return <label className="task-list-label">
             <input className="task-list-item-checkbox" type="checkbox" data-task=""/>
         </label>;
-    } else if (type === "completed-task") {
+    } else if (node.nodeType === "text" && node.isTask && node.isCompleted) {
         return <label className="task-list-label">
             <input className="task-list-item-checkbox" type="checkbox" checked={true} readOnly={true} data-task="x"/>
         </label>;

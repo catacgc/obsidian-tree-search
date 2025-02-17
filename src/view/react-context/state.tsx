@@ -1,8 +1,8 @@
 import { TreeNode } from '../search/SearchViewFlatten'
-import { IndexedResult, SearchQuery } from 'src/search'
-import { ResultNode } from 'src/search'
+import { IndexedResult, SearchQuery } from 'src/search/search'
+import { ResultNode } from 'src/search/search'
 import { atom } from 'jotai'
-import { NotesGraph } from 'src/graph'
+import { NotesGraph, PageNode, ParsedNode, TextNode, ParsedTextToken, TextTokenWithLocationLink, HeaderNode } from 'src/graph'
 import { TFile } from 'obsidian'
  
 export const isGraphLoadingAtom = atom(false)
@@ -162,14 +162,96 @@ export const resetCollapseAtom = atom(null, (get, set) => {
     set(expandVisibleNodesAtom)
 })
 
+function transformToText(node: ParsedNode): TextNode {
+    let tokens: ParsedTextToken[] = []
+    switch(node.nodeType) {
+        case "page":
+            tokens = [
+                {
+                    tokenType: "obsidian_link",
+                    source: node.page,
+                    pageTarget: node.page,
+                }
+            ]
+            break   
+        case "header":
+            tokens = [
+                {
+                    tokenType: "obsidian_link",
+                    source: node.header,
+                    pageTarget: node.page,
+                    headerName: node.header
+                }
+            ]
+            break
+        case "text":
+            tokens = node.parsedTokens
+            break
+    }
+
+    return {
+        nodeType: "text",
+        location: node.location,
+        parsedTokens: tokens,
+        tags: [],
+        isTask: false,
+        isCompleted: false,
+        searchKey: node.searchKey
+    }
+}
+
+function mergeTokens(node1: TextNode, node2: TextNode): TextNode {
+    const separator: TextTokenWithLocationLink = {
+        tokenType: "text",
+        text: "⇒",
+        decoration: "none",
+        location: node2.location
+    }
+    const tokens = [...node1.parsedTokens, separator, ...node2.parsedTokens]
+    return {
+        nodeType: "text",
+        location: node1.location,
+        parsedTokens: tokens,
+        tags: [],
+        isTask: false,
+        isCompleted: false,
+        searchKey: node1.searchKey
+    }
+}
+
+function merge(node1: TreeNode, node2: ParsedNode): TreeNode {
+    const existingNode = node1.node
+
+    return {
+        node: mergeTokens(transformToText(existingNode), transformToText(node2)),
+        indent: node1.indent,
+        hasChildren: false,
+        visible: true,
+        selected: false,
+        index: node1.index
+    }
+}
+
 export function flattenIndex(indexed: ResultNode[], defaultIndentLevel = 0): TreeNode[] {
     const result: TreeNode[] = []
 
-    function flatten(nodes: ResultNode[], indent = 0, parentIndex = 0) {
+    function flatten(nodes: ResultNode[], indent = 0, parentIndex = 0): number {
         let index = parentIndex
+
+        if (result.length > 0 && nodes.length == 1 /*&& nodes[0].node.nodeType == "page"*/) {
+            const node = nodes[0]
+            const isheader = node.node.nodeType == "page" || node.node.nodeType == "header"
+            if (isheader && node.children.length != 0) {
+                const lastresult = result[result.length - 1]
+                result[result.length - 1] = merge(lastresult, node.node)
+
+                return flatten(node.children, indent, index)
+            }
+        }
+
         for (const node of nodes) {
             result.push({
-                attrs: node.attrs,
+                node: node.node,
                 indent: indent,
                 hasChildren: node.children.length > 0,
                 visible: indent <= defaultIndentLevel,
@@ -183,5 +265,6 @@ export function flattenIndex(indexed: ResultNode[], defaultIndentLevel = 0): Tre
     }
 
     flatten(indexed)
+
     return result
 }

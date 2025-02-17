@@ -1,11 +1,9 @@
-import {DirectedGraphOfNotes, NodeAttributes} from "./graph";
-import Graph from "graphology";
+import {DirectedGraphOfNotes, ParsedNode} from "../graph";
 import {firstPassInclude, matchQuery, parseQuery, QueryExpr} from "./query";
 import {TFile} from "obsidian";
 
 export type ResultNode = {
-    value: string,
-    attrs: NodeAttributes,
+    node: ParsedNode,
     children: ResultNode[],
     parents: string[]
 }
@@ -16,7 +14,7 @@ function filterTreeByWord(
     showOnlyMatchingChildren = false,
     pruneMatchingTree = false): ResultNode | null {
     
-    const nodeMatches = matchQuery(node.attrs, expr)
+    const nodeMatches = matchQuery(node.node, expr)
     if (!nodeMatches && pruneMatchingTree) {
         return null
     }
@@ -70,9 +68,8 @@ function buildTree(node: string, graph: DirectedGraphOfNotes, roots: Map<string,
     traversedAlready.add(node);
 
     const newNode: ResultNode = {
-        value: node,
         children: [],
-        attrs: graph.getNodeAttributes(node),
+        node: graph.getNodeAttributes(node),
         parents: []
     };
 
@@ -93,7 +90,7 @@ function buildTree(node: string, graph: DirectedGraphOfNotes, roots: Map<string,
             childNode = buildTree(edge.target, graph, roots, traversedAlready)
         }
 
-        childNode.attrs = {...childNode.attrs, ...{location: edge.attributes.location}}
+        childNode.node = {...childNode.node, ...{location: edge.attributes.location}}
 
         newNode.children.push(childNode)
     }
@@ -116,7 +113,7 @@ export function searchParents(graph: DirectedGraphOfNotes, file: TFile): ResultN
         const newNode = {
             value: edge.source,
             children: [],
-            attrs: {...attrs, ...{location: edge.attributes.location}},
+            node: {...attrs, ...{location: edge.attributes.location}},
             parents: [],
             index: 0
         }
@@ -128,16 +125,11 @@ export function searchParents(graph: DirectedGraphOfNotes, file: TFile): ResultN
 
 
 export function advancedSearch(graph: DirectedGraphOfNotes,
-                               file: TFile,
-                               maxDepth = 3,
-                               heading?: string, 
-                               query?: string,
-                               separator = '.'): ResultNode[] {
-    let node = `[[${file.basename}]]`.toLowerCase();
-    if (heading) {
-        node = `${file.basename}#${heading}`.toLowerCase();
-    }
+                               exactRef: string, 
+                               query: string,
+                               separator: string): ResultNode[] {
 
+    const node = exactRef.toLowerCase()
     if (!graph.hasNode(node)) return []
 
     const tree = buildTree(node, graph, new Map<string, ResultNode>(), new Set<string>())
@@ -157,8 +149,8 @@ export function flattenTasks(nodes: ResultNode[]): IndexedResult {
 
     function search(children: ResultNode[], result: ResultNode[], parent?: ResultNode) {
         for (const node of children) {
-            if (node.attrs.nodeType == "task") {
-                node.attrs.tokens.push(...parent?.attrs.tokens || [])
+            if (node.node.nodeType == "text" && node.node.isTask && !node.node.isCompleted) {
+                // TODO: node.attrs.tokens.push(...parent?.attrs.tokens || []) 
                 result.push(node)
             }
 
@@ -174,7 +166,7 @@ export function flattenTasks(nodes: ResultNode[]): IndexedResult {
 
 export type IndexedResult = { nodes: ResultNode[], total: number }
 
-export function searchIndex(graph: DirectedGraphOfNotes, qs: string, separator = "."): ResultNode[] {
+export function searchIndex(graph: DirectedGraphOfNotes, qs: string, separator: string): ResultNode[] {
     if (qs.length < 3) return []
 
     const expressions = qs.split(separator)
@@ -203,54 +195,6 @@ export function searchIndex(graph: DirectedGraphOfNotes, qs: string, separator =
         .sort((a, b) => b.children.length - a.children.length);
 
     return sorted
-}
-
-/**
- * Recursively prune the graph for each not operator in the expression
- */
-function prune(graph: DirectedGraphOfNotes, expr: QueryExpr): Set<string> {
-    // if (expr.type == "not") {
-    //     const matches = new Set<string>();
-    //     for (const child of expr.expr) {
-    //         const pruned = prune(graph, child)
-    //         pruned.forEach(node => matches.add(node))
-    //     }
-    //     return matches
-    // }
-
-    if (expr.type != "not") {
-        return new Set<string>()
-    }
-
-    const matches = new Set<string>();
-    const visited = new Set<string>();
-
-    // Find initial matching nodes
-    const initialNodes = graph.filterNodes((node, attrs) => !matchQuery(attrs, expr));
-
-    // For each matching node, traverse the graph to find all reachable nodes
-    for (const node of initialNodes) {
-        if (visited.has(node)) continue;
-        traverseAndCollect(node, graph, matches, visited);
-    }
-
-    return matches;
-}
-
-function traverseAndCollect(
-    node: string, 
-    graph: DirectedGraphOfNotes, 
-    matches: Set<string>,
-    visited: Set<string>
-) {
-    if (visited.has(node)) return;
-    visited.add(node);
-    matches.add(node);
-
-    // Traverse outbound edges
-    for (const neighbor of graph.outNeighbors(node)) {
-        traverseAndCollect(neighbor, graph, matches, visited);
-    }
 }
 
 export type SearchQuery = {

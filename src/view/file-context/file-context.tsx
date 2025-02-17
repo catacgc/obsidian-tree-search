@@ -1,6 +1,6 @@
 import {ItemView, WorkspaceLeaf} from "obsidian";
 import {createRoot, Root} from "react-dom/client";
-import {IndexedTree} from "../../indexed-tree";
+import {IndexedTree} from "../../indexing/indexed-tree";
 import {activeFileAtom, FileContextComponent, pinAtom} from "./FileContextComponent";
 import {GraphContextProvider} from "../react-context/GraphContextProvider";
 import { ScopeProvider } from "jotai-scope";

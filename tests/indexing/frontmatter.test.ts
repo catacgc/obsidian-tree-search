@@ -1,5 +1,5 @@
 import {describe, it} from "@jest/globals";
-import {expectSearch, fixture, result} from "./fixtures";
+import {expectSearch, fixture, result} from "../fixtures";
 
 describe('frontmatter relations', () => {
 	it('parent relations', async () => {

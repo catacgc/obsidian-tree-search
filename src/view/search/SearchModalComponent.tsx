@@ -1,6 +1,6 @@
 import {ItemView, WorkspaceLeaf} from "obsidian";
 import {createRoot, Root} from "react-dom/client";
-import {IndexedTree} from "../../indexed-tree";
+import {IndexedTree} from "../../indexing/indexed-tree";
 import {GraphContextProvider} from "../react-context/GraphContextProvider";
 import {SearchModalContainer} from "./SearchModalContainer";
 import { createStore, Provider } from "jotai";

@@ -1,10 +1,10 @@
 import {jest, describe, it, beforeEach, expect} from "@jest/globals";
 import {useApp} from "../../src/view/react-context/AppContext";
-import {NodeRenderer} from "../../src/view/NodeRenderer";
+import {NodeRenderer, TextNodeRenderer} from "../../src/view/NodeRenderer";
 import {openFileByName} from "../../src/obsidian-utils";
 import {render, screen, fireEvent} from '@testing-library/react';
 import '@testing-library/jest-dom/jest-globals'
-import {parseMarkdown} from "../../src/parser";
+import {parseTokens} from "../../src/indexing/parser";
 import React from "react";
 
 // Mock the useApp hook
@@ -18,8 +18,8 @@ jest.mock('../../src/obsidian-utils', () => ({
 }));
 
 function renderMarkdown(text: string) {
-    const tokens = parseMarkdown(text, {})
-    return render(<NodeRenderer tokens={tokens}/>)
+    const tokens = parseTokens(text)
+    return render(<TextNodeRenderer parsedTokens={tokens}/>)
 }
 
 describe('NodeRenderer', () => {
@@ -70,7 +70,14 @@ describe('NodeRenderer', () => {
         const link = screen.getByText('Example');
         expect(link).toBeInTheDocument();
         expect(link).toHaveAttribute('href', 'http://example.com');
+
+        renderMarkdown("inline http://example.com link");
+
+        const newLink = screen.getByText('http://example.com');
+        expect(newLink).toBeInTheDocument();
+        expect(newLink).toHaveAttribute('href', 'http://example.com');
     });
+
 
     it('renders strong text', () => {
         renderMarkdown("**Bold**");

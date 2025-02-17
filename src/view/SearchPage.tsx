@@ -1,6 +1,6 @@
 import { createStore, Provider, useAtomValue, useSetAtom } from "jotai";
 import { useEffect, useMemo, useState } from "react";
-import { ResultNode } from "src/search";
+import { ResultNode } from "src/search/search";
 import { activeFileAtom } from "./file-context/FileContextComponent";
 import { actualQueryAtom, graphVersionAtom, setDefaultExpandLevelAtom, updateSearchResultsAtom } from "./react-context/state";
 import { SearchViewFlatten } from "./search/SearchViewFlatten";

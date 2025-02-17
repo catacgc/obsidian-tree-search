@@ -1,5 +1,5 @@
 import {describe, it} from "@jest/globals";
-import {expectSearch, fixture, result} from "./fixtures";
+import {expectSearch, fixture, result} from "../fixtures";
 
 describe('edit capabilities, graph updates', () => {
 	it('should delete an edge and a node from page', async () => {
