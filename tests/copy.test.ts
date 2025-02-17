@@ -1,6 +1,6 @@
 import {describe, expect, it} from "@jest/globals";
 import {fixture} from "./fixtures";
-import {NotesGraph} from "../src/graph";
+import {NotesGraph, TextNode} from "../src/graph";
 import { searchIndex } from "../src/search";
 import { reverseMarkdownParsing } from "../src/copy";
 
@@ -15,7 +15,7 @@ describe('copy operation for search results', () => {
 
 		const qs = "Important";
 		const resultNodes = searchIndex(nestedGraph.graph, qs);
-        const line = reverseMarkdownParsing(resultNodes[0].attrs.tokens)
+        const line = reverseMarkdownParsing(resultNodes[0].node)
         expect(line).toEqual("[[Project]] http://ImportantLink.com #tag `snippet` [Test](http://test)")
 	});
 
@@ -26,7 +26,7 @@ describe('copy operation for search results', () => {
 		`);
 
 		const resultNodes = searchIndex(nestedGraph.graph, "header");
-        const line = reverseMarkdownParsing(resultNodes[0].attrs.tokens)
+        const line = reverseMarkdownParsing(resultNodes[0].node)
         expect(line).toEqual("[[Project#Header]]")
 	});
 });

@@ -1,44 +1,41 @@
 import { getDefaultStore, useAtomValue, useSetAtom } from "jotai";
 import { useEffect } from "react";
-import { searchIndex } from "../../search";
+import { advancedSearch, searchIndex } from "../../search";
 import { actualQueryAtom, graphAtom, graphVersionAtom, isGraphLoadingAtom, updateSearchResultsAtom } from "../react-context/state";
 import { SearchInstructionsAndNav } from "./SearchInstructionsAndNav";
 import { SearchViewFlatten } from "./SearchViewFlatten";
 import { settingsAtom } from "../react-context/settings";
+import { activeFileAtom } from "../file-context/FileContextComponent";
 
 
-export const SearchModalContainer = ({ refresh = true }: { refresh?: boolean }) => {
+export const SearchModalContainer = ({ refresh = true, isQuickLink = false }: { refresh?: boolean, isQuickLink?: boolean }) => {
 
     const graph = useAtomValue(graphAtom, {store: getDefaultStore()})
     const version = useAtomValue(graphVersionAtom, {store: getDefaultStore()})
 
     const { searchSeparator } = useAtomValue(settingsAtom);
-    const setIsLoading = useSetAtom(isGraphLoadingAtom, {store: getDefaultStore()})
 
     const setResult = useSetAtom(updateSearchResultsAtom)
     const searchQuery = useAtomValue(actualQueryAtom)
+    const activeFile = useAtomValue(activeFileAtom, {store: getDefaultStore()})
 
     useEffect(() => {
-        // try refreshing the graph; nodes count is a good proxy
-        if (graph.graph.nodes().length > 0 || !refresh) return;
+        const search = (isQuickLink && searchQuery.length > 0) ? `${searchQuery} . :page | :header` : searchQuery
 
-        const interval = setInterval(() => {
-            if (graph.graph.nodes().length === 0) setIsLoading(true)
-        }, 2000, 5);
-
-        return () => clearInterval(interval);
-    }, [version, refresh]);
-
-    useEffect(() => {
-        const results = searchIndex(graph.graph, searchQuery, searchSeparator)
-        setResult(results)
-    }, [searchQuery, version, searchSeparator])
+        if (search.length === 0 && activeFile) {
+            const results = advancedSearch(graph.graph, `[[${activeFile.basename}]]`, searchQuery, searchSeparator)
+            setResult(results)
+        } else {
+            const results = searchIndex(graph.graph, search, searchSeparator)
+            setResult(results)
+        }
+    }, [searchQuery, version, searchSeparator, isQuickLink, activeFile])
 
     return <div className="search-container-modal">
             <div className="search-container-modal-middle">
-                <SearchViewFlatten/>
+                <SearchViewFlatten isQuickLink={isQuickLink}/>
             </div>
 
-            <SearchInstructionsAndNav />
+            {!isQuickLink && <SearchInstructionsAndNav />}
         </div>;
 };

@@ -14,21 +14,19 @@ export const InlineMarkdownResults: React.FC<InlineMarkdownResultsProps> = (prop
     const {settings} = props
     const graph = useAtomValue(graphAtom, {store: getDefaultStore()})
     const version = useAtomValue(graphVersionAtom, {store: getDefaultStore()})
-    const file = settings.file || settings.inferredFile
 
-    const children = settings.heading ? file.basename + ' > ' + settings.heading : file.basename;
+    const children = settings.heading ? settings.basename + ' > ' + settings.heading : settings.basename;
 
     let sectionName = children + " Children"
     let search = useCallback((query: string) => {
-        const searchResults = advancedSearch(graph.graph, file,
-            1000,
-            settings.heading,
+        const reference = settings.heading ? `${settings.basename}#${settings.heading}` : `[[${settings.basename}]]`
+        const searchResults = advancedSearch(graph.graph, reference,
             `${settings.query} . ${query}`)
 
         return searchResults
-    }, [version, file, settings.heading, settings.query])
+    }, [version, settings.basename, settings.heading, settings.query])
 
-    if (settings.query && !settings.file) {
+    if (settings.query && settings.inferred) {
         sectionName = "Search Results: " + settings.query
         search = useCallback((query: string) => {
             const searchResults = searchIndex(graph.graph, `${settings.query} . ${query}`)
@@ -37,7 +35,7 @@ export const InlineMarkdownResults: React.FC<InlineMarkdownResultsProps> = (prop
         }, [version, settings.query])
     }
 
-    sectionName = [props.settings.name, sectionName].filter(Boolean).join(" > ")
+    sectionName = [settings.name, sectionName].filter(Boolean).join(" > ")
 
     return <>
         <SearchPage searchFn={search} maxExpand={props.settings.depth} sectionName={sectionName}/>

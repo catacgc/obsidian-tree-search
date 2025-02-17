@@ -169,7 +169,7 @@ export function flattenIndex(indexed: ResultNode[], defaultIndentLevel = 0): Tre
         let index = parentIndex
         for (const node of nodes) {
             result.push({
-                attrs: node.attrs,
+                node: node.node,
                 indent: indent,
                 hasChildren: node.children.length > 0,
                 visible: indent <= defaultIndentLevel,

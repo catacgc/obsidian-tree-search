@@ -1,4 +1,4 @@
-import {NodeAttributes} from "./graph";
+import {ParsedNode} from "./graph";
 
 type QueryModifier = ':task' | ':emoji' | ':page' | ':header';
 
@@ -101,7 +101,7 @@ function parseToken(token: string): QueryExpr {
     return { type: 'contains', value: token };
 }
 
-export function matchExpr(attrs: NodeAttributes, expr: QueryExpr): boolean {
+export function matchExpr(attrs: ParsedNode, expr: QueryExpr): boolean {
     switch (expr.type) {
 		case 'empty':
 			return true;
@@ -120,11 +120,11 @@ export function matchExpr(attrs: NodeAttributes, expr: QueryExpr): boolean {
         case 'modifier':
             switch (expr.value) {
                 case ':task':
-                    return attrs.nodeType === 'task';
+                    return attrs.nodeType === 'text' && attrs.isTask;
                 case ':emoji':
                     return containsEmoji(attrs.searchKey);
                 case ':page':
-                    return attrs.nodeType === 'page' || attrs.nodeType === 'virtual-page';
+                    return attrs.nodeType === 'page';
                 case ':header':
                     return attrs.nodeType === 'header';
             }
@@ -136,7 +136,7 @@ export function containsEmoji(text: string): boolean {
     return emojiRegex.test(text);
 }
 
-export function firstPassInclude(attrs: NodeAttributes, expr: QueryExpr) {
+export function firstPassInclude(attrs: ParsedNode, expr: QueryExpr) {
 	if (expr.type == "not") {
 		return !matchExpr(attrs, expr.expr)
 	}
@@ -144,6 +144,6 @@ export function firstPassInclude(attrs: NodeAttributes, expr: QueryExpr) {
 	return matchExpr(attrs, expr)
 }
 
-export function matchQuery(attrs: NodeAttributes, expr: QueryExpr): boolean {
+export function matchQuery(attrs: ParsedNode, expr: QueryExpr): boolean {
     return matchExpr(attrs, expr);
 }

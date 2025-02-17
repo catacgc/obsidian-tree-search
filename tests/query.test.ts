@@ -1,13 +1,13 @@
 import {describe, expect, it} from "@jest/globals";
 import {matchQuery, parseQuery} from "../src/query";
-import {EMPTY_NODE, NodeAttributes} from "../src/graph";
+import {EMPTY_NODE, ParsedNode} from "../src/graph";
 
 describe('parseSearchQuery', () => {
 	it('queries', () => {
 		const text = "A B C";
 
 		function matchQueryT(text: string, query: string) {
-			const attrs: NodeAttributes = {...EMPTY_NODE, ...{searchKey: text}}
+			const attrs: ParsedNode = {...EMPTY_NODE, ...{searchKey: text}}
 			return matchQuery(attrs, parseQuery(query));
 		}
 		
