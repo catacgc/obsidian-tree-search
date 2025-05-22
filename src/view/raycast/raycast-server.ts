@@ -1,7 +1,7 @@
 import { Server, ServerResponse } from "http";
 import http, { IncomingMessage } from "http";
 import { App, Platform } from "obsidian";
-import { searchIndex } from "src/search/search";
+import { searchIndex } from "../../search/search";
 import { flattenIndex, graphAtom } from "../react-context/state";
 import { getSettings, separatorAtom } from "../react-context/settings";
 import fs from "fs";
@@ -72,18 +72,22 @@ export class RaycastServer {
             res.end(jsonContent);
         };
 
-        this.server = http.createServer(requestListener);
-        const socketFileName = this.getSocketFileName();
+        try {
+            this.server = http.createServer(requestListener);
+            const socketFileName = this.getSocketFileName();
 
-        this.deleteSocketFile(socketFileName);
+            this.deleteSocketFile(socketFileName);
 
-        this.server.listen(socketFileName, () => {
-            console.log("Server is Listening at Port " + socketFileName);
-        });
+            this.server.listen(socketFileName, () => {
+                console.log("Server is Listening at Port " + socketFileName);
+            });
 
-        this.server.on('error', (err) => {
-            console.error('Server error:', err);
-            this.stop();
-        });
+            this.server.on('error', (err) => {
+                    console.error('Server error:', err);
+                    this.stop();
+                });
+        } catch (error) {
+            console.error('Cannot start raycast:', error);
+        }
     }
 }

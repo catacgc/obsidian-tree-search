@@ -1,9 +1,9 @@
-import { SEARCH_ICON } from "src/view/icons";
+import { SEARCH_ICON } from "../icons";
 import { highlightLine, insertHere, insertLine } from "../../obsidian-utils";
 import { GraphEvents } from "../obsidian-views/GraphEvents";
 import { useApp } from "../react-context/AppContext";
 import { useUrlOpener } from "./useUrlOpener";
-import { reverseMarkdownParsing } from "src/view/copy";
+import { reverseMarkdownParsing } from "../copy";
 import { Notice } from "obsidian";
 import {SearchTreeNode} from "../SearchTreeNode";
 import {ParsedNode} from "../../graph";
@@ -111,29 +111,29 @@ export const SearchViewFlatten = ({
         {showSearch &&
             <div>
                 <div className="search-row search-view-top">
-                    <a style={{display: "none"}} target="_blank" ref={linkRef} href="#"></a>
-                    <div className="search-input-container global-search-input-container">
-                        <input enterKeyHint="search"
-                               type="search"
-                               spellCheck="false"
-                               onChange={ev => setSearch(ev.target.value)}
-                               onKeyDown={handleKeyDown}
-                               value={searchQuery.query}
-                               placeholder={searchPlaceholder }/>
-                        <div className="search-input-clear-button" aria-label="Clear search"
-                             onClick={() => setSearch("")}></div>
-                    </div>
-                    <div className="float-search-view-switch">
-                        <div className="clickable-icon" aria-label="Refresh Tree"
-                             onClick={handleRefresh}>
-                            <SEARCH_ICON/>
+                            <a style={{display: "none"}} target="_blank" ref={linkRef} href="#"></a>
+                            <div className="search-input-container global-search-input-container">
+                                <input enterKeyHint="search"
+                                       type="search"
+                                       spellCheck="false"
+                                       onChange={ev => setSearch(ev.target.value)}
+                                       onKeyDown={handleKeyDown}
+                                       value={searchQuery.query}
+                                       placeholder={searchPlaceholder }/>
+                                <div className="search-input-clear-button" aria-label="Clear search"
+                                     onClick={() => setSearch("")}></div>
+                            </div>
+                            <div className="float-search-view-switch">
+                                <div className="clickable-icon" aria-label="Refresh Tree"
+                                     onClick={handleRefresh}>
+                                    <SEARCH_ICON/>
+                                </div>
+                                <div className="clickable-icon" aria-label="Collapse results" onClick={decExpand}> - </div>
+                                <div className="clickable-icon" aria-label="Collapse to zero" onClick={resetCollapse}> {expandLevel} </div>
+                                <div className="clickable-icon" aria-label="Expand results" onClick={incExpand}> + </div>
+                            </div>
                         </div>
-                        <div className="clickable-icon" aria-label="Collapse results" onClick={decExpand}> - </div>
-                        <div className="clickable-icon" aria-label="Collapse to zero" onClick={resetCollapse}> {expandLevel} </div>
-                        <div className="clickable-icon" aria-label="Expand results" onClick={incExpand}> + </div>
                     </div>
-                </div>
-            </div>
 
         }
         <div className="search-results search-view-middle">

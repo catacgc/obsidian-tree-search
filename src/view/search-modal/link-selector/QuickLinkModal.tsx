@@ -5,7 +5,7 @@ import {GraphContextProvider} from "../../react-context/GraphContextProvider";
 import {SearchModalContainer} from "../../search/SearchModalContainer";
 import { createStore, Provider } from "jotai";
 import React from "react";
-import { GraphEvents } from "src/view/obsidian-views/GraphEvents";
+import { GraphEvents } from "../../obsidian-views/GraphEvents";
 
 export class QuickLinkModal extends Modal {
     root: Root | null = null;

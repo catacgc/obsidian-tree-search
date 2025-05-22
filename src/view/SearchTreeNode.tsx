@@ -1,6 +1,6 @@
 import {useEffect, useRef, useState} from "react";
-import {ParsedNode} from "src/graph";
-import {highlightLine} from "src/obsidian-utils";
+import {ParsedNode} from "../graph";
+import {highlightLine} from "../obsidian-utils";
 import {NodeRenderer} from "./NodeRenderer";
 import {GraphEvents} from "./obsidian-views/GraphEvents";
 import {useApp} from "./react-context/AppContext";

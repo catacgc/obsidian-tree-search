@@ -1,4 +1,4 @@
-import { reverseMarkdownParsing } from "src/view/copy";
+import { reverseMarkdownParsing } from "../copy";
 import { TreeNode } from "../search/SearchViewFlatten";
 import { ObsidianLinkToken, ParsedTextToken } from "src/graph";
 

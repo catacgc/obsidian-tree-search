@@ -1,8 +1,7 @@
 import { TreeNode } from '../search/SearchViewFlatten'
-import { IndexedResult, SearchQuery } from 'src/search/search'
-import { ResultNode } from 'src/search/search'
+import { IndexedResult, SearchQuery, ResultNode } from '../../search/search'
 import { atom } from 'jotai'
-import { NotesGraph, PageNode, ParsedNode, TextNode, ParsedTextToken, TextTokenWithLocationLink, HeaderNode } from 'src/graph'
+import { NotesGraph, PageNode, ParsedNode, TextNode, ParsedTextToken, TextTokenWithLocationLink, HeaderNode } from '../../graph'
 import { TFile } from 'obsidian'
  
 export const isGraphLoadingAtom = atom(false)
