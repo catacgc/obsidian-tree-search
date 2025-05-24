@@ -4,16 +4,26 @@
 
 /* Obsidian theme colors https://docs.obsidian.md/Reference/CSS+variables/Foundations/Colors */
 @theme inline {
-	--color-obs-border: var(--background-modifier-border);
-	--color-obs-hover: var(--interactive-hover);
+	--color-obs-border: var(--background-modifier-border-focus);
+	--color-obs-hover: var(--background-modifier-border-hover);
+	--color-obs-base-100: var(--color-base-100);
+	--color-obs-base-60: var(--color-base-60);
+	--color-obs-base-40: var(--color-base-40);
+	--color-obs-base-20: var(--color-base-20);
+	--color-obs-base-0: var(--color-base-0);
+	--color-obs-accent: var(--color-accent);
+}
 
+.tree-search-modal {
+	/* height: calc(100vh * 0.75); */
+	width: calc(100vw * 0.60);
 }
 
 /* @import "tailwindcss/preflight.css" layer(base) important; */
 .tw-reset {
 	@import "./preflight.css";
-	button { 
-		box-shadow: none !important;
+	button {
+		box-shadow: none;
 	}
 
 	button,
@@ -34,71 +44,4 @@
 }
 
 @import "./markdown-code-block/styles.css";
-@import "./SearchPage.css";
 @import "./SearchTreeNode.css";
-@import "./search/SearchView.css";
-@import "./search/SearchModalContainer.css";
-
-/* Tooltip container */
-
-.tooltip-container {
-	position: relative;
-	display: inline-block;
-}
-
-.tree-search-tooltip {
-	visibility: visible;
-	background-color: black;
-	color: #fff;
-	text-align: center;
-	border-radius: 5px;
-	padding: 5px;
-	position: absolute;
-	z-index: 1;
-	top: 0; /* Position in the middle vertically */
-	left: 225%; /* Position to the right of the element */
-	margin-top: -0px; /* Center the tooltip vertically */
-	opacity: 0.9;
-	width: 120px;
-}
-
-.tree-search-tooltip::after {
-	content: "";
-	position: absolute;
-	top: 0; /* In the middle of the tooltip */
-	right: 100%; /* At the left of the tooltip */
-	margin-top: -5px;
-	border-width: 5px;
-	border-style: solid;
-	border-color: transparent black transparent transparent;
-}
-
-/* Loading animations */
-
-/* Add this to your CSS file */
-@keyframes dot-blink {
-	0% { opacity: 0.2; }
-	20% { opacity: 1; }
-	100% { opacity: 0.2; }
-}
-
-.loading-dots {
-	display: flex;
-	justify-content: center;
-	align-items: center;
-	height: 100%;
-}
-
-.loading-dots span {
-	animation: dot-blink 1.4s infinite both;
-	font-size: 60px; /* Increase the size of the dots */
-	margin: 0 5px; /* Adjust spacing between dots */
-}
-
-.loading-dots span:nth-child(2) {
-	animation-delay: 0.2s;
-}
-
-.loading-dots span:nth-child(3) {
-	animation-delay: 0.4s;
-}

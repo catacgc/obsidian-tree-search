@@ -31,11 +31,16 @@ export const SearchModalContainer = ({ refresh = true, isQuickLink = false }: { 
         }
     }, [searchQuery, version, searchSeparator, isQuickLink, activeFile])
 
-    return <div className="search-container-modal">
-            <div className="search-container-modal-middle">
-                <SearchViewFlatten isQuickLink={isQuickLink}/>
-            </div>
+    return <div style={{height: "calc(100vh * 0.75)"}}>
+            <div className="flex flex-col w-full h-full">
 
-            {!isQuickLink && <SearchInstructionsAndNav />}
+            <SearchViewFlatten isQuickLink={isQuickLink}/>
+
+            {!isQuickLink && (
+                <div className="sticky bottom-0 z-10">
+                    <SearchInstructionsAndNav />
+                </div>
+            )}
+            </div>
         </div>;
 };

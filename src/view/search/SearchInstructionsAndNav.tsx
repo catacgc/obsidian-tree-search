@@ -42,26 +42,27 @@ export const SearchInstructionsAndNav = () => {
             </div>
         </div> */}
 
-        {isDesktop && <div className="search-container-modal-instructions tree-search-modal-instructions">
-            <div className="tree-search-modal-instructions-navigate"><span
-                className="tree-search-modal-instructions-key">↑↓</span><span
-                    className="tree-search-modal-instructions-text">Navigate</span></div>
+        {isDesktop && <div className="tw-reset flex gap-2 text-xs border-t 
+        border-obs-base-20 p-2 justify-center flex-wrap">
+            <div className="flex items-center gap-1 whitespace-nowrap"><span
+                className="text-obs-base-100 font-bold">↑↓</span><span
+                    className="text-obs-base-60">Navigate</span></div>
 
-            <div className="tree-search-modal-instructions-enter"><span
-                className="tree-search-modal-instructions-key">↵</span><span
-                    className="tree-search-modal-instructions-text">Open Url or Note</span></div>
+            <div className="flex items-center gap-1 whitespace-nowrap"><span
+                className="text-obs-base-100 font-bold">↵</span><span
+                    className="text-obs-base-60">Open Url or Note</span></div>
 
-            <div className="tree-search-modal-instructions-enter"><span
-                className="tree-search-modal-instructions-key">Shift+↵</span><span
-                    className="tree-search-modal-instructions-text">Highlight Source</span></div>
+            <div className="flex items-center gap-1 whitespace-nowrap"><span
+                className="text-obs-base-100 font-bold">Shift+↵</span><span
+                    className="text-obs-base-60">Highlight Source</span></div>
 
-            <div className="tree-search-modal-instructions-enter"><span
-                className="tree-search-modal-instructions-key">Ctrl+C</span><span
-                    className="tree-search-modal-instructions-text">Copy to Clipboard</span></div>
+            <div className="flex items-center gap-1 whitespace-nowrap"><span
+                className="text-obs-base-100 font-bold">Ctrl+C</span><span
+                    className="text-obs-base-60">Copy to Clipboard</span></div>
 
-            <div className="tree-search-modal-instructions-enter"><span
-                className="tree-search-modal-instructions-key">Ctrl+I</span><span
-                    className="tree-search-modal-instructions-text">Insert After</span></div>
+            <div className="flex items-center gap-1 whitespace-nowrap"><span
+                className="text-obs-base-100 font-bold">Ctrl+I</span><span
+                    className="text-obs-base-60">Insert After</span></div>
         </div>}
     </div>
 }

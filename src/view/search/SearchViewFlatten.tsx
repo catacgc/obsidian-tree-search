@@ -33,17 +33,44 @@ export const SearchViewFlatten = ({
     const treeNodes = useAtomValue(renderableTreeNodes)
     const incrementPages = useSetAtom(incrementPagesAtom)
     const hasMoreTreeNodes = useAtomValue(hasMoreTreeNodesAtom)
-    const searchPlaceholder = useAtomValue(searchPlaceholderAtom)
-    const [isLoading, setLoading] = useAtom(isGraphLoadingAtom, { store: getDefaultStore() })
-    const app = useApp()
+    const isLoading = useAtomValue(isGraphLoadingAtom)
 
-    const expandLevel = useAtomValue(getExpandLevel)
-    const selectedNode = useAtomValue(selectedNodeAtom)
+    return <>
+
+        {showSearch &&
+            <SearchBar isQuickLink={isQuickLink}/>
+        }
+        <div className="flex-1 overflow-y-auto">
+            {isLoading ? (
+                <LoadingDots />
+            ) : (
+                <>
+                    {treeNodes.map((tree, index) => {
+                        return <SearchTreeNode node={tree} key={`${index}`} />
+                    })}
+                    {hasMoreTreeNodes && <button onClick={incrementPages}>Load More</button>}
+                </>
+
+            )}
+        </div>
+    </>
+};
+
+const SearchBar = ({ isQuickLink }: { isQuickLink: boolean }) => {
     const arrowUp = useSetAtom(arrowUpAtom)
     const arrowDown = useSetAtom(arrowDownAtom)
     const decExpand = useSetAtom(decExpandAtom)
     const incExpand = useSetAtom(incExpandAtom)
     const resetCollapse = useSetAtom(resetCollapseAtom)
+    const setLoading = useSetAtom(isGraphLoadingAtom)
+
+    const handleRefresh = () => setLoading(true)
+
+    const searchPlaceholder = useAtomValue(searchPlaceholderAtom)
+    const app = useApp()
+
+    const expandLevel = useAtomValue(getExpandLevel)
+    const selectedNode = useAtomValue(selectedNodeAtom)
 
     const [searchQuery, setSearchQuery] = useAtom(searchQueryAtom)
 
@@ -63,8 +90,6 @@ export const SearchViewFlatten = ({
             }
         }
     };
-
-    const handleRefresh = () => setLoading(true)
 
     const handleKeyDown = async (event: React.KeyboardEvent<HTMLInputElement>) => {
         if (event.key === 'ArrowUp') {
@@ -109,62 +134,49 @@ export const SearchViewFlatten = ({
 
     return <>
         <a style={{ display: "none" }} target="_blank" ref={linkRef} href="#"></a>
+    <div className="tw-reset sticky top-0 z-10">
 
-        {showSearch &&
-            <div className="w-full tw-reset">
+            <div className="relative flex items-center flex-1">
 
-                    <div className="relative flex items-center flex-1">
-
-                    <div className="flex items-center w-full max-w-4xl mx-auto">
-                        <input
-                            enterKeyHint="search"
-                            type="search"
-                            spellCheck="false"
-                            onChange={ev => setSearch(ev.target.value)}
-                            onKeyDown={handleKeyDown}
-                            value={searchQuery.query}
-                            placeholder={searchPlaceholder}
-                            className="w-full pl-5 ml-1 mb-2 mt-2 pr-10 py-3 
-                            rounded-lg border focus:border-obs-border hover:border-obs-hover focus:ring-1 
-                            outline-none transition-all duration-150"
-                        />
-                        
-                        <button
-                            className="relative right-4 text-gray-400 focus:outline-none"
-                            aria-label="Clear search"
-                            onClick={() => setSearch("")}
-                        >
-                            ×
-                        </button>
-                    </div>
-                    <div className="flex items-center ml-4 gap-1 text-gray-400 text-xl">
-                        <button className="rounded-lg px-3 py-1" aria-label="Collapse results" onClick={decExpand}>-</button>
-                        <button className="rounded-lg px-3 py-1" aria-label="Collapse to zero" onClick={resetCollapse}> {expandLevel} </button>
-                        <button className="rounded-lg px-3 py-1" aria-label="Expand results" onClick={incExpand}>+</button>
-                        <button className="rounded-lg p-2 text-xl text-gray-400" aria-label="Refresh Tree" onClick={handleRefresh}>
-                            <SEARCH_ICON />
-                        </button>
-                    </div>
-                </div>
+            <div className="flex items-center w-full max-w-4xl mx-auto">
+                <input
+                    enterKeyHint="search"
+                    type="search"
+                    spellCheck="false"
+                    onChange={ev => setSearch(ev.target.value)}
+                    onKeyDown={handleKeyDown}
+                    value={searchQuery.query}
+                    placeholder={searchPlaceholder}
+                    className="w-full pl-5 ml-1 mb-2 mt-2 pr-10 py-3 
+                    rounded-lg border focus:border-obs-border hover:border-obs-hover focus:ring-1 
+                    outline-none transition-all duration-150"
+                />
+                
+                <button
+                    className="relative right-4 text-obs-base-40 focus:outline-none hover:text-obs-accent"
+                    aria-label="Clear search"
+                    onClick={() => setSearch("")}
+                >
+                    ×
+                </button>
             </div>
-        }
-        <div className="search-results search-view-middle">
-            {isLoading ? (
-                <div className="loading-dots">
-                    <span>.</span><span>.</span><span>.</span>
-                </div>
-            ) : (
-                <>
-                    {treeNodes.map((tree, index) => {
-                        return <SearchTreeNode node={tree} key={`${index}`} />
-                    })}
-                    {hasMoreTreeNodes && <button onClick={incrementPages}>Load More</button>}
-                </>
-
-            )}
+            <div className="flex items-center ml-4 gap-1 text-obs-base-40 text-xl">
+                <button className="rounded-lg px-3 py-1 hover:text-obs-accent" aria-label="Collapse results" onClick={decExpand}>-</button>
+                <button className="rounded-lg px-3 py-1 hover:text-obs-accent" aria-label="Collapse to zero" onClick={resetCollapse}> {expandLevel} </button>
+                <button className="rounded-lg px-3 py-1 hover:text-obs-accent" aria-label="Expand results" onClick={incExpand}>+</button>
+                <button className="rounded-lg p-2 text-xl text-obs-base-40 hover:text-obs-accent" aria-label="Refresh Tree" onClick={handleRefresh}>
+                    <SEARCH_ICON />
+                </button>
+            </div>
         </div>
+    </div>
     </>
-};
+}
 
-
-
+const LoadingDots = () => {
+    return <div className="flex justify-center items-center space-x-1 text-6xl font-bold text-gray-600 dark:text-gray-300">
+        <span className="animate-bounce [animation-delay:-0.3s]">.</span>
+        <span className="animate-bounce [animation-delay:-0.15s]">.</span>
+        <span className="animate-bounce">.</span>
+    </div>
+}
