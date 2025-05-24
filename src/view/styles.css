@@ -1,3 +1,38 @@
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme) important;
+@import "tailwindcss/utilities.css" layer(utilities) important;
+
+/* Obsidian theme colors https://docs.obsidian.md/Reference/CSS+variables/Foundations/Colors */
+@theme inline {
+	--color-obs-border: var(--background-modifier-border);
+	--color-obs-hover: var(--interactive-hover);
+
+}
+
+/* @import "tailwindcss/preflight.css" layer(base) important; */
+.tw-reset {
+	@import "./preflight.css";
+	button { 
+		box-shadow: none !important;
+	}
+
+	button,
+	input,
+	select,
+	optgroup,
+	textarea,
+	::file-selector-button {
+		font: inherit; /* 1 */
+		font-feature-settings: inherit; /* 1 */
+		font-variation-settings: inherit; /* 1 */
+		letter-spacing: inherit; /* 1 */
+		color: inherit; /* 1 */
+		border-radius: 0; /* 2 */
+		background-color: transparent; /* 3 */
+		opacity: 1; /* 4 */
+	}
+}
+
 @import "./markdown-code-block/styles.css";
 @import "./SearchPage.css";
 @import "./SearchTreeNode.css";

@@ -20,7 +20,7 @@ import { getSettings, updateSettings } from './view/react-context/settings';
 import { RaycastServer } from './view/raycast/raycast-server';
 import { MarkdownIndexer } from './indexing/markdown';
 import { CanvasIndexer } from './indexing/canvas';
-import './view/main.css';
+import './view/styles.css';
 
 export default class TreeSearchPlugin extends Plugin {
     index: IndexedTree

@@ -5,8 +5,8 @@ import { useApp } from "../react-context/AppContext";
 import { useUrlOpener } from "./useUrlOpener";
 import { reverseMarkdownParsing } from "../copy";
 import { Notice } from "obsidian";
-import {SearchTreeNode} from "../SearchTreeNode";
-import {ParsedNode} from "../../graph";
+import { SearchTreeNode } from "../SearchTreeNode";
+import { ParsedNode } from "../../graph";
 import { arrowDownAtom, arrowUpAtom, decExpandAtom, graphAtom, incExpandAtom, isGraphLoadingAtom, resetCollapseAtom, searchQueryAtom, selectedNodeAtom, renderableTreeNodes, incrementPagesAtom, hasMoreTreeNodesAtom, getExpandLevel, searchPlaceholderAtom } from "../react-context/state";
 import { getDefaultStore, useAtom, useAtomValue } from "jotai";
 import { useSetAtom } from "jotai";
@@ -26,15 +26,15 @@ export type SearchViewFlattenProps = {
 }
 
 export const SearchViewFlatten = ({
-                               showSearch = true,
-                               isQuickLink = false
-                           }: SearchViewFlattenProps) => {
-    
+    showSearch = true,
+    isQuickLink = false
+}: SearchViewFlattenProps) => {
+
     const treeNodes = useAtomValue(renderableTreeNodes)
     const incrementPages = useSetAtom(incrementPagesAtom)
     const hasMoreTreeNodes = useAtomValue(hasMoreTreeNodesAtom)
     const searchPlaceholder = useAtomValue(searchPlaceholderAtom)
-    const [isLoading, setLoading] = useAtom(isGraphLoadingAtom, {store: getDefaultStore()})
+    const [isLoading, setLoading] = useAtom(isGraphLoadingAtom, { store: getDefaultStore() })
     const app = useApp()
 
     const expandLevel = useAtomValue(getExpandLevel)
@@ -46,12 +46,12 @@ export const SearchViewFlatten = ({
     const resetCollapse = useSetAtom(resetCollapseAtom)
 
     const [searchQuery, setSearchQuery] = useAtom(searchQueryAtom)
-    
+
     const setSearch = (search: string) => {
-        setSearchQuery({query: search})
+        setSearchQuery({ query: search })
     }
 
-    const {linkRef, tryOpenUrl} = useUrlOpener()
+    const { linkRef, tryOpenUrl } = useUrlOpener()
 
     const handleCmdEnter = async (event: React.KeyboardEvent<HTMLInputElement>) => {
         const node = selectedNode
@@ -79,7 +79,7 @@ export const SearchViewFlatten = ({
 
                 await insertHere(app, reverseMarkdownParsing(selectedNode?.node))
                 event.preventDefault();
-                const customEvent = new CustomEvent(GraphEvents.RESULT_SELECTED, {detail: {type: "enter"}});
+                const customEvent = new CustomEvent(GraphEvents.RESULT_SELECTED, { detail: { type: "enter" } });
                 window.dispatchEvent(customEvent);
                 return
             }
@@ -87,7 +87,7 @@ export const SearchViewFlatten = ({
             await handleCmdEnter(event);
 
             // Dispatch custom event
-            const customEvent = new CustomEvent(GraphEvents.RESULT_SELECTED, {detail: {type: "enter"}});
+            const customEvent = new CustomEvent(GraphEvents.RESULT_SELECTED, { detail: { type: "enter" } });
             window.dispatchEvent(customEvent);
             event.preventDefault();
         } else if (event.key === 'c' && event.ctrlKey) {
@@ -100,7 +100,7 @@ export const SearchViewFlatten = ({
         } else if (event.key === 'i' && event.ctrlKey) {
             if (selectedNode && app) {
                 await insertLine(app, selectedNode.node.location)
-                const customEvent = new CustomEvent(GraphEvents.RESULT_SELECTED, {detail: {type: "insert"}});
+                const customEvent = new CustomEvent(GraphEvents.RESULT_SELECTED, { detail: { type: "insert" } });
                 window.dispatchEvent(customEvent);
                 event.preventDefault();
             }
@@ -108,33 +108,45 @@ export const SearchViewFlatten = ({
     };
 
     return <>
-        {showSearch &&
-            <div>
-                <div className="search-row search-view-top">
-                            <a style={{display: "none"}} target="_blank" ref={linkRef} href="#"></a>
-                            <div className="search-input-container global-search-input-container">
-                                <input enterKeyHint="search"
-                                       type="search"
-                                       spellCheck="false"
-                                       onChange={ev => setSearch(ev.target.value)}
-                                       onKeyDown={handleKeyDown}
-                                       value={searchQuery.query}
-                                       placeholder={searchPlaceholder }/>
-                                <div className="search-input-clear-button" aria-label="Clear search"
-                                     onClick={() => setSearch("")}></div>
-                            </div>
-                            <div className="float-search-view-switch">
-                                <div className="clickable-icon" aria-label="Refresh Tree"
-                                     onClick={handleRefresh}>
-                                    <SEARCH_ICON/>
-                                </div>
-                                <div className="clickable-icon" aria-label="Collapse results" onClick={decExpand}> - </div>
-                                <div className="clickable-icon" aria-label="Collapse to zero" onClick={resetCollapse}> {expandLevel} </div>
-                                <div className="clickable-icon" aria-label="Expand results" onClick={incExpand}> + </div>
-                            </div>
-                        </div>
-                    </div>
+        <a style={{ display: "none" }} target="_blank" ref={linkRef} href="#"></a>
 
+        {showSearch &&
+            <div className="w-full tw-reset">
+
+                    <div className="relative flex items-center flex-1">
+
+                    <div className="flex items-center w-full max-w-4xl mx-auto">
+                        <input
+                            enterKeyHint="search"
+                            type="search"
+                            spellCheck="false"
+                            onChange={ev => setSearch(ev.target.value)}
+                            onKeyDown={handleKeyDown}
+                            value={searchQuery.query}
+                            placeholder={searchPlaceholder}
+                            className="w-full pl-5 ml-1 mb-2 mt-2 pr-10 py-3 
+                            rounded-lg border focus:border-obs-border hover:border-obs-hover focus:ring-1 
+                            outline-none transition-all duration-150"
+                        />
+                        
+                        <button
+                            className="relative right-4 text-gray-400 focus:outline-none"
+                            aria-label="Clear search"
+                            onClick={() => setSearch("")}
+                        >
+                            ×
+                        </button>
+                    </div>
+                    <div className="flex items-center ml-4 gap-1 text-gray-400 text-xl">
+                        <button className="rounded-lg px-3 py-1" aria-label="Collapse results" onClick={decExpand}>-</button>
+                        <button className="rounded-lg px-3 py-1" aria-label="Collapse to zero" onClick={resetCollapse}> {expandLevel} </button>
+                        <button className="rounded-lg px-3 py-1" aria-label="Expand results" onClick={incExpand}>+</button>
+                        <button className="rounded-lg p-2 text-xl text-gray-400" aria-label="Refresh Tree" onClick={handleRefresh}>
+                            <SEARCH_ICON />
+                        </button>
+                    </div>
+                </div>
+            </div>
         }
         <div className="search-results search-view-middle">
             {isLoading ? (
@@ -148,8 +160,11 @@ export const SearchViewFlatten = ({
                     })}
                     {hasMoreTreeNodes && <button onClick={incrementPages}>Load More</button>}
                 </>
-                
+
             )}
         </div>
     </>
 };
+
+
+

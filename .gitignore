@@ -1,6 +1,8 @@
 # vscode
 .vscode 
 
+dist/
+
 # Intellij
 *.iml
 .idea

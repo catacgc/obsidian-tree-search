@@ -2,10 +2,13 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
+// import tailwindcss from '@tailwindcss/postcss';
+import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [
     react(),
+    tailwindcss(),
     viteStaticCopy({
       targets: [
         { src: 'manifest.json', dest: '.' },
@@ -15,6 +18,7 @@ export default defineConfig({
     })
   ],
   build: {
+    cssMinify: false,
     outDir: './dist',
     lib: {
       entry: path.resolve(__dirname, 'src/main.ts'),
@@ -44,21 +48,24 @@ export default defineConfig({
         entryFileNames: 'main.js',
         assetFileNames: (assetInfo) => {
           if (assetInfo.name && assetInfo.name.endsWith('.css')) {
-            return 'main.css';
+            return 'styles.css';
           }
           return '[name][extname]';
         },
       },
     },
-    emptyOutDir: false,
+    emptyOutDir: true,
     sourcemap: true,
+    
   },
-  css: {
-    postcss: './postcss.config.js',
-    preprocessorOptions: {
-      css: {
-        additionalData: '@import "tailwindcss/base"; @import "tailwindcss/components"; @import "tailwindcss/utilities";',
-      },
-    },
-  },
+  
+  // css: {
+  //   postcss: {
+  //     from: 'src/view/main.css',
+  //     to: 'dist/main.css',
+  //     plugins: [
+  //       tailwindcss(),
+  //     ]
+  //   },
+  // },
 }); 
