@@ -1,6 +1,6 @@
 import {ParsedNode} from "../graph";
 
-type QueryModifier = ':task' | ':emoji' | ':page' | ':header';
+type QueryModifier = ':task' | ':emoji' | ':page' | ':header' | ':e' | ':p' | ':h' | ':t';
 
 export type QueryExpr = 
     | { type: 'contains'; value: string }
@@ -77,7 +77,7 @@ function parseToken(token: string): QueryExpr {
     // Handle modifiers
     if (token.startsWith(':')) {
         const modifier = token as QueryModifier;
-        if ([':task', ':emoji', ':page', ':header'].includes(modifier)) {
+        if ([':task', ':emoji', ':page', ':header', ':t', ':e', ':p', ':h'].includes(modifier)) {
             return { type: 'modifier', value: modifier };
         }
     }
@@ -120,12 +120,16 @@ export function matchExpr(attrs: ParsedNode, expr: QueryExpr): boolean {
         case 'modifier':
             switch (expr.value) {
                 case ':task':
+                case ':t':
                     return attrs.nodeType === 'text' && attrs.isTask;
                 case ':emoji':
+                case ':e':
                     return containsEmoji(attrs.searchKey);
                 case ':page':
+                case ':p':
                     return attrs.nodeType === 'page';
                 case ':header':
+                case ':h':
                     return attrs.nodeType === 'header';
             }
     }

@@ -136,9 +136,8 @@ const SearchBar = ({ isQuickLink }: { isQuickLink: boolean }) => {
         <a style={{ display: "none" }} target="_blank" ref={linkRef} href="#"></a>
     <div className="tw-reset sticky top-0 z-10">
 
-            <div className="relative flex items-center flex-1">
-
-            <div className="flex items-center w-full max-w-4xl mx-auto">
+        <div className="relative flex items-center flex-1">
+            <div className="flex items-center w-full max-w-4xl mx-auto left-0">
                 <input
                     enterKeyHint="search"
                     type="search"
@@ -166,6 +165,20 @@ const SearchBar = ({ isQuickLink }: { isQuickLink: boolean }) => {
                 <button className="rounded-lg px-3 py-1 hover:text-obs-accent" aria-label="Expand results" onClick={incExpand}>+</button>
                 <button className="rounded-lg p-2 text-xl text-obs-base-40 hover:text-obs-accent" aria-label="Refresh Tree" onClick={handleRefresh}>
                     <SEARCH_ICON />
+                </button>
+            </div>
+        </div>
+        <div className="relative flex flex-1">
+            <div className="flex w-full max-w-4xl mx-auto">
+                <button 
+                    className="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200
+                    bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700
+                    text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700
+                    focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-gray-600
+                    active:bg-gray-50 dark:active:bg-gray-700" 
+                    onClick={decExpand}
+                >
+                    Insert Mode
                 </button>
             </div>
         </div>
