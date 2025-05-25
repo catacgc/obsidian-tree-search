@@ -33,7 +33,7 @@ interface CanvasEdge {
   label?: string;
 }
 
-interface CanvasData {
+export interface CanvasData {
   nodes: CanvasNode[];
   edges: CanvasEdge[];
 }
@@ -125,7 +125,7 @@ function parseNode(node: CanvasNode, path: string): ParsedCanvasNode {
     }
 
     const lines: NodeTextLine[] = node.text.split('\n')
-        .filter(line => !shouldSkip(line))
+        .filter(line => shouldInclude(line))
         .map((line, index) => {
             const headerMatch = line.match(/^(#+)\s*(.*)/);
             const listItemMatch = line.match(/^\s*(-|\*|\d+\.)\s*(.*)/);
@@ -190,61 +190,62 @@ export class CanvasIndexer implements Indexer<TFile> {
             return graph;
         }
 
-        let canvas: CanvasFile;
+        let canvasData: CanvasData;
         try {
             // Read the file content
             const content = await this.app.vault.read(source);
             
             // Parse the JSON content
-            const canvasData = JSON.parse(content) as CanvasData;
-    
-            // map the canvas text nodes to dvlist
-            
-            canvas =  {data: canvasData, path: source.path};
+            canvasData = JSON.parse(content) as CanvasData;
         } catch (error) {
             console.error('Error parsing canvas file:', error);
             return graph;
         }
 
-        const parsed: ParsedCanvasFile = {
-            nodes: canvas.data.nodes.map(node => parseNode(node, source.path)),
-            edges: canvas.data.edges,
-            path: source.path,
-            basename: `${source.basename}.canvas` // obsidian chooses to have a different convention for canvas files
-        }
-
-        console.debug(parsed)
-
-        const withParents = addGroupParents(parsed)
-
-        const pageNode = this.createCanvasNode(withParents, graph)
-
-        for (const node of withParents.nodes) {
-            createNodes(node.lines, pageNode, graph)
-        }
-
-        return graph;
+        return parseCanvasData(source.path, source.basename, canvasData, graph)
     }
-    
-    private createCanvasNode(page: ParsedCanvasFile, graph: NotesGraph): PageNode {
-		const node: PageNode = {
-			nodeType: "page",
-			isReference: false,
-			page: page.basename,
-			aliases: [],
-			tags: [],
-			location: {
-				path: page.path,
-				position: {start: {line: 0, ch: 0}, end: {line: 0, ch: 0}}
-			},
-			searchKey: `${page.basename}`.toLowerCase(),
-		}
+}
 
-        graph.removeExistingPageEdges(node)
-		graph.addOrUpdateNode(node)
+export function parseCanvasData(path: string, basename: string, canvasData: CanvasData, graph: NotesGraph): NotesGraph {
+    // map the canvas text nodes to dvlist
+    const canvas: CanvasFile = {data: canvasData, path: path};
 
-		return node
-	}
+    const parsed: ParsedCanvasFile = {
+        nodes: canvas.data.nodes.map(node => parseNode(node, path)),
+        edges: canvas.data.edges,
+        path: path,
+        basename: `${basename}.canvas` // obsidian chooses to have a different convention for canvas files
+    }
+
+    const withParents = addGroupParents(parsed)
+
+    const pageNode = createCanvasNode(withParents, graph)
+
+    for (const node of withParents.nodes) {
+        createNodes(node.lines, pageNode, graph)
+    }
+
+    return graph;
+}
+
+function createCanvasNode(page: ParsedCanvasFile, graph: NotesGraph): PageNode {
+    const node: PageNode = {
+        nodeType: "page",
+        isReference: false,
+        page: page.basename,
+        aliases: [],
+        tags: [],
+        location: {
+            path: page.path,
+            position: {start: {line: 0, ch: 0}, end: {line: 0, ch: 0}}
+        },
+        searchKey: `${page.basename}`.toLowerCase(),
+    }
+
+    graph.removeExistingPageEdges(node)
+    graph.addOrUpdateNode(node)
+
+    return node
 }
 
 function addGroupParents(parsed: ParsedCanvasFile): ParsedCanvasFile {
@@ -300,11 +301,11 @@ function addParentsWithinNode(lines: NodeTextLine[], groupParent?: NodeTextLine)
 }
 
 // not interested in plain text or random paragraphs
-function shouldSkip(text: string) {
-
-	return !text.includes("[[")
-		&& !text.includes('![[')
-		&& !text.contains('#')
-		&& !text.includes('http')
+function shouldInclude(text: string) {
+	return text.includes("[[")
+		|| text.includes('http')
+		|| text.includes('![[')
+		|| text.includes('#')
+        || text.includes('- [')
 		;
 }

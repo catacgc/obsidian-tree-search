@@ -12,7 +12,6 @@ import { NodeTextLine } from './canvas';
  */
 export function parseTextLines(lines: NodeTextLine[], pageNode: PageNode, graph: NotesGraph): NotesGraph {
     
-    
     // Process each line
     for (const line of lines) {
         // Skip empty lines

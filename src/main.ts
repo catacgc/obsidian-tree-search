@@ -7,17 +7,12 @@ import { getAPI } from "obsidian-dataview";
 import { IndexedTree } from "./indexing/indexed-tree";
 import { FILE_CONTEXT, FileContextView } from "./view/file-context/file-context";
 import { ContextCodeBlock } from "./view/markdown-code-block/ContextCodeBlock";
-import { GraphEvents } from "./view/obsidian-views/GraphEvents";
 import { SearchModal } from "./view/search-modal/SearchModal";
-import fs from 'fs';
-
-import http, { IncomingMessage, ServerResponse } from 'http'
-import { searchIndex } from './search/search';
 import { highlightLine, insertLine, openFileByName } from './obsidian-utils';
 import { getDefaultStore } from 'jotai';
-import { flattenIndex, graphAtom, isGraphLoadingAtom } from './view/react-context/state';
+import { graphAtom, isGraphLoadingAtom } from './view/react-context/state';
 import { getSettings, updateSettings } from './view/react-context/settings';
-import { RaycastServer } from './view/raycast/raycast-server';
+// import { RaycastServer } from './view/raycast/raycast-server';
 import { MarkdownIndexer } from './indexing/markdown';
 import { CanvasIndexer } from './indexing/canvas';
 import './view/styles.css';
@@ -26,13 +21,12 @@ export default class TreeSearchPlugin extends Plugin {
     index: IndexedTree
     private changedRef: EventRef
     private finishedRef: EventRef;
-    private server: RaycastServer | null = null;
-    
+    // private server: RaycastServer | null = null;
 
     async onunload() {
         this.changedRef && this.app.metadataCache.offref(this.changedRef)
         this.finishedRef && this.app.metadataCache.offref(this.finishedRef)
-        this.server?.stop()
+        // this.server?.stop()
     }
 
     async onload() {
@@ -175,8 +169,12 @@ export default class TreeSearchPlugin extends Plugin {
             }
         })
 
-        this.server = new RaycastServer(this.app)
-        this.server.start()
+        if (!Platform.isDesktopApp || !Platform.isMacOS || Platform.isMobileApp || Platform.isMobile) {
+            return true
+        }
+        
+        // this.server = new RaycastServer(this.app)
+        // this.server.start()
 
         return true
     }
