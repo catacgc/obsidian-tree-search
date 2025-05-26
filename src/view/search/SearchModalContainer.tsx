@@ -6,6 +6,7 @@ import { SearchInstructionsAndNav } from "./SearchInstructionsAndNav";
 import { SearchViewFlatten } from "./SearchViewFlatten";
 import { settingsAtom } from "../react-context/settings";
 import { activeFileAtom } from "../file-context/FileContextComponent";
+import { Platform } from "obsidian";
 
 
 export const SearchModalContainer = ({ refresh = true, isQuickLink = false }: { refresh?: boolean, isQuickLink?: boolean }) => {
@@ -18,6 +19,7 @@ export const SearchModalContainer = ({ refresh = true, isQuickLink = false }: { 
     const setResult = useSetAtom(updateSearchResultsAtom)
     const searchQuery = useAtomValue(actualQueryAtom)
     const activeFile = useAtomValue(activeFileAtom, {store: getDefaultStore()})
+    const height = Platform.isMobile ? "100vh" : "calc(100vh * 0.75)"
 
     useEffect(() => {
         const search = (isQuickLink && searchQuery.length > 0) ? `${searchQuery} . :page | :header` : searchQuery
@@ -31,7 +33,7 @@ export const SearchModalContainer = ({ refresh = true, isQuickLink = false }: { 
         }
     }, [searchQuery, version, searchSeparator, isQuickLink, activeFile])
 
-    return <div style={{height: "calc(100vh * 0.75)"}}>
+    return <div style={{height: height}}>
             <div className="flex flex-col w-full h-full">
 
             <SearchViewFlatten isQuickLink={isQuickLink}/>

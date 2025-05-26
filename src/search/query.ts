@@ -77,7 +77,7 @@ function parseToken(token: string): QueryExpr {
     // Handle modifiers
     if (token.startsWith(':')) {
         const modifier = token as QueryModifier;
-        if ([':task', ':emoji', ':page', ':header', ':t', ':e', ':p', ':h'].includes(modifier)) {
+        if ([':t', ':e', ':p', ':h'].find(it => modifier.startsWith(it))) {
             return { type: 'modifier', value: modifier };
         }
     }
@@ -118,20 +118,19 @@ export function matchExpr(attrs: ParsedNode, expr: QueryExpr): boolean {
         case 'or':
             return expr.exprs.some(e => matchExpr(attrs, e));
         case 'modifier':
-            switch (expr.value) {
-                case ':task':
-                case ':t':
-                    return attrs.nodeType === 'text' && attrs.isTask;
-                case ':emoji':
-                case ':e':
-                    return containsEmoji(attrs.searchKey);
-                case ':page':
-                case ':p':
-                    return attrs.nodeType === 'page';
-                case ':header':
-                case ':h':
-                    return attrs.nodeType === 'header';
+            if (expr.value.startsWith(':t')) {
+                return attrs.nodeType === 'text' && attrs.isTask;
             }
+            if (expr.value.startsWith(':e')) {
+                return containsEmoji(attrs.searchKey);
+            }
+            if (expr.value.startsWith(':p')) {
+                return attrs.nodeType === 'page';
+            }
+            if (expr.value.startsWith(':h')) {
+                return attrs.nodeType === 'header';
+            }
+            return false;
     }
 }
 

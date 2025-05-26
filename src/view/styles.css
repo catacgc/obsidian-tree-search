@@ -10,7 +10,7 @@
 	--color-obs-base-60: var(--color-base-60);
 	--color-obs-base-40: var(--color-base-40);
 	--color-obs-base-20: var(--color-base-20);
-	--color-obs-base-0: var(--color-base-0);
+	--color-obs-base-0: var(--color-base-00);
 	--color-obs-accent: var(--color-accent);
 }
 
@@ -19,9 +19,9 @@
 	width: calc(100vw * 0.60);
 }
 
-/* @import "tailwindcss/preflight.css" layer(base) important; */
 .tw-reset {
 	@import "./preflight.css";
+	
 	button {
 		box-shadow: none;
 	}
@@ -40,7 +40,7 @@
 		border-radius: 0; /* 2 */
 		background-color: transparent; /* 3 */
 		opacity: 1; /* 4 */
-	}
+	} 
 }
 
 @import "./markdown-code-block/styles.css";

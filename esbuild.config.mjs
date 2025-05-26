@@ -2,6 +2,7 @@ import esbuild from "esbuild";
 import process from "process";
 import builtins from "builtin-modules";
 import tailwindPlugin from "esbuild-plugin-tailwindcss";
+import nested from "postcss-nested";
 import fs from "fs";
 import path from "path";
 
@@ -58,7 +59,12 @@ const esbuildOptions = {
 	entryNames: "[name]",
 	plugins: [
 		tailwindPlugin({ 
-			output: "dist/styles.css"
+			output: "dist/styles.css",
+			postcssPlugins: {
+				append: [
+					nested() // puts the preflight from tailwindcss only in .tw-reset (see styles.css)
+				]
+			}
 		}),
 		copyFilesPlugin,
 	],

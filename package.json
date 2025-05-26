@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-tree-search",
-	"version": "0.11.0",
+	"version": "0.12.0",
 	"description": "All in one graph search, quick switcher, bookmark manager and MOC manager",
 	"main": "main.js",
 	"scripts": {
@@ -23,7 +23,6 @@
 		"@types/react-dom": "^18.3.0",
 		"@typescript-eslint/eslint-plugin": "5.29.0",
 		"@typescript-eslint/parser": "5.29.0",
-		"@vitejs/plugin-react": "^4.4.1",
 		"autoprefixer": "^10.4.21",
 		"builtin-modules": "3.3.0",
 		"esbuild": "0.17.3",
@@ -34,33 +33,22 @@
 		"obsidian": "latest",
 		"obsidian-dataview": "^0.4.21",
 		"obsidian-typings": "^2.2.0",
+		"postcss": "^8.5.3",
+		"postcss-nested": "^7.0.2",
 		"postcss-prefix-selector": "^2.1.1",
 		"tailwindcss": "^4.1.7",
 		"ts-jest": "^29.1.2",
 		"tslib": "2.4.0",
-		"typescript": "^5.8.3",
-		"vite": "^5.2.0",
-		"vite-plugin-node-polyfills": "^0.23.0",
-		"vite-plugin-static-copy": "^3.0.0"
+		"typescript": "^5.8.3"
 	},
 	"dependencies": {
-		"@tailwindcss/postcss": "^4.1.7",
-		"@tailwindcss/vite": "^4.1.7",
 		"graphology": "^0.25.4",
-		"immer": "^10.1.1",
 		"jotai": "^2.11.0",
-		"jotai-devtools": "^0.10.1",
-		"jotai-immer": "^0.4.1",
 		"jotai-scope": "^0.7.3",
 		"js-yaml": "^4.1.0",
 		"lucide-react": "^0.468.0",
-		"luxon": "^3.5.0",
 		"markdown-it": "^14.1.0",
-		"postcss": "^8.5.3",
-		"promise-worker": "^2.0.1",
 		"react": "^18.3.1",
-		"react-dom": "^18.3.1",
-		"react-markdown": "^9.0.1",
-		"zustand": "^5.0.3"
+		"react-dom": "^18.3.1"
 	}
 }
