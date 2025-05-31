@@ -192,7 +192,9 @@ export function searchIndex(graph: DirectedGraphOfNotes, qs: string, separator: 
     }
 
     const sorted = filterDown(Array.from(roots.values()), expressions.slice(1))
-        .sort((a, b) => b.children.length - a.children.length);
+        .sort((a, b) => {
+            return b.children.length - a.children.length
+        });
 
     return sorted
 }

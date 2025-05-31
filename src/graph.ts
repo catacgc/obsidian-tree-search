@@ -1,11 +1,18 @@
 import Graph from "graphology";
 import {DvList, DvPage} from "./indexing/markdown";
 import {parseTokens} from "./indexing/parser";
-import { HeadingCache } from "obsidian";
+import { HeadingCache, TFolder } from "obsidian";
 
 export type BaseNode = {
 	searchKey: string,
 	location: Location,
+}
+
+export type FolderNode = BaseNode & {
+	nodeType: "folder",
+	path: string,
+	name: string,
+	folderNote?: string
 }
 
 export type PageNode = BaseNode & {
@@ -13,7 +20,7 @@ export type PageNode = BaseNode & {
 	isReference: boolean,
 	page: string,
 	aliases: string[],
-	tags: string[],
+	tags: string[]
 }
 
 export type TextNode = BaseNode & {
@@ -38,7 +45,7 @@ export type MonthNode = BaseNode & {
 	year: number,
 }
 
-export type ParsedNode = BaseNode & (PageNode | TextNode | HeaderNode | MonthNode)
+export type ParsedNode = BaseNode & (PageNode | TextNode | HeaderNode | MonthNode | FolderNode)
 
 export type TextToken = {
 	tokenType: "text",
@@ -82,6 +89,8 @@ function getKey(node: ParsedNode): string {
 			return node.searchKey
 		case "month":
 			return `${node.year}-${node.month}`
+		case "folder":
+			return node.path.toLowerCase()
 	}
 }
 
@@ -330,6 +339,39 @@ export class NotesGraph {
 		} else if (node.nodeType == "header") {
 			this.graph.replaceNodeAttributes(nodeKey, this.mergeHeaderNode(this.graph.getNodeAttributes(nodeKey) as HeaderNode, node))
 		}
+
+		// if we have a page named identically to the folder, then we have a folder node
+		if (node.nodeType == "folder" && !this.graph.hasNode(nodeKey)) {
+			this.findFolderNote(node)
+		}
+
+		if (node.nodeType == "page" && !this.graph.hasNode(nodeKey)) {
+			const folder = this.findFolderForNote(node)
+			console.log(folder)
+		}
+	}
+
+	private findFolderForNote(page: PageNode) {
+		const key = `${page.page}`.toLowerCase()
+		const folders =  this.graph.filterNodes((it, attrs) => attrs.nodeType == "folder" && attrs.name.toLowerCase() == key)
+		if (folders.length == 0) {
+			return null
+		} else if (folders.length > 1) {
+			console.warn(`multiple folders found for ${page.page}`)
+		}
+
+		return folders[0]
+	}
+
+
+	private findFolderNote(folder: FolderNode) {
+		const key = `[[${folder.name}]]`.toLowerCase()
+		const nodes =  this.graph.filterNodes(it => it.toLowerCase() == key)
+		if (nodes.length == 0) {
+			return null
+		}
+
+		console.log(nodes)
 	}
 
 	private addEdge(from: string, to: string, attrs: EdgeAttributes) {
@@ -341,6 +383,23 @@ export class NotesGraph {
 		if (!this.graph.hasEdge(sourceKey, targetKey)) {
 			this.graph.addDirectedEdge(sourceKey, targetKey, attrs)
 		}
+	}
+
+	createFolderNode(folder: TFolder): ParsedNode {
+
+		const location = {path: folder.path, position: {start: {line: 0, ch: 0}, end: {line: 0, ch: 0}}}
+
+		const page: FolderNode = {
+			nodeType: "folder",
+			path: folder.path,
+			name: folder.name,
+			location: location,
+			searchKey: `${folder.name}`.toLowerCase()
+		}
+
+		this.addOrUpdateNode(page)
+
+		return page;
 	}
 
 	private createNodeFromText(page: DvPage, item: DvList): TextNode | PageNode | HeaderNode {
@@ -451,7 +510,7 @@ export class NotesGraph {
 				path: page.file.path,
 				position: {start: {line: 0, ch: 0}, end: {line: 0, ch: 0}}
 			},
-			searchKey: `${page.file.name}|${aliases.join(" ")}`.toLowerCase(),
+			searchKey: `${page.file.name}|${aliases.join(" ")}|${page.file.path}`.toLowerCase(),
 		}
 
 		this.removeExistingPageEdges(node)

@@ -1,5 +1,5 @@
 // import {Notice} from "obsidian";
-import {NotesGraph, ParsedNode} from "../graph";
+import {NotesGraph, PageNode, ParsedNode} from "../graph";
 import {TreeSearchSettings} from "../view/react-context/settings";
 import {App, HeadingCache, TFile, TFolder} from "obsidian";
 import { Indexer } from "./indexed-tree";
@@ -61,13 +61,13 @@ function shouldSkip(lst: DvList, archiveTag: string) {
 		;
 }
 
-export async function indexSinglePage(page: DvPage, graph: NotesGraph, settings: TreeSearchSettings) {
+export async function indexSinglePage(page: DvPage, graph: NotesGraph, settings: TreeSearchSettings): Promise<PageNode | undefined> {
 
 	const isArchived = (page.file.frontmatter.tags || []).includes(settings.archiveTag)
 	
 	const pageNode = graph.addPageNode(page, settings.parentRelation, isArchived)
 
-	 if (isArchived) return
+	 if (isArchived) return undefined;
 
 	const lineArchiveTag = '#' + settings.archiveTag;
 
@@ -83,6 +83,8 @@ export async function indexSinglePage(page: DvPage, graph: NotesGraph, settings:
 			createSubtree(created, child.children)
 		}
 	}
+
+	return pageNode;
 }
 
 export class MarkdownIndexer implements Indexer<TFile> {
@@ -93,7 +95,13 @@ export class MarkdownIndexer implements Indexer<TFile> {
 		if (source.extension === "md") {
 			const page = this.parseDvPage(source)
 			if (!page) return graph;
-			await indexSinglePage(page, graph, settings)
+			const pageNode = await indexSinglePage(page, graph, settings)
+
+			if (source.parent instanceof TFolder && pageNode && source.parent.path != "/") {
+				const folderNode = graph.createFolderNode(source.parent)
+				graph.addOrUpdateNode(folderNode)
+				graph.addChild(folderNode, pageNode, pageNode.location, page.file.mtime.ts)
+			}
 		}
 
 		return graph;

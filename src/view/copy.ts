@@ -19,6 +19,10 @@ export function reverseMarkdownParsing(node: ParsedNode): string {
         return `[[${node.month}]]`
     }
 
+    if (node.nodeType == "folder") {
+      return `[[${node.path}]]`
+    }
+
     return reverseMarkdown(node.parsedTokens)
 }
 

@@ -1,4 +1,4 @@
-import {NotesGraph} from "../graph";
+import {NotesGraph, ParsedNode} from "../graph";
 import {DvAPIInterface} from "obsidian-dataview/lib/typings/api";
 import {App, TFile, TFolder} from "obsidian";
 import {DvPage, indexSinglePage, MarkdownIndexer} from "./markdown";
@@ -67,6 +67,7 @@ export class IndexedTree {
 				if (child instanceof TFile && !this.isIgnored(child)) {
 					yield child;
 				} else if (child instanceof TFolder) {
+					yield child;
 					folders.push(child);
 				}
 			}
@@ -120,8 +121,28 @@ export class IndexedTree {
 		})
 	}
 
+	private async indexFolder(folder: TFolder, graph: NotesGraph, settings: TreeSearchSettings) {
+		if (folder.isRoot()) {
+			return;
+		}
+
+		const node = graph.createFolderNode(folder)
+		graph.addOrUpdateNode(node)
+
+		if (folder.parent instanceof TFolder) {
+			const parent = await this.indexFolder(folder.parent, graph, settings)
+			if (parent) {
+				graph.addChild(parent, node, node.location, 0)
+			}
+		}
+
+		return node;
+
+	}
+
 	private async indexSinglePage(page: TFile|TFolder, graph: NotesGraph, settings: TreeSearchSettings) {
 		if (page instanceof TFolder) {
+			await this.indexFolder(page, graph, settings)
 			return;
 		}
 

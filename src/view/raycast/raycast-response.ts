@@ -104,7 +104,10 @@ function renderTitle(result: TreeNode, actions: RaycastAction[], vault: string):
         };
         case "month": {
             return result.node.monthLiteral;
-        }
+        };
+        case "folder": {
+            return `${result.node.path} 📂`;
+        };
     }
 }
 

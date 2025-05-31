@@ -10,11 +10,13 @@ type SearchPageProps = {
     showSearch?: boolean
     maxExpand?: number
     searchFn: (q: string) => ResultNode[]
+    children?: React.ReactNode
 }
 
 const SearchPage = (props: SearchPageProps) => {
     const childItemSearchStore = useMemo(() => createStore(), [])
     const [showSearch, setShowSearch] = useState(false)
+
     const updateSearchResults = useSetAtom(updateSearchResultsAtom, {store: childItemSearchStore})
     const actualQuery = useAtomValue(actualQueryAtom, {store: childItemSearchStore})
     const setDefaultExpand = useSetAtom(setDefaultExpandLevelAtom, {store: childItemSearchStore})
@@ -32,7 +34,10 @@ const SearchPage = (props: SearchPageProps) => {
     }, [version, activeFile, actualQuery])
 
     return <Provider store={childItemSearchStore}>
-        <h5 onClick={() => setShowSearch(!showSearch)}>{props.sectionName}</h5>
+        <div onClick={() => setShowSearch(!showSearch)}>
+            {props.children}
+            {props.sectionName && <h5>{props.sectionName}</h5>}
+        </div>
         <SearchViewFlatten showSearch={showSearch}></SearchViewFlatten>
     </Provider>
 }

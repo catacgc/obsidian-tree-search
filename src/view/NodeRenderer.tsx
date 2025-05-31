@@ -32,8 +32,9 @@ export const NodeRenderer = (
             return <TextNodeRenderer parsedTokens={props.node.parsedTokens}/>
         case "month":
             return <span>{props.node.monthLiteral} {props.node.year}</span>
+        case "folder":
+            return <span>{props.node.path} 📂</span>
     }
-    
 }
 
 export const TextNodeRenderer = (props: { parsedTokens: ParsedTextToken[] }) => {

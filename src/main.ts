@@ -12,7 +12,7 @@ import { highlightLine, insertLine, openFileByName } from './obsidian-utils';
 import { getDefaultStore } from 'jotai';
 import { graphAtom, isGraphLoadingAtom } from './view/react-context/state';
 import { getSettings, updateSettings } from './view/react-context/settings';
-// import { RaycastServer } from './view/raycast/raycast-server';
+import { RaycastServer } from './view/raycast/raycast-server';
 import { MarkdownIndexer } from './indexing/markdown';
 import { CanvasIndexer } from './indexing/canvas';
 import './view/styles.css';
@@ -21,12 +21,12 @@ export default class TreeSearchPlugin extends Plugin {
     index: IndexedTree
     private changedRef: EventRef
     private finishedRef: EventRef;
-    // private server: RaycastServer | null = null;
+    private server: RaycastServer | null = null;
 
     async onunload() {
         this.changedRef && this.app.metadataCache.offref(this.changedRef)
         this.finishedRef && this.app.metadataCache.offref(this.finishedRef)
-        // this.server?.stop()
+        this.server?.stop()
     }
 
     async onload() {
@@ -169,12 +169,8 @@ export default class TreeSearchPlugin extends Plugin {
             }
         })
 
-        if (!Platform.isDesktopApp || !Platform.isMacOS || Platform.isMobileApp || Platform.isMobile) {
-            return true
-        }
-        
-        // this.server = new RaycastServer(this.app)
-        // this.server.start()
+        this.server = new RaycastServer(this.app)
+        this.server.start()
 
         return true
     }
