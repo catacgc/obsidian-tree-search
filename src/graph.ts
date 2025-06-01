@@ -342,7 +342,8 @@ export class NotesGraph {
 
 		// if we have a page named identically to the folder, then we have a folder node
 		if (node.nodeType == "folder" && !this.graph.hasNode(nodeKey)) {
-			this.findFolderNote(node)
+			const folder = this.findFolderNote(node)
+			console.log(folder)
 		}
 
 		if (node.nodeType == "page" && !this.graph.hasNode(nodeKey)) {
@@ -510,7 +511,7 @@ export class NotesGraph {
 				path: page.file.path,
 				position: {start: {line: 0, ch: 0}, end: {line: 0, ch: 0}}
 			},
-			searchKey: `${page.file.name}|${aliases.join(" ")}|${page.file.path}`.toLowerCase(),
+			searchKey: `${page.file.name}|${aliases.join(" ")}`.toLowerCase(),
 		}
 
 		this.removeExistingPageEdges(node)

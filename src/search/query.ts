@@ -76,7 +76,7 @@ function splitByOr(tokens: string[]): string[][] {
 function parseToken(token: string): QueryExpr {
     // Handle modifiers
     if (token.startsWith(':')) {
-        const modifier = [':task', ':emoji', ':page', ':header', ':folder'].find(it => it.includes(token))
+        const modifier = [':task', ':emoji', ':page', ':header', ':folder'].find(it => it.startsWith(token))
         if (modifier) {
             return { type: 'modifier', value: modifier as QueryModifier };
         }
@@ -131,7 +131,7 @@ export function matchExpr(attrs: ParsedNode, expr: QueryExpr): boolean {
                 return attrs.nodeType === 'header';
             }
             if (expr.value.startsWith(':f')) {
-                return attrs.nodeType === 'page' && attrs.isFolder;
+                return attrs.nodeType === 'folder';
             }
             return false;
     }

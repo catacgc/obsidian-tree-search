@@ -81,6 +81,18 @@ export async function highlightLine(app: App, loc: Location) {
 	}
 }
 
+export async function openFolder(app: App, folderPath: string) {
+
+	const folder = app.vault.getFolderByPath(folderPath)
+    console.log(folder)
+
+
+	if (folder) {
+        app.showInFolder(folder.path)
+		// await leaf.openFile(folder, {active: false});
+	} 
+}
+
 export async function openFileByName(app: App, basenameAndAliases: string) {
     const basename = basenameAndAliases.split("|")[0]
 

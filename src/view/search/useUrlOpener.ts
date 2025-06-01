@@ -1,7 +1,6 @@
 import { useRef } from 'react';
 import { App } from 'obsidian';
-import {highlightLine, openFileByName} from '../../obsidian-utils';
-import {ResultNode} from "../../search/search";
+import {highlightLine, openFileByName, openFolder} from '../../obsidian-utils';
 import { ParsedNode } from 'src/graph';
 
 export const useUrlOpener = () => {
@@ -20,6 +19,11 @@ export const useUrlOpener = () => {
         if (attrs.nodeType == "month") {
             // NOT HANDLED YET
             return
+        }
+
+        if (attrs.nodeType == "folder") {
+            await openFolder(app, attrs.path);
+            return;
         }
 
         const children = attrs.parsedTokens;

@@ -236,8 +236,8 @@ export function flattenIndex(indexed: ResultNode[], defaultIndentLevel = 0): Tre
 
     function flatten(unsorted: ResultNode[], indent = 0, parentIndex = 0): number {
         const nodes = unsorted.sort((a, b) => {
-            let aboost = a.node.nodeType === "page" && a.node.isFolder ? 1000 : 0
-            let bboost = b.node.nodeType === "page" && b.node.isFolder ? 1000 : 0
+            let aboost = a.node.nodeType === "folder" ? 1000 : 0
+            let bboost = b.node.nodeType === "folder" ? 1000 : 0
             aboost += a.node.nodeType === "page" ? 900 : 0
             bboost += b.node.nodeType === "page" ? 900 : 0
             aboost += a.node.nodeType === "header" ? 800 : 0
