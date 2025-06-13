@@ -97,7 +97,7 @@ export class MarkdownIndexer implements Indexer<TFile> {
 			if (!page) return graph;
 			const pageNode = await indexSinglePage(page, graph, settings)
 
-			if (source.parent instanceof TFolder && pageNode && source.parent.path != "/") {
+			if (source.parent instanceof TFolder && pageNode /*&& source.parent.path != "/"*/) {
 				const folderNode = graph.createFolderNode(source.parent)
 				graph.addOrUpdateNode(folderNode)
 				graph.addChild(folderNode, pageNode, pageNode.location, page.file.mtime.ts)

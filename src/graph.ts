@@ -8,6 +8,12 @@ export type BaseNode = {
 	location: Location,
 }
 
+// this is used to model folders with / without folder nodes
+export type GroupNode = BaseNode & {
+	nodeType: "group"
+	children: ParsedNode[]
+}
+
 export type FolderNode = BaseNode & {
 	nodeType: "folder",
 	path: string,
@@ -43,6 +49,12 @@ export type MonthNode = BaseNode & {
 	month: number,
 	monthLiteral: string,
 	year: number,
+}
+
+export type AttachmentNode = BaseNode & {
+	nodeType: "attachment"
+	path: string
+	internal: boolean
 }
 
 export type ParsedNode = BaseNode & (PageNode | TextNode | HeaderNode | MonthNode | FolderNode)
@@ -395,7 +407,7 @@ export class NotesGraph {
 			path: folder.path,
 			name: folder.name,
 			location: location,
-			searchKey: `${folder.name}`.toLowerCase()
+			searchKey: `${folder.name || "(root)"}`.toLowerCase()
 		}
 
 		this.addOrUpdateNode(page)

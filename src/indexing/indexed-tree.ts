@@ -122,9 +122,9 @@ export class IndexedTree {
 	}
 
 	private async indexFolder(folder: TFolder, graph: NotesGraph, settings: TreeSearchSettings) {
-		if (folder.isRoot()) {
-			return;
-		}
+		// if (folder.isRoot()) {
+		// 	return;
+		// }
 
 		const node = graph.createFolderNode(folder)
 		graph.addOrUpdateNode(node)
