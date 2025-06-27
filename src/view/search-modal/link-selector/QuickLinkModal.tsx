@@ -1,17 +1,16 @@
-import {App, ItemView, Modal, Platform, WorkspaceLeaf} from "obsidian";
+import {Modal} from "obsidian";
 import {createRoot, Root} from "react-dom/client";
-import {IndexedTree} from "../../../indexing/indexed-tree";
 import {GraphContextProvider} from "../../react-context/GraphContextProvider";
 import {SearchModalContainer} from "../../search/SearchModalContainer";
-import { createStore, Provider } from "jotai";
 import React from "react";
-import { GraphEvents } from "../../obsidian-views/GraphEvents";
+import {getDefaultStore} from "jotai";
+import {GlobalAtoms} from "../../react-context/global";
 
 export class QuickLinkModal extends Modal {
     root: Root | null = null;
 
-    constructor(app: App, private index: IndexedTree) {
-        super(app);
+    constructor(private store: ReturnType<typeof getDefaultStore>) {
+        super(store.get(GlobalAtoms.appAtom));
 
         this.modalEl.addClass("tree-search-modal");
         this.contentEl.addClass("tree-search-modal-content");
@@ -20,10 +19,10 @@ export class QuickLinkModal extends Modal {
     async onOpen() {
         this.root = createRoot(this.contentEl);
         this.root.render(
-            <GraphContextProvider app={this.app}>
+            <GraphContextProvider store={this.store}>
                 <div className="tree-search-modal-container">
                     <div className="workspace-leaf-content">
-                        <SearchModalContainer refresh={false} isQuickLink={true} />
+                        <SearchModalContainer isQuickLink={true} />
                     </div>
                 </div>
             </GraphContextProvider>
@@ -35,11 +34,13 @@ export class QuickLinkModal extends Modal {
             inputEl?.select();
         }, 0);
 
-        window.addEventListener(GraphEvents.RESULT_SELECTED, () => this.close());
+        this.store.set(GlobalAtoms.currentModalAtom, this)
+
     }
 
     async onClose() {
         this.root?.unmount();
-        window.removeEventListener(GraphEvents.RESULT_SELECTED, () => this.close());
+
+        this.store.set(GlobalAtoms.currentModalAtom, null)
     }
 }

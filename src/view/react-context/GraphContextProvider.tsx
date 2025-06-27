@@ -1,20 +1,24 @@
 /**
  * Utility component to render any plugin view
  */
-import {AppContext} from "./AppContext";
 import {StrictMode} from "react";
-import {App} from "obsidian";
+import {ScopeProvider} from "bunshi/react";
+import {GlobalAppScope} from "./state";
+import {GlobalAtoms, GlobalStore} from "./global";
+import {Provider} from "jotai";
 
 export type GraphContextProps = {
-    app: App
+    store: GlobalStore
     children: React.ReactNode
 }
 
-export const GraphContextProvider = ({app, children}: GraphContextProps) => {
+export const GraphContextProvider = ({store, children}: GraphContextProps) => {
 
     return <StrictMode>
-        <AppContext.Provider value={app}>
-            {children}
-        </AppContext.Provider>
+        <Provider store={store}>
+            <ScopeProvider scope={GlobalAppScope} value={{obsidianApp: store.get(GlobalAtoms.appAtom)}} uniqueValue={true}>
+                {children}
+            </ScopeProvider>
+        </Provider>
     </StrictMode>
 }

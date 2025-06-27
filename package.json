@@ -25,6 +25,7 @@
 		"@typescript-eslint/parser": "5.29.0",
 		"autoprefixer": "^10.4.21",
 		"builtin-modules": "3.3.0",
+		"bunshi": "^2.1.5",
 		"esbuild": "0.17.3",
 		"esbuild-plugin-tailwindcss": "^2.0.1",
 		"jest": "^29.7.0",
@@ -44,7 +45,7 @@
 	"dependencies": {
 		"graphology": "^0.25.4",
 		"jotai": "^2.11.0",
-		"jotai-scope": "^0.7.3",
+		"jotai-effect": "^2.0.4",
 		"js-yaml": "^4.1.0",
 		"lucide-react": "^0.468.0",
 		"markdown-it": "^14.1.0",

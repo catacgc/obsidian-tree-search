@@ -2,13 +2,13 @@ import {DvList, indexSinglePage} from "../src/indexing/markdown";
 import {ResultNode, searchIndex} from "../src/search/search";
 import {expect} from "@jest/globals";
 import {NotesGraph, ParsedNode} from "../src/graph";
-import { getSettings } from "../src/view/react-context/settings";
-import Graph from "graphology";
+import {getSettings} from "../src/view/react-context/settings";
+import {getDefaultStore} from "jotai";
 
 export function buildIndexFromFixture(page: string, lines: string, aliases: string[] = []) {
 	const graph = new NotesGraph()
 	const pageFixture = createFixture(page, lines, aliases);
-	indexSinglePage(pageFixture, graph, getSettings());
+	indexSinglePage(pageFixture, graph, getSettings(getDefaultStore()));
 	return graph;
 }
 
@@ -94,7 +94,7 @@ export async function edit(graph: NotesGraph, ...fixtures: string[]): Promise<No
 		const trimmed = trimIndent(lines.slice(1));
 
 		const pageFixture = createFixture(pagename, trimmed.join("\n"), frontMatter);
-		await indexSinglePage(pageFixture, graph, getSettings());
+		await indexSinglePage(pageFixture, graph, getSettings(getDefaultStore()));
 	}
 
 	return graph

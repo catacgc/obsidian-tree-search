@@ -1,48 +1,51 @@
-import { getDefaultStore, useAtomValue, useSetAtom } from "jotai";
-import { useEffect } from "react";
-import { advancedSearch, searchIndex } from "../../search/search";
-import { actualQueryAtom, graphAtom, graphVersionAtom, isGraphLoadingAtom, updateSearchResultsAtom } from "../react-context/state";
-import { SearchInstructionsAndNav } from "./SearchInstructionsAndNav";
-import { SearchViewFlatten } from "./SearchViewFlatten";
-import { settingsAtom } from "../react-context/settings";
-import { activeFileAtom } from "../file-context/FileContextComponent";
-import { Platform } from "obsidian";
+import {useAtom, useAtomValue, useSetAtom} from "jotai";
+import {useEffect} from "react";
+import {advancedSearch, searchIndex} from "../../search/search";
+import {SearchModalMolecule, SearchViewMolecule, SearchViewScope,} from "../react-context/state";
+import {SearchViewFlatten} from "./SearchViewFlatten";
+import {settingsAtom} from "../react-context/settings";
+import {Platform} from "obsidian";
+import {ScopeProvider, useMolecule} from "bunshi/react";
+import {GlobalAtoms} from "../react-context/global";
+import {KeyComboWrapper} from "./KeyComboWrapper";
 
+export const SearchModalContainer = ({ isQuickLink = false }: { isQuickLink?: boolean }) => {
 
-export const SearchModalContainer = ({ refresh = true, isQuickLink = false }: { refresh?: boolean, isQuickLink?: boolean }) => {
+    return <ScopeProvider scope={SearchViewScope} value={{name: "modal", isQuickLink, showSearch: true, isModal: true}}>
+        <KeyComboWrapper>
+            <_SearchModalContainer isQuickLink={isQuickLink}/>
+        </KeyComboWrapper>
+    </ScopeProvider>
+}
 
-    const graph = useAtomValue(graphAtom, {store: getDefaultStore()})
-    const version = useAtomValue(graphVersionAtom, {store: getDefaultStore()})
+export const _SearchModalContainer = ({ isQuickLink = false }: { isQuickLink?: boolean }) => {
 
-    const { searchSeparator } = useAtomValue(settingsAtom);
+    // const graph = useAtomValue(GlobalAtoms.graphAtom)
+    // const version = useAtomValue(GlobalAtoms.graphVersionAtom)
 
-    const setResult = useSetAtom(updateSearchResultsAtom)
-    const searchQuery = useAtomValue(actualQueryAtom)
-    const activeFile = useAtomValue(activeFileAtom, {store: getDefaultStore()})
-    const height = Platform.isMobile ? "100vh" : "calc(100vh * 0.75)"
+    const { searchResultsComputeAtom } = useMolecule(SearchModalMolecule)
 
-    useEffect(() => {
-        const search = (isQuickLink && searchQuery.length > 0) ? `${searchQuery} . :page | :header` : searchQuery
+    // const {actualQueryAtom, updateSearchResultsAtom} = useMolecule(SearchViewMolecule)
 
-        if (search.length === 0 && activeFile) {
-            const results = advancedSearch(graph.graph, `[[${activeFile.basename}]]`, searchQuery, searchSeparator)
-            setResult(results)
-        } else {
-            const results = searchIndex(graph.graph, search, searchSeparator)
-            setResult(results)
-        }
-    }, [searchQuery, version, searchSeparator, isQuickLink, activeFile])
+    // const { searchSeparator } = useAtomValue(settingsAtom);
+    //
+    // const setResult = useSetAtom(updateSearchResultsAtom)
+    // const searchQuery = useAtomValue(actualQueryAtom)
+
+    const height = (Platform.isMobile || Platform.isTablet) ? "100vh" : "calc(100vh * 0.75)"
+
+    // useEffect(() => {
+    //     const search = (isQuickLink && searchQuery.length > 0) ? `${searchQuery} . :page | :header` : searchQuery
+    //
+    //     const results = searchIndex(graph.graph, search, searchSeparator)
+    //     setResult(results)
+    // }, [searchQuery, version, searchSeparator, isQuickLink])
+
+    useAtom(searchResultsComputeAtom)
 
     return <div style={{height: height}}>
             <div className="flex flex-col w-full h-full">
-
-            <SearchViewFlatten isQuickLink={isQuickLink}/>
-
-            {!isQuickLink && (
-                <div className="sticky bottom-0 z-10">
-                    <SearchInstructionsAndNav />
-                </div>
-            )}
+                <SearchViewFlatten/>
             </div>
         </div>;
 };

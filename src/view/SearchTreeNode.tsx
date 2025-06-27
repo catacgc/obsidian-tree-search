@@ -1,23 +1,26 @@
-import {useEffect, useRef, useState} from "react";
+import {useEffect, useRef} from "react";
 import {ParsedNode} from "../graph";
-import {highlightLine} from "../obsidian-utils";
 import {NodeRenderer} from "./NodeRenderer";
-import {GraphEvents} from "./obsidian-views/GraphEvents";
-import {useApp} from "./react-context/AppContext";
 import {TreeNode} from "./search/SearchViewFlatten";
-import { selectedLineAtom, expandVisibleNodesAtom, selectHoveredLineAtom, expandNodeAtom } from "./react-context/state";
-import { useAtomValue, useSetAtom } from "jotai";
+import {useAtomValue, useSetAtom} from "jotai";
+import {useMolecule} from "bunshi/react";
+import {SearchViewMolecule} from "./react-context/state";
+import {ActionsMolecule} from "./react-context/actions";
 
 type SearchTreeNodePropsFlatten = {
     node: TreeNode;
 };
 
 export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
+
+    const {expandNodeAtom, selectedLineAtom, updateHoveredLineAtom} = useMolecule(SearchViewMolecule)
+    const {selectHoveredLineAtom} = useMolecule(ActionsMolecule)
+
     const nodeRef = useRef<HTMLDivElement>(null);
-    const app = useApp();
     const selectedLine = useAtomValue(selectedLineAtom);
 
     const expandNode = useSetAtom(expandNodeAtom);
+    const updateHovered = useSetAtom(updateHoveredLineAtom);
     const selectHovered = useSetAtom(selectHoveredLineAtom);
 
     const expandableClass = props.node.hasChildren ? "is-collapsed " : ""
@@ -36,14 +39,14 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
         }
     }, [selectedLine, props.node.index]);
 
-    async function openFile(attrs: ParsedNode) {
-        await highlightLine(app, attrs.location);
-        const customEvent = new CustomEvent(GraphEvents.RESULT_SELECTED, {detail: {type: "mouse"}});
-        window.dispatchEvent(customEvent);
-    }
+    // async function openFile(attrs: ParsedNode) {
+    //     await highlightLine(app, attrs.location);
+    //     const customEvent = new CustomEvent(GraphEvents.RESULT_SELECTED, {detail: {type: "mouse"}});
+    //     window.dispatchEvent(customEvent);
+    // }
 
     function handleMouseMove(ev: any) {
-        selectHovered(props.node.index);
+        updateHovered(props.node.index);
 
         ev.preventDefault();
     }
@@ -52,15 +55,14 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
         if (ev.isDefaultPrevented()) {
             return;
         }
-        await openFile(props.node.node);
+
+        await selectHovered();
     }
 
     function handleUserExpandClicked(ev: any) {
         expandNode(props.node.index);
         ev.preventDefault();
     }
-
-    // return <TreeNodeExperiment/>
 
     return (
         <div className="tree-node"
@@ -80,9 +82,16 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
                         node={props.node.node}
                     />
                 </div>
-                <div className="ts-list-content">
+                <div className="ts-list-content flex flex-row justify-between"
+                     area-label={props.node.node.location.path} title={props.node.node.location.path}>
+                    <div>
                     <NodeRenderer node={props.node.node}/>
-                    {/* {props.node.node.aliases.length > 0 && `(${props.node.node.aliases.join(", ")})`} */}
+                    </div>
+
+                    {/*<div className="flex justify-end text-xs">*/}
+                    {/*    {props.node.node.location.path}*/}
+                    {/*    /!* {props.node.node.aliases.length > 0 && `(${props.node.node.aliases.join(", ")})`} *!/*/}
+                    {/*</div>*/}
                 </div>
             </div>
         </div>

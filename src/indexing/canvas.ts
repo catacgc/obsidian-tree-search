@@ -240,6 +240,8 @@ function createCanvasNode(page: ParsedCanvasFile, graph: NotesGraph): PageNode {
             position: {start: {line: 0, ch: 0}, end: {line: 0, ch: 0}}
         },
         searchKey: `${page.basename}`.toLowerCase(),
+        boost: 0, // Default boost for canvas nodes
+        ageDays: 0 // Default age for canvas nodes
     }
 
     graph.removeExistingPageEdges(node)

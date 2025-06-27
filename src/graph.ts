@@ -1,24 +1,123 @@
-import Graph from "graphology";
-import {DvList, DvPage} from "./indexing/markdown";
+import Graph, {MultiDirectedGraph} from "graphology";
+import {DvList, DvPage, isOnlyText} from "./indexing/markdown";
 import {parseTokens} from "./indexing/parser";
-import { HeadingCache, TFolder } from "obsidian";
+import {HeadingCache, TFile, TFolder} from "obsidian";
+import {containsEmoji} from "./search/query";
 
+
+
+
+function extractDateFromString(string: string): Date | null {
+    const dateRegex = /(\d{4}-\d{2}-\d{2})/;
+    const match = string.match(dateRegex);
+    if (match) {
+        const dateStr = match[1];
+        const date = new Date(dateStr);
+        // Validate the date is valid
+        if (!isNaN(date.getTime())) {
+            return date;
+        }
+    }
+    return null;
+}
+
+/**
+ * Calculate age in days from a timestamp or date
+ * @param timestamp Timestamp in milliseconds or Date object
+ * @returns Number of days since the date
+ */
+function calculateAgeDays(timestamp: number | Date): number {
+    const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
+    const now = new Date();
+    const diffTime = now.getTime() - date.getTime();
+    return Math.floor(diffTime / (1000 * 60 * 60 * 24));
+}
+
+/**
+ * Calculate age in days from modification time and filename
+ * @param modifiedTime Optional modification time (timestamp or Date)
+ * @param filename Optional filename for date extraction
+ * @returns Number of days since the date
+ */
+function getAgeDays(modifiedTime?: number | Date, filename?: string): number {
+    let dateToUse: Date | null = null;
+
+    // First try to extract date from filename if provided
+    if (filename) {
+        dateToUse = extractDateFromString(filename);
+    }
+
+    // If no date from filename and we have modifiedTime, use that
+    if (!dateToUse && modifiedTime !== undefined) {
+        dateToUse = modifiedTime instanceof Date ? modifiedTime : new Date(modifiedTime);
+    }
+
+    if (dateToUse) {
+        return calculateAgeDays(dateToUse);
+    }
+
+    return 0; // Default to 0 if no date available
+}
+
+/**
+ * Calculate boost value for a node based on its type and content
+ * @param nodeType Type of the node
+ * @param searchKey Search key to check for emojis
+ * @param ageDays Age in days (0 or positive number)
+ * @returns Calculated boost value
+ */
+function calculateBoost(
+    nodeType: "page" | "header" | "folder" | "attachment" | "folderNote" | "text" | "month" | "pointer",
+    searchKey: string,
+    ageDays: number = 0
+): number {
+    const BOOST : Record<ParsedNode['nodeType'], number> = {
+        page: 6,
+        folder: 5,
+        folderNote: 5,
+        header: 4,
+        attachment: 3,
+        month: 2,
+        pointer: 1,
+        text: 1
+    }
+
+    const ageBoost = 1000 - ageDays; // fresh is better
+    const typeBoost = (10 + BOOST[nodeType]) * 10000
+    const emojiBoost = containsEmoji(searchKey) ? 1000 : 0;
+
+    return ageBoost + typeBoost + emojiBoost;
+}
 export type BaseNode = {
 	searchKey: string,
 	location: Location,
-}
-
-// this is used to model folders with / without folder nodes
-export type GroupNode = BaseNode & {
-	nodeType: "group"
-	children: ParsedNode[]
+    boost?: number,
+    ageDays: number
 }
 
 export type FolderNode = BaseNode & {
 	nodeType: "folder",
 	path: string,
 	name: string,
-	folderNote?: string
+	folderNote: string
+}
+
+export type PointerNode = BaseNode & {
+	nodeType: "pointer",
+	target: string // graph node key
+}
+
+export type FolderNote = BaseNode & {
+    nodeType: "folderNote",
+    folder: FolderNode
+    page: PageNode
+}
+
+export type AttachmentNode = BaseNode & {
+    nodeType: 'attachment',
+    name: string
+    extension: string
+    aliases: string[]
 }
 
 export type PageNode = BaseNode & {
@@ -51,13 +150,7 @@ export type MonthNode = BaseNode & {
 	year: number,
 }
 
-export type AttachmentNode = BaseNode & {
-	nodeType: "attachment"
-	path: string
-	internal: boolean
-}
-
-export type ParsedNode = BaseNode & (PageNode | TextNode | HeaderNode | MonthNode | FolderNode)
+export type ParsedNode = BaseNode & (PageNode | TextNode | HeaderNode | MonthNode | FolderNode | AttachmentNode | FolderNote | PointerNode)
 
 export type TextToken = {
 	tokenType: "text",
@@ -95,6 +188,10 @@ function getKey(node: ParsedNode): string {
 	switch(node.nodeType) {
 		case "page":
 			return `[[${node.page.toLowerCase().replace(/\.canvas$/, '')}]]`
+        case "folderNote":
+			return `folderNote:${node.folder.name.toLowerCase()}`
+        case "pointer":
+			return `pointer:${node.target}`
 		case "header":
 			return (node.page + "#" + node.header).toLowerCase()
 		case "text":
@@ -103,9 +200,10 @@ function getKey(node: ParsedNode): string {
 			return `${node.year}-${node.month}`
 		case "folder":
 			return node.path.toLowerCase()
+        case "attachment":
+            return node.name.toLowerCase()
 	}
 }
-
 
 export const EMPTY_NODE: ParsedNode = {
 		nodeType: "text",
@@ -117,7 +215,9 @@ export const EMPTY_NODE: ParsedNode = {
 		},
 		isTask: false,
 		isCompleted: false,
-		searchKey: ""
+		searchKey: "",
+		boost: calculateBoost("text", "", 0),
+		ageDays: 0
 	}
 
 export type EdgeAttributes = {
@@ -141,11 +241,86 @@ export type Location = {
 	canvasNode?: string
 }
 
+class PointersGraph extends MultiDirectedGraph<{}, {key: string}, {name: string}> {
+    constructor() {
+        super()
+    }
+
+    private getDuplicateKey(parsedNode: ParsedNode) {
+        switch (parsedNode.nodeType) {
+            case "page":
+                return parsedNode.page
+            case "header":
+                return parsedNode.page + "#" + parsedNode.header
+            case "text":
+                return null
+            case "month":
+                return parsedNode.monthLiteral
+            case "folder":
+                return parsedNode.name
+            case "attachment":
+                return parsedNode.name
+            case "folderNote":
+                return parsedNode.folder.name
+            case "pointer":
+                return parsedNode.target
+        }
+    }
+
+    addParsedNode(node: ParsedNode) {
+        const duplicateKey = this.getDuplicateKey(node)
+        const targetKey = getKey(node)
+
+        this.addNode(duplicateKey)
+        this.addNode(targetKey)
+        this.addEdge(duplicateKey, targetKey, {key: targetKey})
+    }
+
+    with<A extends ParsedNode, B extends ParsedNode>(parsedNode: ParsedNode, predicate: (a: A, b: B) => void ) {
+        
+    }
+
+    upgradeVirtualPageToPage(node: ParsedNode, graph: NotesGraph) {
+        const duplicateKey = this.getDuplicateKey(node)
+        const targetKey = getKey(node)
+
+        if (duplicateKey == targetKey) {
+            return
+        }
+
+        if (this.hasNode(duplicateKey)) {
+            const edges = this.outEdges(duplicateKey)
+            for (const edge of edges) {
+                this.dropEdge(edge)
+            }
+        }
+    }
+
+    upgradeFolderToFolderNote(node: ParsedNode, graph: NotesGraph) {
+        const duplicateKey = this.getDuplicateKey(node)
+        const targetKey = getKey(node)
+
+        if (duplicateKey == targetKey) {
+            return
+        }
+
+        if (this.hasNode(duplicateKey)) {
+            const edges = this.outEdges(duplicateKey)
+            for (const edge of edges) {
+                this.dropEdge(edge)
+            }
+        }
+    }
+
+}
+
 export class NotesGraph {
 	graph: Graph<ParsedNode, EdgeAttributes, GraphAttributes>;
+    pointers: PointersGraph;
 
 	constructor() {
 		this.graph = new Graph<ParsedNode, EdgeAttributes, GraphAttributes>()
+        this.pointers = new PointersGraph()
 	}
 
 	addPageNode(page: DvPage, parentRelation: string, isArchived: boolean = false): PageNode {
@@ -159,7 +334,7 @@ export class NotesGraph {
 		}
 
 		for (const parent of parents) {
-			this.createParentFromRelation(parent, pageNode);
+			this.createParentFromRelation(parent, pageNode, page.file.mtime.ts);
 		}
 
         !isArchived && this.createHeadersNodes(pageNode, page)
@@ -168,15 +343,15 @@ export class NotesGraph {
 	}
 
 	// handles references like [[parent]] , [[parent#header]] , [[parent|alias]]
-	private createParentFromRelation(parent: string, page: ParsedNode) {
+	private createParentFromRelation(parent: string, page: ParsedNode, mtime: number) {
 		const refs = this.getRefsFromString(parent)
 		// cannot add inexisting refs as parents
 		if (refs.length == 0) {
 			return
 		}
 
-		const ref = this.createVirtualPage(refs[0], page.location)
-		this.addChild(ref, page, page.location, 0)
+		const ref = this.createVirtualPage(refs[0], page.location, getAgeDays(mtime))
+		this.addChild(ref, page, page.location, mtime)
 	}
 
 	addChild(parent: ParsedNode, child: ParsedNode, location: BaseNode['location'], mtime: number) {
@@ -187,14 +362,18 @@ export class NotesGraph {
 		})
 	}
 
-	createHeaderNode(page: string, heading: string, location: BaseNode['location'], indent: number = -1): HeaderNode {
-		const node: HeaderNode = {	
+	createHeaderNode(page: string, heading: string, location: BaseNode['location'], indent: number = -1, modifiedTime?: number, filename?: string): HeaderNode {
+		const searchKey = `${page}#${heading}`.toLowerCase();
+		const ageDays = getAgeDays(modifiedTime, filename + heading);
+		const node: HeaderNode = {
 			page: page,
 			header: heading,
 			indent: indent,
 			nodeType: "header",
 			location: location,
-			searchKey: `${page}#${heading}`.toLowerCase()
+			searchKey: searchKey,
+			boost: calculateBoost("header", searchKey, ageDays),
+			ageDays: ageDays
 		}
 
 		this.addOrUpdateNode(node)
@@ -274,7 +453,7 @@ export class NotesGraph {
                 position: position
             };
 
-			return this.createHeaderNode(page.file.name, header.heading, location, header.level)
+			return this.createHeaderNode(page.file.name, header.heading, location, header.level, page.file.mtime.ts, page.file.name)
 		}
 
         for (let i = 0; i < page.headers.length; i++) {
@@ -290,8 +469,8 @@ export class NotesGraph {
         }
     }
 
-	createRefsNodes(obsidianLinkReference: ObsidianLinkToken[], textNode: TextNode): ParsedNode[] {
-		return obsidianLinkReference.map(ref => this.createVirtualPage(ref, textNode.location))
+	createRefsNodes(obsidianLinkReference: ObsidianLinkToken[], textNode: TextNode, ageDays: number): ParsedNode[] {
+		return obsidianLinkReference.map(ref => this.createVirtualPage(ref, textNode.location, ageDays))
 	}
 
 	private getClosestHeader(headers: HeadingCache[], line: number): HeadingCache | null {
@@ -319,7 +498,7 @@ export class NotesGraph {
 
 		// if this item does not have a parent and it is in a subsection, then add it as child of the header node
 		if (!item.parent && closestParentHeader) {
-			const header = this.createHeaderNode(page.file.name, closestParentHeader.heading, createdNode.location, -1)
+			const header = this.createHeaderNode(page.file.name, closestParentHeader.heading, createdNode.location, -1, page.file.mtime.ts, page.file.name)
 			this.addChild(header, createdNode, createdNode.location, 0)
 			// this.addChild(parentNode, header, createdNode.location, 0)
 		} else {
@@ -333,12 +512,16 @@ export class NotesGraph {
 		node1.aliases = [...new Set([...node1.aliases, ...node2.aliases])]
 		node1.isReference = node1.isReference && node2.isReference
 		node1.searchKey = (node1.page + "|" + node1.aliases.join(" ")).toLowerCase()
-		
+		// Keep the higher boost value when merging
+		node1.boost = Math.max(node1.boost || 0, node2.boost || 0)
+
 		return node1
 	}
 
 	private mergeHeaderNode(node1: HeaderNode, node2: HeaderNode): HeaderNode {
 		node1.indent = node1.indent > node2.indent ? node1.indent : node2.indent
+		// Keep the higher boost value when merging
+		node1.boost = Math.max(node1.boost || 0, node2.boost || 0)
 		return node1
 	}
 	
@@ -373,26 +556,125 @@ export class NotesGraph {
 			console.warn(`multiple folders found for ${page.page}`)
 		}
 
-		return folders[0]
+		return this.graph.getNodeAttributes(folders[0]) as FolderNode
 	}
 
+	private findFolderNote(folder: FolderNode): PageNode | null {
+		const folderName = folder.name.toLowerCase()
 
-	private findFolderNote(folder: FolderNode) {
-		const key = `[[${folder.name}]]`.toLowerCase()
-		const nodes =  this.graph.filterNodes(it => it.toLowerCase() == key)
-		if (nodes.length == 0) {
-			return null
+		// Look for exact page name match first
+		const exactMatches = this.graph.filterNodes((nodeKey, attrs) =>
+			attrs.nodeType === "page" && attrs.page.toLowerCase() === folderName
+		)
+
+		if (exactMatches.length > 0) {
+			return this.graph.getNodeAttributes(exactMatches[0]) as PageNode
 		}
 
-		console.log(nodes)
+		// If no exact match, look for pages that have the folder name in their aliases
+		const aliasMatches = this.graph.filterNodes((nodeKey, attrs) => {
+			if (attrs.nodeType !== "page") return false
+			const aliases = (attrs as PageNode).aliases || []
+			return aliases.some(alias => alias.toLowerCase() === folderName)
+		})
+
+		if (aliasMatches.length > 0) {
+			return this.graph.getNodeAttributes(aliasMatches[0]) as PageNode
+		}
+
+		return null
+	}
+
+	// private createFolderNoteNode(folder: FolderNode, page: PageNode): FolderNote {
+	// 	// Use folder name as the primary identifier for the FolderNote
+	// 	const searchKey = folder.name.toLowerCase(); // Use folder name as primary search key
+	// 	const folderNote: FolderNote = {
+	// 		nodeType: "folderNote",
+	// 		folder: folder,
+	// 		page: page,
+	// 		location: page.location,
+	// 		searchKey: searchKey,
+	// 		boost: calculateBoost("folderNote", searchKey),
+    //         ageDays: 0
+	// 	}
+    //
+	// 	const folderNoteKey = getKey(folderNote)
+    //
+	// 	// Check if FolderNote already exists
+	// 	if (this.graph.hasNode(folderNoteKey)) {
+	// 		return this.graph.getNodeAttributes(folderNoteKey) as FolderNote
+	// 	}
+    //
+	// 	// Check if there's already a FolderNote for this folder (with different page)
+	// 	const existingFolderNotes = this.graph.filterNodes((nodeKey, attrs) =>
+	// 		attrs.nodeType === "folderNote" &&
+	// 		(attrs as FolderNote).folder.name.toLowerCase() === folder.name.toLowerCase()
+	// 	)
+    //
+	// 	if (existingFolderNotes.length > 0) {
+	// 		// Return the existing FolderNote instead of creating a new one
+	// 		console.warn(`FolderNote already exists for folder ${folder.name}`)
+	// 		return this.graph.getNodeAttributes(existingFolderNotes[0]) as FolderNote
+	// 	}
+    //
+	// 	// Add the node directly to avoid recursion in addOrUpdateNode
+	// 	this.graph.addNode(folderNoteKey, folderNote)
+	// 	return folderNote
+	// }
+
+	/**
+	 * Create a pointer node that redirects to a target node
+	 */
+	// private createPointerNode(sourceNode: ParsedNode, targetNode: ParsedNode, customTargetKey?: string): PointerNode {
+	// 	const targetKey = customTargetKey || getKey(targetNode)
+	// 	const searchKey = sourceNode.searchKey;
+	// 	const pointer: PointerNode = {
+	// 		nodeType: "pointer",
+	// 		target: targetKey,
+	// 		location: sourceNode.location,
+	// 		searchKey: searchKey,
+    //         ageDays: 0,
+	// 		boost: calculateBoost("pointer", searchKey) // Inherit boost from source node plus emoji boost if applicable,\
+	// 	}
+    //
+	// 	// Replace the source node with a pointer
+	// 	const sourceKey = getKey(sourceNode)
+	// 	if (this.graph.hasNode(sourceKey)) {
+	// 		this.graph.replaceNodeAttributes(sourceKey, pointer)
+	// 	}
+    //
+	// 	return pointer
+	// }
+
+	/**
+	 * Resolve a node to its final target if it's a pointer
+	 */
+	private resolvePointer(node: ParsedNode): ParsedNode {
+		if (node.nodeType === "pointer") {
+			const targetKey = node.target
+			if (this.graph.hasNode(targetKey)) {
+				const targetNode = this.graph.getNodeAttributes(targetKey)
+				// Recursively resolve in case of chained pointers
+				return this.resolvePointer(targetNode)
+			}
+		}
+		return node
 	}
 
 	private addEdge(from: string, to: string, attrs: EdgeAttributes) {
 		const sourceKey = from.toLowerCase();
 		const targetKey = to.toLowerCase();
+
 		if (sourceKey == targetKey) {
 			return
 		}
+
+		// Ensure both nodes exist before adding edge
+		if (!this.graph.hasNode(sourceKey) || !this.graph.hasNode(targetKey)) {
+			console.warn(`Cannot add edge: missing node(s) ${sourceKey} -> ${targetKey}`)
+			return
+		}
+
 		if (!this.graph.hasEdge(sourceKey, targetKey)) {
 			this.graph.addDirectedEdge(sourceKey, targetKey, attrs)
 		}
@@ -402,17 +684,22 @@ export class NotesGraph {
 
 		const location = {path: folder.path, position: {start: {line: 0, ch: 0}, end: {line: 0, ch: 0}}}
 
-		const page: FolderNode = {
+		const searchKey = `${folder.name || "(root)"}`.toLowerCase();
+		const ageDays = getAgeDays(new Date(), folder.name); // Folders use current date
+		const folderNode: FolderNode = {
 			nodeType: "folder",
 			path: folder.path,
+            folderNote: `${folder.path}/${folder.name || "root"}.md`,
 			name: folder.name,
 			location: location,
-			searchKey: `${folder.name || "(root)"}`.toLowerCase()
+			searchKey: searchKey,
+			boost: calculateBoost("folder", searchKey, ageDays),
+			ageDays: ageDays
 		}
 
-		this.addOrUpdateNode(page)
+		this.addOrUpdateNode(folderNode)
 
-		return page;
+		return folderNode;
 	}
 
 	private createNodeFromText(page: DvPage, item: DvList): TextNode | PageNode | HeaderNode {
@@ -421,27 +708,33 @@ export class NotesGraph {
 
 		const obsidianLinkReference: ObsidianLinkToken[] = this.getObsidianLinkReference(parsed);
 
+        const searchKey = item.text.toLowerCase();
+        const ageDays = getAgeDays(page.file.mtime.ts, searchKey);
+
+
 		// if this is just a page reference, then skip the text node
 		if (obsidianLinkReference.length == 1 && obsidianLinkReference[0].source == item.text) {
-			return this.createVirtualPage(obsidianLinkReference[0], location)
-		}
+			return this.createVirtualPage(obsidianLinkReference[0], location, ageDays)
+        }
 
 		let textNode: TextNode = {
 			location: location,
-			searchKey: item.text.toLowerCase(),
+			searchKey: searchKey,
 			parsedTokens: parsed,
 			nodeType: "text",
 			// tokens: tokens,
 			tags: item.tags,
 			isTask: item.task,
 			isCompleted: item.completed,
+			boost: calculateBoost("text", searchKey, ageDays),
+			ageDays: ageDays
 		}
 
 		this.addOrUpdateNode(textNode)
 
 		// make all reference nodes, parents of the text node
-		const parentsFromRefs = this.createRefsNodes(obsidianLinkReference, textNode);
-		parentsFromRefs.forEach(it => this.addChild(it, textNode, textNode.location, 0))
+		const parentsFromRefs = this.createRefsNodes(obsidianLinkReference, textNode, ageDays);
+		parentsFromRefs.forEach(it => this.addChild(it, textNode, textNode.location, page.file.mtime.ts))
 
 		return textNode;
 	}
@@ -467,15 +760,19 @@ export class NotesGraph {
 	/**
 	 * [[ParsedNode|Alias#Header]]
 	 */
-	createVirtualPage(pageReference: ObsidianLinkToken, location: BaseNode['location']): PageNode | HeaderNode {
+    createVirtualPage(pageReference: ObsidianLinkToken, location: BaseNode["location"], ageDays: number): PageNode | HeaderNode {
+		const aliases = pageReference.alias ? [pageReference.alias] : []
+		const searchKey = pageReference.pageTarget.toLowerCase();
 		const page: PageNode = {
 			nodeType: "page",
 			isReference: true,
 			page: pageReference.pageTarget,
-			aliases: pageReference.alias ? [pageReference.alias] : [],
+			aliases: Array.isArray(aliases) ? aliases : [],
 			tags: [],
 			location: location,
-			searchKey: pageReference.pageTarget.toLowerCase(),
+			searchKey: searchKey,
+			boost: calculateBoost("page", searchKey, ageDays),
+			ageDays: ageDays
 		}
 
 		this.addOrUpdateNode(page)
@@ -489,11 +786,13 @@ export class NotesGraph {
 		}
 
 		return page
-	}	
+	}
 
 	private createMonthNode(page: DvPage, ts: number): MonthNode {
 		const date = new Date(ts)
 		const monthLiteral = date.toLocaleString('default', { month: 'long' });
+		const searchKey = `${monthLiteral} ${date.getFullYear()}`.toLowerCase();
+		const ageDays = getAgeDays(ts, page.file.name);
 		const node: MonthNode = {
 			nodeType: "month",
 			month: date.getMonth() + 1,
@@ -503,7 +802,9 @@ export class NotesGraph {
 				path: page.file.path,
 				position: {start: {line: 0, ch: 0}, end: {line: 0, ch: 0}}
 			},
-			searchKey: `${monthLiteral} ${date.getFullYear()}`.toLowerCase(),
+			searchKey: searchKey,
+			boost: calculateBoost("month", searchKey, ageDays), // Small base boost for month nodes
+			ageDays: ageDays
 		}
 
 		this.addOrUpdateNode(node)
@@ -512,18 +813,23 @@ export class NotesGraph {
 	}
 
 	private createPageNode(page: DvPage): PageNode {
-		const aliases = page.file.aliases.values || []
+		const aliases = page.file.aliases?.values || []
+		const tags = page.file.tags || []
+		const searchKey = `${page.file.name}|${aliases.join(" ")}`.toLowerCase();
+		const ageDays = getAgeDays(page.file.mtime.ts, page.file.name);
 		const node: PageNode = {
 			nodeType: "page",
 			isReference: false,
 			page: page.file.name,
-			aliases: aliases,
-			tags: page.file.tags,
+			aliases: Array.isArray(aliases) ? aliases : [],
+			tags: Array.isArray(tags) ? tags : [],
 			location: {
 				path: page.file.path,
 				position: {start: {line: 0, ch: 0}, end: {line: 0, ch: 0}}
 			},
-			searchKey: `${page.file.name}|${aliases.join(" ")}`.toLowerCase(),
+			searchKey: searchKey,
+            boost: calculateBoost("page", searchKey, ageDays),
+			ageDays: ageDays
 		}
 
 		this.removeExistingPageEdges(node)
@@ -534,6 +840,29 @@ export class NotesGraph {
 
 		return node
 	}
+
+    addAttachmentNode(file: TFile) {
+        const searchKey = file.name.toLowerCase();
+        const ageDays = getAgeDays(file.stat.mtime, file.name);
+        const node: AttachmentNode = {
+            nodeType: "attachment",
+            name: file.name,
+            extension: file.extension,
+            location: {
+                path: file.path,
+                position: {start: {line: 0, ch: 0}, end: {line: 0, ch: 0}}
+            },
+            searchKey: searchKey,
+            aliases: [],
+            boost: calculateBoost("attachment", searchKey, ageDays),
+            ageDays: ageDays
+        }
+
+        this.addOrUpdateNode(node)
+
+        return node
+    }
+
 }
 
 export function toLocation(position: DvList['position']): Location['position'] {

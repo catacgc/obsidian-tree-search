@@ -11,7 +11,7 @@ export type ResultNode = {
 function filterTreeByWord(
     node: ResultNode, 
     expr: QueryExpr, 
-    showOnlyMatchingChildren = false,
+    showOnlyMatchingChildren = true,
     pruneMatchingTree = false): ResultNode | null {
     
     const nodeMatches = matchQuery(node.node, expr)
@@ -40,9 +40,9 @@ function filterTreeByWord(
     };
 }
 
-function isPageOrHeader(expr: QueryExpr): boolean {
-    return (expr.type == "modifier" && (expr.value == ":page" || expr.value == ":header"))
-    || (expr.type == "or" && expr.exprs.every(e => isPageOrHeader(e)))
+function isPageOrHeaderOrFolder(expr: QueryExpr): boolean {
+    return (expr.type == "modifier" && (expr.value == ":page" || expr.value == ":header" || expr.value == ":folder"))
+    || (expr.type == "or" && expr.exprs.every(e => isPageOrHeaderOrFolder(e)))
 }
 
 function isNegation(expr: QueryExpr): boolean {
@@ -54,7 +54,8 @@ function filterDown(results: ResultNode[], search: QueryExpr[], showOnlyMatching
 
     const expr = search[0]
 
-    showOnlyMatchingChildren = isPageOrHeader(expr)
+    // showOnlyMatchingChildren = isPageOrHeaderOrFolder(expr)
+    showOnlyMatchingChildren = true
     const pruneMatchingTree = isNegation(expr)
 
     const filtered = results
@@ -91,6 +92,7 @@ function buildTree(node: string, graph: DirectedGraphOfNotes, roots: Map<string,
         }
 
         childNode.node = {...childNode.node, ...{location: edge.attributes.location}}
+        childNode.parents.push(newNode.node.location.path)
 
         newNode.children.push(childNode)
     }
@@ -178,7 +180,7 @@ export function searchIndex(graph: DirectedGraphOfNotes, qs: string, separator: 
     const firstPass = expressions[0]
 
     let firstPageCandidates =  graph
-            .filterNodes((_, attrs) => firstPassInclude(attrs, firstPass))
+            .filterNodes((_, attrs) => attrs.nodeType !== "pointer" && firstPassInclude(attrs, firstPass))
             .sort((a, b) => b.length - a.length);
 
     const traversed = new Set<string>()

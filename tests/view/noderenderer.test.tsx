@@ -1,5 +1,4 @@
 import {jest, describe, it, beforeEach, expect} from "@jest/globals";
-import {useApp} from "../../src/view/react-context/AppContext";
 import {NodeRenderer, TextNodeRenderer} from "../../src/view/NodeRenderer";
 import {openFileByName} from "../../src/obsidian-utils";
 import {render, screen, fireEvent} from '@testing-library/react';
@@ -25,9 +24,10 @@ function renderMarkdown(text: string) {
 describe('NodeRenderer', () => {
     const mockApp = {};
 
-    beforeEach(() => {
-        (useApp as jest.Mock).mockReturnValue(mockApp);
-    });
+    // TODO fix this with scopes
+    // beforeEach(() => {
+    //     (useApp as jest.Mock).mockReturnValue(mockApp);
+    // });
 
     it('renders embeds', () => {
         renderMarkdown("![[Hello]]")

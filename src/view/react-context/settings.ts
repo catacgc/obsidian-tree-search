@@ -16,10 +16,10 @@ export const settingsAtom = atom<TreeSearchSettings>({
 
 export const separatorAtom = atom((get) => get(settingsAtom).searchSeparator)
 
-export function updateSettings(settings: TreeSearchSettings) {
-	getDefaultStore().set(settingsAtom, {...getSettings(), ...settings})
+export function updateSettings(store: ReturnType<typeof getDefaultStore>, settings: TreeSearchSettings) {
+	store.set(settingsAtom, {...getSettings(store), ...settings})
 }
 
-export function getSettings() {
-	return getDefaultStore().get(settingsAtom)
+export function getSettings(store: ReturnType<typeof getDefaultStore>) {
+	return store.get(settingsAtom)
 }

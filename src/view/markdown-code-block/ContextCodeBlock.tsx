@@ -1,8 +1,8 @@
-import {App, MarkdownPostProcessorContext, MarkdownRenderChild, parseYaml, TFile} from "obsidian";
+import {MarkdownPostProcessorContext, MarkdownRenderChild, parseYaml, TFile} from "obsidian";
 import {createRoot} from "react-dom/client";
-import {IndexedTree} from "../../indexing/indexed-tree";
 import {GraphContextProvider} from "../react-context/GraphContextProvider";
 import {InlineMarkdownResults} from "./InlineMarkdownResults";
+import {GlobalAtoms, GlobalStore} from "../react-context/global";
 
 export class MarkdownContextSettings {
     depth: number
@@ -17,7 +17,7 @@ export class ContextCodeBlock extends MarkdownRenderChild {
     constructor(private source: string,
                 private context: MarkdownPostProcessorContext,
                 element: HTMLElement,
-                private app: App
+                private store: GlobalStore
     ) {
         super(element);
     }
@@ -27,8 +27,11 @@ export class ContextCodeBlock extends MarkdownRenderChild {
         const root = createRoot(this.containerEl);
 
 
+        let app = this.store.get(GlobalAtoms.appAtom);
+        if (!app) return
+
         const findHeading = () => {
-            const cache = this.app.metadataCache.getCache(this.context.sourcePath)
+            const cache = app.metadataCache.getCache(this.context.sourcePath)
 
             if (!cache?.headings) return;
 
@@ -43,7 +46,7 @@ export class ContextCodeBlock extends MarkdownRenderChild {
         let heading = findHeading();
 
         // this won't work for canvas files
-        const inferredFile = this.app.vault.getAbstractFileByPath(this.context.sourcePath) as TFile
+        const inferredFile = app.vault.getAbstractFileByPath(this.context.sourcePath) as TFile
         let basename = inferredFile?.basename
         let inferred = true
 
@@ -83,7 +86,7 @@ export class ContextCodeBlock extends MarkdownRenderChild {
         const hasErrors = unexpectedKeys.length > 0 || noQueriableSource
 
         root.render(
-            <GraphContextProvider app={this.app}>
+            <GraphContextProvider store={this.store}>
                 {hasErrors && (
                     <div className="context-block-warning">
                         {noQueriableSource && <p>Please provide a valid "file" or "query" setting</p>}

@@ -32,7 +32,11 @@ function createNode(pageNode: PageNode, line: NodeTextLine, graph: NotesGraph) {
     if (line.type == 'header') {
         node = createHeaderNode(pageNode.page, line.text, line.location, line.indent);
     } else {
-        node = createNodeFromText(graph, line.text, line.location, line.task == 'task' || line.task == 'completed', line.task == 'completed');
+        node = createNodeFromText(graph,
+            line.text,
+            line.location, line.task == 'task' || line.task == 'completed',
+            line.task == 'completed',
+            pageNode.ageDays);
     }
 
     graph.addOrUpdateNode(node)
@@ -50,18 +54,22 @@ function createHeaderNode(page: string, header: string, location: Location, inde
         header: header,
         indent: indent,
         location: location,
-        searchKey: `${page}#${header}`.toLowerCase()
+        searchKey: `${page}#${header}`.toLowerCase(),
+        boost: 0, // Default boost for text-parser created headers
+        ageDays: 0 // Default age for text-parser created headers
     };
 }
 
-function createNodeFromText(graph: NotesGraph, text: string, location: Location, isTask: boolean, isCompleted: boolean): TextNode | PageNode | HeaderNode {
+function createNodeFromText(graph: NotesGraph, text: string,
+                            location: Location, isTask: boolean,
+                            isCompleted: boolean, ageDays: number): TextNode | PageNode | HeaderNode {
     const parsed = parseTokens(text)
 
     const obsidianLinkReference: ObsidianLinkToken[] = graph.getObsidianLinkReference(parsed);
 
     // if this is just a page reference, then skip the text node
     if (obsidianLinkReference.length == 1 && obsidianLinkReference[0].source == text) {
-        return graph.createVirtualPage(obsidianLinkReference[0], location)
+        return graph.createVirtualPage(obsidianLinkReference[0], location, ageDays)
     }
 
     let textNode: TextNode = {
@@ -73,13 +81,15 @@ function createNodeFromText(graph: NotesGraph, text: string, location: Location,
         tags: [],
         isTask: isTask,
         isCompleted: isCompleted,
+        boost: 0, // Default boost for text-parser created text nodes
+        ageDays: ageDays
     }
 
     graph.addOrUpdateNode(textNode)
 
     // make all reference nodes, parents of the text node
-    const parentsFromRefs = graph.createRefsNodes(obsidianLinkReference, textNode);
-    parentsFromRefs.forEach(it => graph.addChild(it, textNode, textNode.location, 0))
+    const parentsFromRefs = graph.createRefsNodes(obsidianLinkReference, textNode, ageDays);
+    parentsFromRefs.forEach(it => graph.addChild(it, textNode, textNode.location, ageDays))
 
     return textNode;
 }

@@ -1,35 +1,49 @@
-import { App, debounce, EventRef, Notice, Platform, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf } from 'obsidian';
+import {App, debounce, EventRef, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf} from 'obsidian';
 
-import { SEARCH_VIEW, SearchModalComponent } from './view/search/SearchModalComponent';
-import { QuickLinkModal } from './view/search-modal/link-selector/QuickLinkModal';
-import { getAPI } from "obsidian-dataview";
+import {SEARCH_VIEW, SearchViewPanel} from './view/search/SearchViewPanel';
+import {QuickLinkModal} from './view/search-modal/link-selector/QuickLinkModal';
+import {getAPI} from "obsidian-dataview";
 
-import { IndexedTree } from "./indexing/indexed-tree";
-import { FILE_CONTEXT, FileContextView } from "./view/file-context/file-context";
-import { ContextCodeBlock } from "./view/markdown-code-block/ContextCodeBlock";
-import { SearchModal } from "./view/search-modal/SearchModal";
-import { highlightLine, insertLine, openFileByName } from './obsidian-utils';
-import { getDefaultStore } from 'jotai';
-import { graphAtom, isGraphLoadingAtom } from './view/react-context/state';
-import { getSettings, updateSettings } from './view/react-context/settings';
-import { RaycastServer } from './view/raycast/raycast-server';
-import { MarkdownIndexer } from './indexing/markdown';
-import { CanvasIndexer } from './indexing/canvas';
+import {IndexedTree} from "./indexing/indexed-tree";
+import {FILE_CONTEXT, FileContextView} from "./view/file-context/file-context";
+import {ContextCodeBlock} from "./view/markdown-code-block/ContextCodeBlock";
+import {SearchModal} from "./view/search-modal/SearchModal";
+import {highlightLine, insertLine, moveToFolder, openFileByName, revealFolder, showFolder} from './obsidian-utils';
+import {createStore} from 'jotai';
+import {getSettings, updateSettings} from './view/react-context/settings';
+import {RaycastServer} from './view/raycast/raycast-server';
+import {MarkdownIndexer} from './indexing/markdown';
+import {CanvasIndexer} from './indexing/canvas';
 import './view/styles.css';
+import {GlobalAtoms} from "./view/react-context/global";
+import {resetDefaultInjector} from "bunshi";
 
 export default class TreeSearchPlugin extends Plugin {
     index: IndexedTree
     private changedRef: EventRef
     private finishedRef: EventRef;
     private server: RaycastServer | null = null;
+    globalStore = createStore();
+    private refreshInterval: number | null = null;
 
     async onunload() {
+        console.log("Cleaning up after")
+
+        this.globalStore = createStore()
+
         this.changedRef && this.app.metadataCache.offref(this.changedRef)
         this.finishedRef && this.app.metadataCache.offref(this.finishedRef)
         this.server?.stop()
+        if (this.refreshInterval) {
+            clearInterval(this.refreshInterval)
+        }
     }
 
     async onload() {
+        resetDefaultInjector()
+        this.globalStore = createStore()
+        this.globalStore.set(GlobalAtoms.appAtom, this.app)
+
         if (!await this.waitForDataview()) {
             // @ts-ignore
             this.app.metadataCache.on("dataview:index-ready", async () => await this.waitForDataview())
@@ -46,16 +60,16 @@ export default class TreeSearchPlugin extends Plugin {
 
         const markdown = new MarkdownIndexer(api, this.app);
         const canvas = new CanvasIndexer(this.app);
-        this.index = new IndexedTree(this.app, markdown, canvas);
+        this.index = new IndexedTree(this.globalStore, markdown, canvas);
 
         this.registerView(
             SEARCH_VIEW,
-            (leaf) => new SearchModalComponent(leaf, this.index)
+            (leaf) => new SearchViewPanel(leaf, this.globalStore)
         );
 
         this.registerView(
             FILE_CONTEXT,
-            (leaf) => new FileContextView(leaf, this.index)
+            (leaf) => new FileContextView(leaf, this.globalStore)
         );
 
         this.addCommand({
@@ -70,10 +84,10 @@ export default class TreeSearchPlugin extends Plugin {
             callback: () => this.activateView(FILE_CONTEXT)
         });
 
-        const quickLinkModal = new QuickLinkModal(this.app, this.index);
+        const quickLinkModal = new QuickLinkModal(this.globalStore);
         quickLinkModal.setTitle("Insert Link");
 
-        const searchModal = new SearchModal(this.app, this.index);
+        const searchModal = new SearchModal(this.globalStore);
         searchModal.setTitle("Search");
 
         this.addCommand({
@@ -101,15 +115,6 @@ export default class TreeSearchPlugin extends Plugin {
             }
         });
 
-        this.addCommand({
-            id: 'highlight-open',
-            name: 'Highlight search result',
-            callback: () => {
-                const event = new CustomEvent('highlight-open', { detail: { message: 'Highlight command triggered' } });
-                window.dispatchEvent(event);
-            }
-        });
-
         // This adds a settings tab so the user can configure various aspects of the plugin
         this.addSettingTab(new SettingsTab(this.app, this));
         await this.loadSettings();
@@ -117,21 +122,24 @@ export default class TreeSearchPlugin extends Plugin {
         /**
          * Load the graph when the plugin is loaded
          */
-        const store = getDefaultStore()
-        store.sub(isGraphLoadingAtom, async () => {
-            const reload = store.get(isGraphLoadingAtom)
-            
+        const store = this.globalStore
+        store.sub(GlobalAtoms.isGraphLoadingAtom, async () => {
+            const reload = store.get(GlobalAtoms.isGraphLoadingAtom)
+
+            // anything changed
             if (reload) {
                 console.debug("Graph refresh requested")
                 await this.index.refresh()
             }
         })
 
-        setInterval(() => {
-            const loading = store.get(isGraphLoadingAtom)
-            const graph = store.get(graphAtom)
+        this.refreshInterval = setInterval(() => {
+            const loading = store.get(GlobalAtoms.isGraphLoadingAtom)
+            const graph = store.get(GlobalAtoms.graphAtom)
             
-            if (!loading && graph.graph.nodes().length === 0) store.set(isGraphLoadingAtom, true)
+            if (!loading && graph.graph.nodes().length === 0) store.set(GlobalAtoms.isGraphLoadingAtom, true)
+
+
         }, 2000, 5);
 
 
@@ -146,9 +154,8 @@ export default class TreeSearchPlugin extends Plugin {
         }))
 
         this.registerMarkdownCodeBlockProcessor("tree-context", (source, element, context) => {
-            context.addChild(new ContextCodeBlock(source, context, element, this.app));
+            context.addChild(new ContextCodeBlock(source, context, element, this.globalStore));
         });
-
 
         // this will handle the tree-search-uri protocol coming from raycast
         this.registerObsidianProtocolHandler("tree-search-uri", async (uri) => {
@@ -162,14 +169,18 @@ export default class TreeSearchPlugin extends Plugin {
             
             if (uri.raycastaction === "insert") {
                 await insertLine(this.app, location)
+            } else if (uri.raycastaction == "revealFolder") {
+                await showFolder(this.app, uri.filepath)
             } if (uri.raycastaction == "open") {
                 await openFileByName(this.app, uri.filepath + (uri.hash ? `#${uri.hash}` : ""))
+            } else if (uri.raycastaction == "moveToFolder") {
+                moveToFolder(this.app, uri.filepath)
             } else {
                 await highlightLine(this.app, location)
             }
         })
 
-        this.server = new RaycastServer(this.app)
+        this.server = new RaycastServer(this.globalStore)
         this.server.start()
 
         return true
@@ -205,12 +216,12 @@ export default class TreeSearchPlugin extends Plugin {
     }
 
     async loadSettings() {
-        updateSettings(await this.loadData())
+        updateSettings(this.globalStore, await this.loadData())
         await this.saveSettings(); // do this to make sure to create data.json
     }
 
     async saveSettings() {
-        await this.saveData(getSettings());
+        await this.saveData(getSettings(this.globalStore));
     }
 }
 
@@ -223,7 +234,7 @@ class SettingsTab extends PluginSettingTab {
     }
 
     display(): void {
-        const settings = getSettings()
+        const settings = getSettings(this.plugin.globalStore)
         const { containerEl } = this;
 
         containerEl.empty();

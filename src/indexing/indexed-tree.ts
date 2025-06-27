@@ -1,11 +1,9 @@
-import {NotesGraph, ParsedNode} from "../graph";
-import {DvAPIInterface} from "obsidian-dataview/lib/typings/api";
-import {App, TFile, TFolder} from "obsidian";
-import {DvPage, indexSinglePage, MarkdownIndexer} from "./markdown";
+import {NotesGraph} from "../graph";
+import {TFile, TFolder} from "obsidian";
+import {MarkdownIndexer} from "./markdown";
 import {getSettings, TreeSearchSettings} from "../view/react-context/settings";
-import { getDefaultStore } from "jotai";
-import { graphAtom, graphVersionAtom, isGraphLoadingAtom } from "../view/react-context/state";
-import { CanvasIndexer } from "./canvas";
+import {CanvasIndexer} from "./canvas";
+import {GlobalAtoms, GlobalStore} from "../view/react-context/global";
 
 export interface Indexer<T> {
 	index(source: T, graph: NotesGraph, settings: TreeSearchSettings): Promise<NotesGraph>
@@ -16,7 +14,7 @@ export class IndexedTree {
     private isLoading = false;
 	private version = 0;
 
-    constructor(private app: App, 
+    constructor(private store: GlobalStore,
 			private markdown: MarkdownIndexer,
 			private canvas: CanvasIndexer,
 			private extensions: Indexer<any>[] = []) {
@@ -24,7 +22,7 @@ export class IndexedTree {
 	}
 
 	async refreshPage(file: TFile) {
-		await this.indexSinglePage(file, this.graph, getSettings())
+		await this.indexSinglePage(file, this.graph, getSettings(this.store))
 		console.debug(`indexed ${file.basename}`)
 		this.setState(this.graph)
 	}
@@ -44,20 +42,26 @@ export class IndexedTree {
 
 	private setState(graph: NotesGraph) {
 		this.graph = graph
-		getDefaultStore().set(graphAtom, graph)
-		getDefaultStore().set(graphVersionAtom, ++this.version)
-		getDefaultStore().set(isGraphLoadingAtom, false)
+		this.store.set(GlobalAtoms.graphAtom, graph)
+		this.store.set(GlobalAtoms.graphVersionAtom, ++this.version)
+		this.store.set(GlobalAtoms.isGraphLoadingAtom, false)
 	}
 
 	isIgnored(file: TFile | TFolder) {
-		return this.app.metadataCache.isUserIgnored && this.app.metadataCache.isUserIgnored(file.path)
+        const app = this.store.get(GlobalAtoms.appAtom)
+		return app.metadataCache.isUserIgnored && app.metadataCache.isUserIgnored(file.path)
 	}
 
 	/**
 	 * Gets all files from the Obsidian vault
 	 */
 	* getAllFiles(): Generator<TFile | TFolder> {
-		const folders: TFolder[] = [this.app.vault.getRoot()];
+        const app = this.store.get(GlobalAtoms.appAtom)
+        if (!app) {
+            return
+        }
+
+		const folders: TFolder[] = [app.vault.getRoot()];
 		
 		while (folders.length > 0) {
 			const folder = folders[0];
@@ -110,7 +114,7 @@ export class IndexedTree {
 	}
 
 	private indexBatch(batch: (TFile|TFolder)[], graph: NotesGraph) : Promise<boolean> {
-		const settings = getSettings()
+		const settings = getSettings(this.store)
 		return new Promise((resolve) => {
 			setTimeout(async () => {
 				for (const page of batch) {
@@ -153,6 +157,15 @@ export class IndexedTree {
 			case "canvas":
 				await this.canvas.index(page, graph, settings);
 				break;
+            default:
+                const node = graph.addAttachmentNode(page)
+                if (page.parent instanceof TFolder /*&& source.parent.path != "/"*/) {
+                    const folderNode = graph.createFolderNode(page.parent)
+                    graph.addOrUpdateNode(folderNode)
+                    graph.addChild(folderNode, node, node.location, page.stat.mtime)
+                }
+                break;
+
 		}
 	}
 }

@@ -1,16 +1,15 @@
-import {App, Modal} from "obsidian";
-import {IndexedTree} from "../../indexing/indexed-tree";
+import {Modal} from "obsidian";
 import {createRoot, Root} from "react-dom/client";
 import {GraphContextProvider} from "../react-context/GraphContextProvider";
 import {SearchModalContainer} from "../search/SearchModalContainer";
-import {GraphEvents} from "../obsidian-views/GraphEvents";
+import {GlobalAtoms, GlobalStore} from "../react-context/global";
 
 export class SearchModal extends Modal {
 
     root: Root | null = null;
 
-    constructor(app: App, private index: IndexedTree) {
-        super(app);
+    constructor(private store: GlobalStore) {
+        super(store.get(GlobalAtoms.appAtom));
 
         this.modalEl.addClass("tree-search-modal");
         this.contentEl.addClass("tree-search-modal-content");
@@ -20,25 +19,27 @@ export class SearchModal extends Modal {
         this.root = createRoot(this.contentEl);
 
         this.root?.render(
-            <GraphContextProvider app={this.app}>
+            <GraphContextProvider store={this.store}>
                 <div className="tree-search-modal-container">
                     <div className="workspace-leaf-content">
-                        <SearchModalContainer refresh={true} isQuickLink={false}/>
+                        <SearchModalContainer isQuickLink={false}/>
                     </div>
                 </div>
             </GraphContextProvider>
         );
+
         setTimeout(() => {
             const inputEl = this.containerEl.querySelector('input');
             inputEl?.click();
             inputEl?.select();
+            inputEl?.focus();
         }, 0);
 
-        window.addEventListener(GraphEvents.RESULT_SELECTED, () => this.close());
+        this.store.set(GlobalAtoms.currentModalAtom, this)
     }
 
     async onClose() {
+        this.store.set(GlobalAtoms.currentModalAtom, null)
         this.root?.unmount();
-        window.removeEventListener(GraphEvents.RESULT_SELECTED, () => this.close());
     }
 }

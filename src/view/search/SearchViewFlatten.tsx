@@ -1,8 +1,11 @@
-import { useAtomValue, useSetAtom } from "jotai";
-import { ParsedNode } from "../../graph";
-import { hasMoreTreeNodesAtom, incrementPagesAtom, isGraphLoadingAtom, renderableTreeNodes } from "../react-context/state";
-import { SearchTreeNode } from "../SearchTreeNode";
-import { SearchBar } from "./SearchBar";
+import {useAtomValue, useSetAtom} from "jotai";
+import {ParsedNode} from "../../graph";
+import {useMolecule} from "bunshi/react";
+import {SearchViewMolecule} from "../react-context/state";
+import {SearchTreeNode} from "../SearchTreeNode";
+import {SearchBar} from "./SearchBar";
+import {SearchActions} from "./SearchActions";
+import React from "react";
 
 export type TreeNode = {
     node: ParsedNode,
@@ -13,37 +16,44 @@ export type TreeNode = {
     index: number
 }
 
-export type SearchViewFlattenProps = {
-    showSearch?: boolean,
-    isQuickLink?: boolean
-}
+export const SearchViewFlatten = () => {
+    const {searchViewStateAtom, incrementPagesAtom} = useMolecule(SearchViewMolecule)
 
-export const SearchViewFlatten = ({
-    showSearch = true,
-    isQuickLink = false
-}: SearchViewFlattenProps) => {
-
-    const treeNodes = useAtomValue(renderableTreeNodes)
+    const viewState = useAtomValue(searchViewStateAtom)
     const incrementPages = useSetAtom(incrementPagesAtom)
-    const hasMoreTreeNodes = useAtomValue(hasMoreTreeNodesAtom)
-    const isLoading = useAtomValue(isGraphLoadingAtom)
 
     return <>
-        {showSearch &&
-            <SearchBar isQuickLink={isQuickLink}/>
+        {(viewState.showSearch) && <div className="tw-reset bg-obs-base-0 rounded-sm border border-gray-200">
+                <SearchBar isQuickLink={viewState.isQuickLink}/>
+
+                <div className="sticky top-0 z-10">
+                    <SearchActions />
+                </div>
+            </div>
         }
+
         <div className="flex-1 overflow-y-auto">
-            {isLoading ? (
+            {viewState.isLoading ? (
                 <LoadingDots />
             ) : (
                 <>
-                    {treeNodes.map((tree, index) => {
+                    {viewState.searchResults.renderableNodes.map((tree, index) => {
                         return <SearchTreeNode node={tree} key={`${index}`} />
                     })}
-                    {hasMoreTreeNodes && <button onClick={incrementPages}>Load More</button>}
+                    {viewState.searchResults.hasMore && (
+                        <div className="flex justify-center items-center py-4">
+                            <button
+                                onClick={incrementPages}
+                                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors duration-200"
+                            >
+                                Load More
+                            </button>
+                        </div>
+                    )}
                 </>
             )}
         </div>
+
     </>
 };
 

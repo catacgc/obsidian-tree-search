@@ -1,6 +1,7 @@
 import {ParsedNode} from "../graph";
 
-type QueryModifier = ':task' | ':emoji' | ':page' | ':header' | ':folder';
+type QueryModifier = ':task' | ':emoji' | ':page' | ':header' | ':folder' | ':attachment';
+const QUERY_MODIFIERS: QueryModifier[] = [':task', ':emoji', ':page', ':header', ':folder', ':attachment']
 
 export type QueryExpr = 
     | { type: 'contains'; value: string }
@@ -76,7 +77,8 @@ function splitByOr(tokens: string[]): string[][] {
 function parseToken(token: string): QueryExpr {
     // Handle modifiers
     if (token.startsWith(':')) {
-        const modifier = [':task', ':emoji', ':page', ':header', ':folder'].find(it => it.startsWith(token))
+
+        const modifier = QUERY_MODIFIERS.find(it => it.startsWith(token))
         if (modifier) {
             return { type: 'modifier', value: modifier as QueryModifier };
         }
@@ -132,6 +134,12 @@ export function matchExpr(attrs: ParsedNode, expr: QueryExpr): boolean {
             }
             if (expr.value.startsWith(':f')) {
                 return attrs.nodeType === 'folder';
+            }
+            if (expr.value.startsWith(':a')) {
+                return attrs.nodeType === 'attachment';
+            }
+            if (expr.value.startsWith(':fn')) {
+                return attrs.nodeType === 'folderNote';
             }
             return false;
     }

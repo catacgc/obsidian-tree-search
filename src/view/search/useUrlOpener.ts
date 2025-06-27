@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { App } from 'obsidian';
-import {highlightLine, openFileByName, openFolder} from '../../obsidian-utils';
+import {highlightLine, openFileByName, revealFolder} from '../../obsidian-utils';
 import { ParsedNode } from 'src/graph';
 
 export const useUrlOpener = () => {
@@ -22,7 +22,22 @@ export const useUrlOpener = () => {
         }
 
         if (attrs.nodeType == "folder") {
-            await openFolder(app, attrs.path);
+            await revealFolder(app, attrs.path);
+            return;
+        }
+
+        if (attrs.nodeType == "attachment") {
+            await openFileByName(app, attrs.name);
+            return;
+        }
+
+        if (attrs.nodeType == "folderNote") {
+            await openFileByName(app, attrs.page.page);
+            return;
+        }
+
+        if (attrs.nodeType == "pointer") {
+            console.warn("Pointer node should not be opened directly");
             return;
         }
 

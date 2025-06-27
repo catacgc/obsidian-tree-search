@@ -1,18 +1,18 @@
-import { Server, ServerResponse } from "http";
-import http, { IncomingMessage } from "http";
-import { App, Platform } from "obsidian";
-import { searchIndex } from "../../search/search";
-import { flattenIndex, graphAtom } from "../react-context/state";
-import { getSettings, separatorAtom } from "../react-context/settings";
+import http, {IncomingMessage, Server, ServerResponse} from "http";
+import {App, Platform} from "obsidian";
+import {searchIndex} from "../../search/search";
+import {flattenIndex} from "../react-context/state";
+import {getSettings, separatorAtom} from "../react-context/settings";
 import fs from "fs";
-import { getDefaultStore } from "jotai";
-import { createRaycastResponse } from "./raycast-response";
+import {createRaycastResponse} from "./raycast-response";
+import {GlobalAtoms, GlobalStore} from "../react-context/global";
 
 export class RaycastServer {
     private server: Server | null = null;
+    private app: App;
 
-    constructor(private readonly app: App) {
-        this.app = app;
+    constructor(private readonly store: GlobalStore) {
+        this.app = store.get(GlobalAtoms.appAtom);
     }
 
     start() {
@@ -38,7 +38,7 @@ export class RaycastServer {
     
     private getSocketFileName() {
         const vaultName = this.app.vault.getName()
-        return getSettings().socketPath.replace("{vaultname}", vaultName);
+        return getSettings(this.store).socketPath.replace("{vaultname}", vaultName);
     }
  
     createRaycastSocket() {
@@ -48,8 +48,6 @@ export class RaycastServer {
             console.log("Server already running, skipping creation");
             return;
         }
-
-        const vaultName = this.app.vault.getName()
 
         const requestListener = (req: IncomingMessage, res: ServerResponse) => {
             // parse query parameters from url
@@ -63,11 +61,12 @@ export class RaycastServer {
                 res.end("No query provided  ");
             }
 
-            const separator = getDefaultStore().get(separatorAtom);
-            const graph = getDefaultStore().get(graphAtom);
+
+            const separator = this.store.get(separatorAtom);
+            const graph = this.store.get(GlobalAtoms.graphAtom);
             const result = searchIndex(graph.graph, decodedQuery, separator);
             const flattened = flattenIndex(result)
-            const mapped = createRaycastResponse(vaultName, flattened.slice(0, limit))
+            const mapped = createRaycastResponse(this.app, flattened.slice(0, limit))
             const jsonContent = JSON.stringify(mapped);
             res.end(jsonContent);
         };

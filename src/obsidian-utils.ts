@@ -1,4 +1,4 @@
-import {App} from "obsidian";
+import {App, normalizePath, TFile, FuzzySuggestModal, TFolder, FuzzyMatch} from "obsidian";
 import {Location} from "./graph";
 
 // Reverse engineer the Canvas api
@@ -57,6 +57,16 @@ async function highlightCanvasNode(app: App, loc: Location) {
     }
 }
 
+export async function showFolder(app: App, folderPath: string) {
+    const fileExplorer = this.app.workspace.getLeavesOfType("file-explorer")?.[0];
+
+    if (fileExplorer) {
+        await fileExplorer.view.revealInFolder(app.vault.getFolderByPath(folderPath) || app.vault.getFileByPath(folderPath));
+    } else {
+        console.error("File explorer is not open.");
+    }
+}
+
 export async function highlightLine(app: App, loc: Location) {
     if (loc.path.endsWith(".canvas")) {
         if (loc.canvasNode) {
@@ -81,16 +91,101 @@ export async function highlightLine(app: App, loc: Location) {
 	}
 }
 
-export async function openFolder(app: App, folderPath: string) {
+class FolderSuggestModal extends FuzzySuggestModal<TFolder> {
+    private fileToMove: TFile;
 
+    constructor(app: App, fileToMove: TFile) {
+        super(app);
+        this.fileToMove = fileToMove;
+        this.setPlaceholder(`Move ${fileToMove.path} to ...`);
+        this.setInstructions([
+            { command: "↑↓", purpose: "to navigate" },
+            { command: "↵", purpose: "to move file" },
+            { command: "esc", purpose: "to dismiss" },
+        ]);
+    }
+
+    getItems(): TFolder[] {
+        const folders: TFolder[] = [];
+        const rootFolder = this.app.vault.getRoot();
+
+        // Add root folder
+        folders.push(rootFolder);
+
+        // Recursively collect all folders
+        const collectFolders = (folder: TFolder) => {
+            for (const child of folder.children) {
+                if (child instanceof TFolder) {
+                    folders.push(child);
+                    collectFolders(child);
+                }
+            }
+        };
+
+        collectFolders(rootFolder);
+        return folders;
+    }
+
+    getItemText(folder: TFolder): string {
+        // Return the text that will be used for fuzzy matching
+        const folderPath = folder.path || "/";
+        const folderName = folder.name || "Vault Root";
+
+        // Include both folder name and path for better fuzzy matching
+        return folderPath === "/" ? folderName : `${folderName} ${folderPath}`;
+    }
+
+    renderSuggestion(folder: FuzzyMatch<TFolder>, el: HTMLElement) {
+        const folderPath = folder.item.path || "/";
+        const folderName = folder.item.name || "Vault Root";
+
+        el.createDiv({ text: folderName, cls: "suggestion-title" });
+        if (folderPath !== "/") {
+            el.createDiv({ text: folderPath, cls: "suggestion-note" });
+        }
+    }
+
+    async onChooseItem(folder: TFolder) {
+        try {
+            const targetPath = folder.path || "";
+            const newFilePath = normalizePath(
+                targetPath ? `${targetPath}/${this.fileToMove.name}` : this.fileToMove.name
+            );
+
+            // Check if the file would be moved to the same location
+            if (this.fileToMove.path === newFilePath) {
+                console.log(`File ${this.fileToMove.name} is already in the selected folder`);
+                return;
+            }
+
+            // Use FileManager.renameFile which handles moving and updates internal links
+            await this.app.fileManager.renameFile(this.fileToMove, newFilePath);
+            console.log(`Successfully moved ${this.fileToMove.path} to ${newFilePath}`);
+        } catch (error) {
+            console.error(`Failed to move file:`, error);
+        }
+    }
+}
+
+export function moveToFolder(app: App, fileSTr: string): void {
+    // Get the file to move - either the provided file or the currently active file
+    const file = app.vault.getFileByPath(fileSTr)
+    const fileToMove = file || app.workspace.getActiveFile();
+    if (!fileToMove) {
+        console.error("No file to move");
+        return;
+    }
+
+    // Open the folder selection modal
+    new FolderSuggestModal(app, fileToMove).open();
+}
+
+export async function revealFolder(app: App, folderPath: string) {
 	const folder = app.vault.getFolderByPath(folderPath)
-    console.log(folder)
-
 
 	if (folder) {
         app.showInFolder(folder.path)
-		// await leaf.openFile(folder, {active: false});
-	} 
+	}
 }
 
 export async function openFileByName(app: App, basenameAndAliases: string) {

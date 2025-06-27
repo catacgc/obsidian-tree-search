@@ -23,7 +23,19 @@ export function reverseMarkdownParsing(node: ParsedNode): string {
       return `[[${node.path}]]`
     }
 
-    return reverseMarkdown(node.parsedTokens)
+    if (node.nodeType == "attachment") {
+        return `[[${node.location.path}]]`
+    }
+
+    if (node.nodeType == "folderNote") {
+        return `[[${(node as any).page.page}]]`
+    }
+
+    if (node.nodeType == "pointer") {
+        return "⚠️ Pointer node should not be copied"
+    }
+
+    return reverseMarkdown((node as any).parsedTokens)
 }
 
 function reverseMarkdown(tokens: ParsedTextToken[]): string {

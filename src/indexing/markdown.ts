@@ -53,12 +53,15 @@ function shouldSkip(lst: DvList, archiveTag: string) {
 
 	if (lst.tags.length > 0) return false;
 
-	return !lst.text.includes("[[")
-		&& !lst.text.includes('![[')
-		&& !lst.text.startsWith('#')
-		&& !lst.text.includes('http')
-		&& !lst.task
-		;
+	return isOnlyText(lst.text)
+}
+
+export function isOnlyText(text: string) {
+    return !text.includes("[[")
+    	&& !text.includes('![[')
+    	&& !text.contains('#')
+    	&& !text.includes('http')
+    	;
 }
 
 export async function indexSinglePage(page: DvPage, graph: NotesGraph, settings: TreeSearchSettings): Promise<PageNode | undefined> {

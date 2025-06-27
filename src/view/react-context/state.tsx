@@ -1,165 +1,382 @@
-import { TreeNode } from '../search/SearchViewFlatten'
-import { IndexedResult, SearchQuery, ResultNode } from '../../search/search'
-import { atom } from 'jotai'
-import { NotesGraph, PageNode, ParsedNode, TextNode, ParsedTextToken, TextTokenWithLocationLink, HeaderNode } from '../../graph'
-import { TFile } from 'obsidian'
- 
-export const isGraphLoadingAtom = atom(false)
-export const graphAtom = atom<NotesGraph>(new NotesGraph())
-export const graphVersionAtom = atom(0)
+import {TreeNode} from '../search/SearchViewFlatten'
+import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, SearchQuery} from '../../search/search'
+import {atom, useAtomValue} from 'jotai'
+import {ParsedNode, ParsedTextToken, TextNode, TextTokenWithLocationLink} from '../../graph'
+import {createScope, molecule} from "bunshi";
+import {App} from "obsidian";
+import {GlobalAtoms} from "./global";
+import {separatorAtom} from "./settings";
+import {atomWithDefault} from "jotai/utils";
+import {withAtomEffect} from "jotai-effect";
 
-export const searchQueryAtom = atom<SearchQuery>({query: ""})
+export type SearchResultsState = {
+    visibleNodes: TreeNode[]
+    renderableNodes: TreeNode[]
+    hasMore: boolean
+    totalVisible: number
+    totalNodes: number
+}
 
-export const actualQueryAtom = atom<string>(get => get(searchQueryAtom).query)
-export const selectedLineAtom = atom(0)
-export const treeNodesAtom = atom<TreeNode[]>([])
+export type SearchViewState = {
+    searchResults: SearchResultsState
+    isLoading: boolean
+    showSearch: boolean
+    version: number
+    isQuickLink: boolean
+    scopeName: { name: string, instance: number }
+}
 
-export const pageSizeAtom = atom(50)
-const visibleNodesAtom = atom((get) => {
-    return get(treeNodesAtom)
-        .filter(node => node.visible)
+export type SearchQueryBuilderBase = {
+    viewType: "activeFile" | "parents" | "tasks" | "modal"
+}
+
+export type ModalQuery = {
+    viewType: "modal"
+}
+
+export type SearchQueryBuilder = SearchQueryBuilderBase & (ModalQuery)
+
+export const GlobalAppScope = createScope<{
+    obsidianApp: App
+}>({
+    obsidianApp: null as any as App
 })
 
-const pagesAtom = atom(1)
-export const renderableTreeNodes = atom((get) => {
-    const pageSize = get(pageSizeAtom)
-    const pages = get(pagesAtom)
-    return get(visibleNodesAtom).slice(0, pages * pageSize)
+export const SearchViewScope = createScope({
+    name: "default",
+    isQuickLink: false,
+    showSearch: true,
+    isModal: true
 })
 
-export const searchPlaceholderAtom = atom((get) => {
-    const treeNodes = get(treeNodesAtom)
-    const graph = get(graphAtom)
-    if (treeNodes.length > 0) {
-        return `Search ${treeNodes.length} nodes`
+export const GlobalAppMolecule = molecule((_, scope) => {
+
+    const searchForActiveFileAtom = atom((get) => {
+        const graph = get(GlobalAtoms.graphAtom)
+        const activeFile = get(GlobalAtoms.activeFileAtom)
+        const separator = get(separatorAtom)
+
+        return (query: string) => {
+            console.debug("Search again for active file", get(GlobalAtoms.graphVersionAtom), activeFile?.name)
+
+            if (activeFile === undefined) {
+                return []
+            }
+
+            return advancedSearch(
+                graph.graph,
+                `[[${activeFile.basename}]]`.toLowerCase(),
+                query,
+                separator
+            )
+        }
+    })
+
+    const searchParentsFnAtom = atom((get) => {
+        const graph = get(GlobalAtoms.graphAtom)
+        const activeFile = get(GlobalAtoms.activeFileAtom)
+
+        return (q: string) => {
+            if (activeFile === undefined) {
+                return []
+            }
+
+            return searchParents(graph.graph, activeFile)
+        }
+    })
+
+    const searchTasksAtom = atom((get) => {
+        const graph = get(GlobalAtoms.graphAtom)
+        const activeFile = get(GlobalAtoms.activeFileAtom)
+        const separator = get(separatorAtom)
+
+        return (query: string) => {
+            if (activeFile === undefined) {
+                return []
+            }
+
+            const searchResults = advancedSearch(
+                graph.graph,
+                `[[${activeFile.basename}]]`.toLowerCase(),
+                query,
+                separator
+            )
+
+            return flattenTasks(searchResults).nodes
+        }
+    })
+
+    const lastSearchAtom = atom<SearchQuery>({query: ""})
+
+    return {
+        appAtom: GlobalAtoms.appAtom,
+        isGraphLoadingAtom: GlobalAtoms.isGraphLoadingAtom,
+        searchForActiveFileAtom,
+        searchParentsFnAtom,
+        searchTasksAtom,
+        lastSearchAtom
     }
-
-    return `Search ${graph.graph.nodes().length} nodes and ${graph.graph.edges().length} edges`
 })
 
-export const hasMoreTreeNodesAtom = atom((get) => {
-    const pageSize = get(pageSizeAtom)
-    const pages = get(pagesAtom)
-    return get(visibleNodesAtom).length > pageSize * pages
+export const SearchModalMolecule = molecule((mol, scope) => {
+    const scp = scope(SearchViewScope)
+    const searchMol = mol(SearchViewMolecule)
+
+    const searchResultsAtom = atom<ResultNode[]>([])
+
+    const searchResultsComputeAtom = withAtomEffect(searchResultsAtom, (get, set) => {
+        const searchQuery = get(searchMol.actualQueryAtom)
+        const isQuickLink = scp.isQuickLink
+        const graph = get(GlobalAtoms.graphAtom)
+        const separator = get(separatorAtom)
+
+        const search = (isQuickLink && searchQuery.length > 0) ? `${searchQuery} . :page | :header` : searchQuery
+
+        const searchResults = searchIndex(graph.graph, search, separator)
+        set(searchMol.updateSearchResultsAtom, searchResults)
+    })
+
+    return { searchResultsComputeAtom }
 })
 
-export const incrementPagesAtom = atom(
-    null, 
-    (get, set) => set(pagesAtom, get(pagesAtom) + 1)
+export const SearchViewMolecule = molecule((mol, scope) => {
+    const scp = scope(SearchViewScope)
+
+    const instance = Math.random()
+
+    const { lastSearchAtom } = mol(GlobalAppMolecule)
+
+    const searchQueryAtom = atomWithDefault<SearchQuery>(get => {
+        if (scp.isModal) {
+            return get(lastSearchAtom)
+        }
+
+        return {query: ""}
+    })
+
+    const actualQueryAtom = atom<string>(get => get(searchQueryAtom).query)
+    const selectedLineAtom = atom(-1)
+    const searchVisibleAtom = atom(scp.showSearch)
+    const hoveredLineAtom = atom(0)
+    const treeNodesAtom = atom<TreeNode[]>([])
+
+    const pageSizeAtom = atom(50)
+    const pagesAtom = atom(1)
+
+    // Combined derived atom to avoid multiple cascading updates
+    const searchResultsStateAtom = atom<SearchResultsState>((get) => {
+        const treeNodes = get(treeNodesAtom)
+        const pageSize = get(pageSizeAtom)
+        const pages = get(pagesAtom)
+
+        const visibleNodes = treeNodes.filter(node => node.visible)
+        const renderableNodes = visibleNodes.slice(0, pages * pageSize)
+        const hasMore = visibleNodes.length > pageSize * pages
+
+        return {
+            visibleNodes,
+            renderableNodes,
+            hasMore,
+            totalVisible: visibleNodes.length,
+            totalNodes: treeNodes.length
+        }
+    })
+
+    // Combined view state atom to eliminate multiple subscriptions
+    const searchViewStateAtom = atom<SearchViewState>((get) => {
+        const searchResults = get(searchResultsStateAtom)
+        const isLoading = get(GlobalAtoms.isGraphLoadingAtom)
+        const showSearch = get(searchVisibleAtom)
+        const version = get(GlobalAtoms.graphVersionAtom)
+
+        return {
+            searchResults,
+            isLoading,
+            showSearch,
+            version,
+            isQuickLink: scp.isQuickLink,
+            scopeName: { name: scp.name, instance: instance }
+        }
+    })
+
+    // Keep individual atoms for backward compatibility
+    const visibleNodesAtom = atom((get) => get(searchResultsStateAtom).visibleNodes)
+    const renderableTreeNodesAtom = atom((get) => get(searchResultsStateAtom).renderableNodes)
+    const hasMoreTreeNodesAtom = atom((get) => get(searchResultsStateAtom).hasMore)
+
+    const searchPlaceholderAtom = atom((get) => {
+        const { totalNodes } = get(searchResultsStateAtom)
+        const graph = get(GlobalAtoms.graphAtom)
+        if (totalNodes > 0) {
+            return `Search ${totalNodes} nodes`
+        }
+
+        return `Search ${graph.graph.nodes().length} nodes and ${graph.graph.edges().length} edges`
+    })
+
+    const incrementPagesAtom = atom(
+        null,
+        (get, set) => set(pagesAtom, get(pagesAtom) + 1)
     )
 
-export const selectedNodeAtom = atom<TreeNode | null>(get => get(treeNodesAtom)[get(selectedLineAtom)])
+    const selectedNodeAtom = atom<TreeNode | null>(get => {
+        const sel = get(selectedLineAtom)
+        if (sel == -1) return null
+        return get(treeNodesAtom)[sel]
+    })
 
-export const updateSearchResultsAtom = atom(null, (get, set, result: ResultNode[]) => {
+    const updateSearchResultsAtom = atom(null, (get, set, result: ResultNode[]) => {
+        // Calculate dynamic expand level first
+        const dynamicExpand = get(searchQueryAtom).query
+            ? Math.round(Math.max(0, 10 - result.length / 20))
+            : -1
 
-    const nodes = flattenIndex(result, get(getExpandLevel))
-
-    set(treeNodesAtom, nodes)
-
-    if (get(searchQueryAtom).query) {
-        // if there is a query, we want to expand all nodes
-        // this is a bit of magic, but indentation should expand with number of results
-        // in order to keep rendering really fast
-        // max indentation at 20 results
-        // min indentation at 200 results
-        const dynamicExpand = Math.round(Math.max(0, 10 - nodes.length / 20))
+        // Set dynamic expand level before getting the expand level
         set(dynamicExpandAtom, dynamicExpand)
-    } else {
-        // no query, show a default expand for the view
-        set(dynamicExpandAtom, -1)
-    }
 
-    set(expandVisibleNodesAtom)
-    set(selectedLineAtom, 0)
-    set(pagesAtom, 1)
-})
+        // Get the current expand level (which now includes the updated dynamic expand)
+        const expandLevel = get(getExpandLevel)
 
-export const arrowDownAtom = atom(null, (get, set) => {
-    const line = get(selectedLineAtom)
-    const nodes = get(treeNodesAtom)
-    const nextVisible = nodes.slice(line + 1).find(node => node.visible)
-    set(selectedLineAtom, nextVisible?.index ?? nodes.length - 1)
-})
+        // Flatten nodes with the correct expand level
+        const nodes = flattenIndex(result, expandLevel)
 
-export const arrowUpAtom = atom(null, (get, set) => {
-    const line = get(selectedLineAtom)
-    const nodes = get(treeNodesAtom)
-    const prevVisible = nodes.slice(0, line).reverse().find(node => node.visible)
-    set(selectedLineAtom, prevVisible?.index ?? 0)
-})
+        // Apply visibility logic immediately instead of separate update
+        const nodesWithVisibility = nodes.map(node => ({
+            ...node,
+            visible: node.indent <= expandLevel
+        }))
 
-export const selectHoveredLineAtom = atom(null, (get, set, index: number) => {
-    set(selectedLineAtom, index)
-})
+        const searchVisible = get(searchVisibleAtom)
+
+        console.debug("updateSearchResultsAtom setting atoms:", new Date().toISOString().slice(11, 23), {
+            nodesCount: nodesWithVisibility.length,
+            dynamicExpand,
+            expandLevel,
+            searchVisible
+        })
+
+        // Try to batch updates by doing them all synchronously
+        // This should minimize the number of atom recalculations
+        set(treeNodesAtom, nodesWithVisibility)
+        set(selectedLineAtom, searchVisible ? 0 : -1)
+        set(hoveredLineAtom, -1)
+        set(pagesAtom, 1)
+    })
+
+    const arrowDownAtom = atom(null, (get, set) => {
+        const line = get(selectedLineAtom)
+        const nodes = get(treeNodesAtom)
+        const nextVisible = nodes.slice(line + 1).find(node => node.visible)
+
+        set(selectedLineAtom, nextVisible?.index ?? nodes.length - 1)
+    })
+
+    const arrowUpAtom = atom(null, (get, set) => {
+        const line = get(selectedLineAtom)
+        const nodes = get(treeNodesAtom)
+        const prevVisible = nodes.slice(0, line).reverse().find(node => node.visible)
+        set(selectedLineAtom, prevVisible?.index ?? 0)
+    })
+
+    const updateHoveredLineAtom = atom(null, (get, set, index: number) => {
+        set(hoveredLineAtom, index)
+    })
+
+
 
 //  make all children  of the current node visible or invisible
-export const expandNodeAtom = atom(null, (get, set, index: number) => {
+    const expandNodeAtom = atom(null, (get, set, index: number) => {
 
-    const treeNodes = get(treeNodesAtom)
-    const startIndex = treeNodes.findIndex(it => it.index == index)
-    if (startIndex == -1) return
+        const treeNodes = get(treeNodesAtom)
+        const startIndex = treeNodes.findIndex(it => it.index == index)
+        if (startIndex == -1) return
 
-    const nodeToExpand = treeNodes[index]
-    const childVisible = treeNodes[startIndex + 1]?.visible
+        const nodeToExpand = treeNodes[index]
+        const childVisible = treeNodes[startIndex + 1]?.visible
 
-    for (let i = index + 1; i < treeNodes.length; i++) {
-        if (treeNodes[i].indent <= nodeToExpand.indent) {
-            break
+        for (let i = index + 1; i < treeNodes.length; i++) {
+            if (treeNodes[i].indent <= nodeToExpand.indent) {
+                break
+            }
+
+            if (!childVisible && treeNodes[i].indent == nodeToExpand.indent + 1) {
+                treeNodes[i].visible = !childVisible
+            } else {
+                treeNodes[i].visible = false
+            }
         }
 
-        if (!childVisible && treeNodes[i].indent == nodeToExpand.indent + 1) {
-            treeNodes[i].visible = !childVisible
-        } else {
-            treeNodes[i].visible = false
+        set(treeNodesAtom, [...treeNodes])
+    })
+
+    const userExpandLevel = atom<number | null>(null)
+    const defaultExpandLevelAtom = atom(0)
+    const dynamicExpandAtom = atom(-1)
+
+    const setDefaultExpandLevelAtom = atom(
+        (get) => get(defaultExpandLevelAtom),
+        (get, set, newValue: number) => {
+            set(defaultExpandLevelAtom, newValue)
+            set(expandVisibleNodesAtom) // Trigger the expand nodes
         }
+    )
+
+    const getExpandLevel = atom((get) => {
+        if (get(dynamicExpandAtom) > 0)
+            return get(dynamicExpandAtom)
+        return get(userExpandLevel) ?? get(defaultExpandLevelAtom)
+    })
+
+    const incExpandAtom = atom(null, (get, set) => {
+        set(userExpandLevel, get(getExpandLevel) + 1)
+        set(dynamicExpandAtom, -1)
+        set(expandVisibleNodesAtom)
+    })
+
+    const decExpandAtom = atom(null, (get, set) => {
+        set(userExpandLevel, Math.max(0, get(getExpandLevel) - 1))
+        set(dynamicExpandAtom, -1)
+        set(expandVisibleNodesAtom)
+    })
+
+    const expandVisibleNodesAtom = atom(null, (get, set) => {
+        const level = get(getExpandLevel)
+        const treeNodes = get(treeNodesAtom)
+        const newNodes = treeNodes.map(it => { return { ...it, ...{ visible: it.indent <= level } } })
+        set(treeNodesAtom, newNodes)
+    })
+
+    const resetCollapseAtom = atom(null, (get, set) => {
+        set(userExpandLevel, 0)
+        set(dynamicExpandAtom, -1)
+        set(expandVisibleNodesAtom)
+    })
+
+    return {
+            scopeName: {name: scp.name, instance: instance},
+            actualQueryAtom,
+            searchQueryAtom,
+            searchResultsStateAtom,
+            searchViewStateAtom,
+            renderableTreeNodesAtom,
+            incrementPagesAtom,
+            hasMoreTreeNodesAtom,
+            searchVisibleAtom,
+            updateSearchResultsAtom,
+            arrowUpAtom,
+            arrowDownAtom,
+            decExpandAtom,
+            incExpandAtom,
+            resetCollapseAtom,
+            selectedNodeAtom,
+            getExpandLevel,
+            searchPlaceholderAtom,
+            setDefaultExpandLevelAtom,
+            expandNodeAtom, selectedLineAtom, updateHoveredLineAtom, hoveredLineAtom
     }
-
-    set(treeNodesAtom, [...treeNodes])
 })
 
-const userExpandLevel = atom<number | null>(null)
-const defaultExpandLevelAtom = atom(0)
-const dynamicExpandAtom = atom(-1)
 
-// Create a derived atom that watches for changes
-export const setDefaultExpandLevelAtom = atom(
-    (get) => get(defaultExpandLevelAtom),
-    (get, set, newValue: number) => {
-      set(defaultExpandLevelAtom, newValue)
-      set(expandVisibleNodesAtom) // Trigger the expand nodes
-    }
-  )
-
-export const getExpandLevel = atom((get) => {
-    if (get(dynamicExpandAtom) > 0) 
-        return get(dynamicExpandAtom)
-    return get(userExpandLevel) ?? get(defaultExpandLevelAtom)
-})
-
-export const incExpandAtom = atom(null, (get, set) => {
-    set(userExpandLevel, get(getExpandLevel) + 1)
-    set(dynamicExpandAtom, -1)
-    set(expandVisibleNodesAtom)
-})
-
-export const decExpandAtom = atom(null, (get, set) => {
-    set(userExpandLevel, Math.max(0, get(getExpandLevel) - 1))
-    set(dynamicExpandAtom, -1)
-    set(expandVisibleNodesAtom)
-})
-
-export const expandVisibleNodesAtom = atom(null, (get, set) => {
-    const level = get(getExpandLevel)
-    const treeNodes = get(treeNodesAtom)
-    const newNodes = treeNodes.map(it => { return { ...it, ...{ visible: it.indent <= level } } })
-    set(treeNodesAtom, newNodes)
-})
-
-export const resetCollapseAtom = atom(null, (get, set) => {
-    set(userExpandLevel, 0)
-    set(dynamicExpandAtom, -1)
-    set(expandVisibleNodesAtom)
-})
 
 function transformToText(node: ParsedNode): TextNode {
     let tokens: ParsedTextToken[] = []
@@ -186,6 +403,24 @@ function transformToText(node: ParsedNode): TextNode {
         case "text":
             tokens = node.parsedTokens
             break
+        case "folderNote":
+            tokens = [
+                {
+                    tokenType: "obsidian_link",
+                    source: node.page.page,
+                    pageTarget: node.page.page,
+                }
+            ]
+            break
+        case "pointer":
+            tokens = [
+                {
+                    tokenType: "text",
+                    text: "⚠️ Pointer node",
+                    decoration: "none"
+                }
+            ]
+            break
     }
 
     return {
@@ -195,7 +430,9 @@ function transformToText(node: ParsedNode): TextNode {
         tags: [],
         isTask: false,
         isCompleted: false,
-        searchKey: node.searchKey
+        searchKey: node.searchKey,
+        ageDays: node.ageDays,
+        boost: node.boost
     }
 }
 
@@ -212,12 +449,14 @@ function mergeTokens(node1: TextNode, node2: TextNode): TextNode {
         location: node1.location,
         parsedTokens: tokens,
         tags: [],
+        ageDays: Math.min(node1.ageDays, node2.ageDays),
         isTask: false,
         isCompleted: false,
         searchKey: node1.searchKey
     }
 }
 
+// TODO: merged nodes are not yet ready for "production"
 function merge(node1: TreeNode, node2: ParsedNode): TreeNode {
     const existingNode = node1.node
 
@@ -235,33 +474,34 @@ export function flattenIndex(indexed: ResultNode[], defaultIndentLevel = 0): Tre
     const result: TreeNode[] = []
 
     function flatten(unsorted: ResultNode[], indent = 0, parentIndex = 0): number {
+
         const nodes = unsorted.sort((a, b) => {
-            let aboost = a.node.nodeType === "folder" ? 1000 : 0
-            let bboost = b.node.nodeType === "folder" ? 1000 : 0
-            aboost += a.node.nodeType === "page" ? 900 : 0
-            bboost += b.node.nodeType === "page" ? 900 : 0
-            aboost += a.node.nodeType === "header" ? 800 : 0
-            bboost += b.node.nodeType === "header" ? 800 : 0
-            aboost += 700 + a.children.length
-            bboost += 700 + b.children.length
-            aboost -= a.node.searchKey.length
-            bboost -= b.node.searchKey.length
+
+            // // Add node-specific boost values if they exist
+            let aboost = a.node.boost || 0
+            let bboost = b.node.boost || 0
+            //
+            // // Add other factors
+            // aboost += a.children.length
+            // bboost += b.children.length
+            // aboost -= a.node.searchKey.length
+            // bboost -= b.node.searchKey.length
 
             return bboost - aboost
         })
         
         let index = parentIndex
 
-        if (result.length > 0 && nodes.length == 1 /*&& nodes[0].node.nodeType == "page"*/) {
-            const node = nodes[0]
-            const isheader = node.node.nodeType == "page" || node.node.nodeType == "header"
-            if (isheader && node.children.length != 0) {
-                const lastresult = result[result.length - 1]
-                result[result.length - 1] = merge(lastresult, node.node)
-
-                return flatten(node.children, indent, index)
-            }
-        }
+        // if (result.length > 0 && nodes.length == 1 /*&& nodes[0].node.nodeType == "page"*/) {
+        //     const node = nodes[0]
+        //     const isheader = node.node.nodeType == "page" || node.node.nodeType == "header"
+        //     if (isheader && node.children.length != 0) {
+        //         const lastresult = result[result.length - 1]
+        //         result[result.length - 1] = merge(lastresult, node.node)
+        //
+        //         return flatten(node.children, indent, index)
+        //     }
+        // }
 
         for (const node of nodes) {
             result.push({
