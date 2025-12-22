@@ -1,13 +1,13 @@
-import {TreeNode} from '../search/SearchViewFlatten'
-import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, SearchQuery} from '../../search/search'
-import {atom, useAtomValue} from 'jotai'
-import {ParsedNode, ParsedTextToken, TextNode, TextTokenWithLocationLink} from '../../graph'
-import {createScope, molecule} from "bunshi";
-import {App} from "obsidian";
-import {GlobalAtoms} from "./global";
-import {separatorAtom} from "./settings";
-import {atomWithDefault} from "jotai/utils";
-import {withAtomEffect} from "jotai-effect";
+import { TreeNode } from '../search-common/SearchViewFlatten'
+import { advancedSearch, flattenTasks, getAllFoldersTree, ResultNode, searchIndex, searchParents, SearchQuery } from '../../search/search'
+import { atom, useAtomValue } from 'jotai'
+import { ParsedNode, ParsedTextToken, TextNode, TextTokenWithLocationLink } from '../../graph'
+import { ComponentScope, createScope, molecule } from "bunshi";
+import { App } from "obsidian";
+import { separatorAtom } from "./settings";
+import { atomWithDefault } from "jotai/utils";
+import { withAtomEffect } from "jotai-effect";
+import { GlobalAppMolecule } from './global';
 
 export type SearchResultsState = {
     visibleNodes: TreeNode[]
@@ -36,11 +36,11 @@ export type ModalQuery = {
 
 export type SearchQueryBuilder = SearchQueryBuilderBase & (ModalQuery)
 
-export const GlobalAppScope = createScope<{
-    obsidianApp: App
-}>({
-    obsidianApp: null as any as App
-})
+// export const GlobalAppScope = createScope<{
+//     obsidianApp: App
+// }>({
+//     obsidianApp: null as any as App
+// })
 
 export const SearchViewScope = createScope({
     name: "default",
@@ -49,15 +49,16 @@ export const SearchViewScope = createScope({
     isModal: true
 })
 
-export const GlobalAppMolecule = molecule((_, scope) => {
+export const GlobalSearchMolecule = molecule((mol, scope) => {
+    const { graphAtom, activeFileAtom, graphVersionAtom } = mol(GlobalAppMolecule)
 
     const searchForActiveFileAtom = atom((get) => {
-        const graph = get(GlobalAtoms.graphAtom)
-        const activeFile = get(GlobalAtoms.activeFileAtom)
+        const graph = get(graphAtom)
+        const activeFile = get(activeFileAtom)
         const separator = get(separatorAtom)
 
         return (query: string) => {
-            console.debug("Search again for active file", get(GlobalAtoms.graphVersionAtom), activeFile?.name)
+            console.debug("Search again for active file", get(graphVersionAtom), activeFile?.name)
 
             if (activeFile === undefined) {
                 return []
@@ -73,8 +74,8 @@ export const GlobalAppMolecule = molecule((_, scope) => {
     })
 
     const searchParentsFnAtom = atom((get) => {
-        const graph = get(GlobalAtoms.graphAtom)
-        const activeFile = get(GlobalAtoms.activeFileAtom)
+        const graph = get(graphAtom)
+        const activeFile = get(activeFileAtom)
 
         return (q: string) => {
             if (activeFile === undefined) {
@@ -86,8 +87,8 @@ export const GlobalAppMolecule = molecule((_, scope) => {
     })
 
     const searchTasksAtom = atom((get) => {
-        const graph = get(GlobalAtoms.graphAtom)
-        const activeFile = get(GlobalAtoms.activeFileAtom)
+        const graph = get(graphAtom)
+        const activeFile = get(activeFileAtom)
         const separator = get(separatorAtom)
 
         return (query: string) => {
@@ -106,15 +107,10 @@ export const GlobalAppMolecule = molecule((_, scope) => {
         }
     })
 
-    const lastSearchAtom = atom<SearchQuery>({query: ""})
-
     return {
-        appAtom: GlobalAtoms.appAtom,
-        isGraphLoadingAtom: GlobalAtoms.isGraphLoadingAtom,
         searchForActiveFileAtom,
         searchParentsFnAtom,
         searchTasksAtom,
-        lastSearchAtom
     }
 })
 
@@ -122,15 +118,25 @@ export const SearchModalMolecule = molecule((mol, scope) => {
     const scp = scope(SearchViewScope)
     const searchMol = mol(SearchViewMolecule)
 
+    const { graphAtom, graphVersionAtom, random } = mol(GlobalAppMolecule)
+
     const searchResultsAtom = atom<ResultNode[]>([])
 
     const searchResultsComputeAtom = withAtomEffect(searchResultsAtom, (get, set) => {
         const searchQuery = get(searchMol.actualQueryAtom)
         const isQuickLink = scp.isQuickLink
-        const graph = get(GlobalAtoms.graphAtom)
+        const graph = get(graphAtom)
+        const version = get(graphVersionAtom)
+        console.log("Graph", graph.graph.nodes().length, version, random)
         const separator = get(separatorAtom)
 
-        const search = (isQuickLink && searchQuery.length > 0) ? `${searchQuery} . :page | :header` : searchQuery
+        if (!searchQuery) {
+            const allFolders = getAllFoldersTree(graph.graph)
+            set(searchMol.updateSearchResultsAtom, allFolders)
+            return
+        }
+
+        const search = (isQuickLink && searchQuery.length > 0) ? `${searchQuery} . : page | : header` : searchQuery
 
         const searchResults = searchIndex(graph.graph, search, separator)
         set(searchMol.updateSearchResultsAtom, searchResults)
@@ -144,14 +150,15 @@ export const SearchViewMolecule = molecule((mol, scope) => {
 
     const instance = Math.random()
 
-    const { lastSearchAtom } = mol(GlobalAppMolecule)
+    const { graphAtom, graphVersionAtom, isGraphLoadingAtom } = mol(GlobalAppMolecule)
+    const lastSearchAtom = atom<SearchQuery>({ query: "" })
 
     const searchQueryAtom = atomWithDefault<SearchQuery>(get => {
         if (scp.isModal) {
             return get(lastSearchAtom)
         }
 
-        return {query: ""}
+        return { query: "" }
     })
 
     const actualQueryAtom = atom<string>(get => get(searchQueryAtom).query)
@@ -185,9 +192,9 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     // Combined view state atom to eliminate multiple subscriptions
     const searchViewStateAtom = atom<SearchViewState>((get) => {
         const searchResults = get(searchResultsStateAtom)
-        const isLoading = get(GlobalAtoms.isGraphLoadingAtom)
+        const isLoading = get(isGraphLoadingAtom)
         const showSearch = get(searchVisibleAtom)
-        const version = get(GlobalAtoms.graphVersionAtom)
+        const version = get(graphVersionAtom)
 
         return {
             searchResults,
@@ -206,7 +213,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
 
     const searchPlaceholderAtom = atom((get) => {
         const { totalNodes } = get(searchResultsStateAtom)
-        const graph = get(GlobalAtoms.graphAtom)
+        const graph = get(graphAtom)
         if (totalNodes > 0) {
             return `Search ${totalNodes} nodes`
         }
@@ -238,7 +245,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         const expandLevel = get(getExpandLevel)
 
         // Flatten nodes with the correct expand level
-        const nodes = flattenIndex(result, expandLevel)
+        const nodes = flattenIndex(result, expandLevel, !!get(searchQueryAtom).query)
 
         // Apply visibility logic immediately instead of separate update
         const nodesWithVisibility = nodes.map(node => ({
@@ -247,13 +254,6 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         }))
 
         const searchVisible = get(searchVisibleAtom)
-
-        console.debug("updateSearchResultsAtom setting atoms:", new Date().toISOString().slice(11, 23), {
-            nodesCount: nodesWithVisibility.length,
-            dynamicExpand,
-            expandLevel,
-            searchVisible
-        })
 
         // Try to batch updates by doing them all synchronously
         // This should minimize the number of atom recalculations
@@ -282,9 +282,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         set(hoveredLineAtom, index)
     })
 
-
-
-//  make all children  of the current node visible or invisible
+    //  make all children  of the current node visible or invisible
     const expandNodeAtom = atom(null, (get, set, index: number) => {
 
         const treeNodes = get(treeNodesAtom)
@@ -353,26 +351,27 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     })
 
     return {
-            scopeName: {name: scp.name, instance: instance},
-            actualQueryAtom,
-            searchQueryAtom,
-            searchResultsStateAtom,
-            searchViewStateAtom,
-            renderableTreeNodesAtom,
-            incrementPagesAtom,
-            hasMoreTreeNodesAtom,
-            searchVisibleAtom,
-            updateSearchResultsAtom,
-            arrowUpAtom,
-            arrowDownAtom,
-            decExpandAtom,
-            incExpandAtom,
-            resetCollapseAtom,
-            selectedNodeAtom,
-            getExpandLevel,
-            searchPlaceholderAtom,
-            setDefaultExpandLevelAtom,
-            expandNodeAtom, selectedLineAtom, updateHoveredLineAtom, hoveredLineAtom
+        scopeName: { name: scp.name, instance: instance },
+        actualQueryAtom,
+        searchQueryAtom,
+        searchResultsStateAtom,
+        searchViewStateAtom,
+        renderableTreeNodesAtom,
+        incrementPagesAtom,
+        hasMoreTreeNodesAtom,
+        searchVisibleAtom,
+        updateSearchResultsAtom,
+        arrowUpAtom,
+        arrowDownAtom,
+        decExpandAtom,
+        incExpandAtom,
+        resetCollapseAtom,
+        selectedNodeAtom,
+        getExpandLevel,
+        searchPlaceholderAtom,
+        setDefaultExpandLevelAtom,
+        expandNodeAtom, selectedLineAtom, updateHoveredLineAtom, hoveredLineAtom,
+        lastSearchAtom
     }
 })
 
@@ -380,7 +379,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
 
 function transformToText(node: ParsedNode): TextNode {
     let tokens: ParsedTextToken[] = []
-    switch(node.nodeType) {
+    switch (node.nodeType) {
         case "page":
             tokens = [
                 {
@@ -389,7 +388,7 @@ function transformToText(node: ParsedNode): TextNode {
                     pageTarget: node.page,
                 }
             ]
-            break   
+            break
         case "header":
             tokens = [
                 {
@@ -470,26 +469,29 @@ function merge(node1: TreeNode, node2: ParsedNode): TreeNode {
     }
 }
 
-export function flattenIndex(indexed: ResultNode[], defaultIndentLevel = 0): TreeNode[] {
+export function flattenIndex(indexed: ResultNode[], defaultIndentLevel = 0, shouldSort = true): TreeNode[] {
     const result: TreeNode[] = []
 
     function flatten(unsorted: ResultNode[], indent = 0, parentIndex = 0): number {
 
-        const nodes = unsorted.sort((a, b) => {
+        let nodes = unsorted
+        if (shouldSort) {
+            nodes = unsorted.sort((a, b) => {
 
-            // // Add node-specific boost values if they exist
-            let aboost = a.node.boost || 0
-            let bboost = b.node.boost || 0
-            //
-            // // Add other factors
-            // aboost += a.children.length
-            // bboost += b.children.length
-            // aboost -= a.node.searchKey.length
-            // bboost -= b.node.searchKey.length
+                // // Add node-specific boost values if they exist
+                let aboost = a.node.boost || 0
+                let bboost = b.node.boost || 0
+                //
+                // // Add other factors
+                // aboost += a.children.length
+                // bboost += b.children.length
+                // aboost -= a.node.searchKey.length
+                // bboost -= b.node.searchKey.length
 
-            return bboost - aboost
-        })
-        
+                return bboost - aboost
+            })
+        }
+
         let index = parentIndex
 
         // if (result.length > 0 && nodes.length == 1 /*&& nodes[0].node.nodeType == "page"*/) {

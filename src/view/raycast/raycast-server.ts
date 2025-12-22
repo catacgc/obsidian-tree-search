@@ -1,18 +1,21 @@
-import http, {IncomingMessage, Server, ServerResponse} from "http";
-import {App, Platform} from "obsidian";
-import {searchIndex} from "../../search/search";
-import {flattenIndex} from "../react-context/state";
-import {getSettings, separatorAtom} from "../react-context/settings";
+import http, { IncomingMessage, Server, ServerResponse } from "http";
+import { App, Platform } from "obsidian";
+import { searchIndex } from "../../search/search";
+import { flattenIndex } from "../react-context/state";
+import { getSettings, separatorAtom } from "../react-context/settings";
 import fs from "fs";
-import {createRaycastResponse} from "./raycast-response";
-import {GlobalAtoms, GlobalStore} from "../react-context/global";
+import { createRaycastResponse } from "./raycast-response";
+import { GlobalStore } from "../react-context/global";
+import { getDefaultInjector } from "bunshi";
+import { GlobalAppMolecule } from "../react-context/global";
 
 export class RaycastServer {
     private server: Server | null = null;
     private app: App;
 
     constructor(private readonly store: GlobalStore) {
-        this.app = store.get(GlobalAtoms.appAtom);
+        const { appAtom } = getDefaultInjector().get(GlobalAppMolecule)
+        this.app = store.get(appAtom);
     }
 
     start() {
@@ -35,39 +38,90 @@ export class RaycastServer {
             });
         }
     }
-    
+
     private getSocketFileName() {
         const vaultName = this.app.vault.getName()
         return getSettings(this.store).socketPath.replace("{vaultname}", vaultName);
     }
- 
+
     createRaycastSocket() {
         if (!Platform.isDesktopApp || !Platform.isMacOS || Platform.isMobileApp || Platform.isMobile) return;
-        
+
         if (this.server) {
             console.log("Server already running, skipping creation");
             return;
         }
 
         const requestListener = (req: IncomingMessage, res: ServerResponse) => {
-            // parse query parameters from url
-            const query = new URL(req.url || "", "http://localhost").searchParams.get("query");
-            const limit = parseInt(new URL(req.url || "", "http://localhost").searchParams.get("limit") || "100");
+            const url = new URL(req.url || "", "http://localhost");
+            const pathname = url.pathname;
+
+            // Set CORS headers for browser access
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+            res.setHeader('Content-Type', 'application/json');
+
+            // Handle OPTIONS preflight request
+            if (req.method === 'OPTIONS') {
+                res.writeHead(200);
+                res.end();
+                return;
+            }
+
+            // Handle /graph endpoint - return full graph data
+            if (pathname === '/graph') {
+                try {
+                    const { graphAtom } = getDefaultInjector().get(GlobalAppMolecule)
+                    const graph = this.store.get(graphAtom);
+
+                    // Serialize the graph data
+                    const graphData = {
+                        nodes: graph.graph.nodes().map(nodeKey => ({
+                            key: nodeKey,
+                            attributes: graph.graph.getNodeAttributes(nodeKey)
+                        })),
+                        edges: graph.graph.edges().map(edgeKey => {
+                            const [source, target] = graph.graph.extremities(edgeKey);
+                            return {
+                                source,
+                                target,
+                                attributes: graph.graph.getEdgeAttributes(edgeKey)
+                            };
+                        })
+                    };
+
+                    res.writeHead(200);
+                    res.end(JSON.stringify(graphData));
+                } catch (error) {
+                    console.error('Error serializing graph:', error);
+                    res.writeHead(500);
+                    res.end(JSON.stringify({ error: 'Failed to serialize graph data' }));
+                }
+                return;
+            }
+
+            // Handle search endpoint (default behavior)
+            const query = url.searchParams.get("query");
+            const limit = parseInt(url.searchParams.get("limit") || "100");
 
             // decode the url
             const decodedQuery = decodeURIComponent(query || "");
 
             if (!decodedQuery) {
-                res.end("No query provided  ");
+                res.writeHead(400);
+                res.end(JSON.stringify({ error: "No query provided" }));
+                return;
             }
 
-
             const separator = this.store.get(separatorAtom);
-            const graph = this.store.get(GlobalAtoms.graphAtom);
+            const { graphAtom } = getDefaultInjector().get(GlobalAppMolecule)
+            const graph = this.store.get(graphAtom);
             const result = searchIndex(graph.graph, decodedQuery, separator);
             const flattened = flattenIndex(result)
             const mapped = createRaycastResponse(this.app, flattened.slice(0, limit))
             const jsonContent = JSON.stringify(mapped);
+            res.writeHead(200);
             res.end(jsonContent);
         };
 
@@ -82,9 +136,9 @@ export class RaycastServer {
             });
 
             this.server.on('error', (err) => {
-                    console.error('Server error:', err);
-                    this.stop();
-                });
+                console.error('Server error:', err);
+                this.stop();
+            });
         } catch (error) {
             console.error('Cannot start raycast:', error);
         }

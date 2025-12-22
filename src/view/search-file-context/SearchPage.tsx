@@ -1,12 +1,12 @@
-import {useAtom, useAtomValue, useSetAtom} from "jotai";
-import {useEffect} from "react";
-import {ResultNode} from "src/search/search";
-import {SearchViewFlatten} from "./search/SearchViewFlatten";
-import {KeyComboWrapper} from "./search/KeyComboWrapper";
-import {ScopeProvider, useMolecule} from "bunshi/react";
-import {SearchViewMolecule, SearchViewScope} from "./react-context/state";
-import {GlobalAtoms} from "./react-context/global";
-import {SEARCH_ICON} from "./icons";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useEffect } from "react";
+import { ResultNode } from "src/search/search";
+import { SearchViewFlatten } from "../search-common/SearchViewFlatten";
+import { KeyComboWrapper } from "../search-common/KeyComboWrapper";
+import { ScopeProvider, useMolecule } from "bunshi/react";
+import { SearchViewMolecule, SearchViewScope } from "../react-context/state";
+import { SEARCH_ICON } from "../icons";
+import { GlobalAppMolecule } from "../react-context/global";
 
 type SearchPageProps = {
     sectionName: string
@@ -16,14 +16,15 @@ type SearchPageProps = {
     children?: React.ReactNode
 }
 const SearchPage = (props: SearchPageProps) => {
-    return <ScopeProvider scope={SearchViewScope} value={{showSearch: props.showSearch || false, isQuickLink: false, name: props.sectionName, isModal: false}}>
-        <_SearchPage {...props}/>
+    return <ScopeProvider scope={SearchViewScope} value={{ showSearch: props.showSearch || false, isQuickLink: false, name: props.sectionName, isModal: false }}>
+        <_SearchPage {...props} />
     </ScopeProvider>
 }
 
 const _SearchPage = (props: SearchPageProps) => {
     const { actualQueryAtom, searchVisibleAtom, setDefaultExpandLevelAtom, updateSearchResultsAtom, scopeName } = useMolecule(SearchViewMolecule)
-    const [pin, setPin] = useAtom(GlobalAtoms.pinAtom);
+    const { pinAtom } = useMolecule(GlobalAppMolecule)
+    const [pin, setPin] = useAtom(pinAtom);
 
     const [showSearch, setShowSearch] = useAtom(searchVisibleAtom)
     const updateSearchResults = useSetAtom(updateSearchResultsAtom)
@@ -34,13 +35,13 @@ const _SearchPage = (props: SearchPageProps) => {
         setDefaultExpand(props.maxExpand || 0)
     }, [])
 
-    const activeFile = useAtomValue(GlobalAtoms.activeFileAtom)
-    const version = useAtomValue(GlobalAtoms.graphVersionAtom)
+    const { activeFileAtom, graphVersionAtom } = useMolecule(GlobalAppMolecule)
+    const activeFile = useAtomValue(activeFileAtom)
+    const version = useAtomValue(graphVersionAtom)
 
     useEffect(() => {
         if (props.searchFn) {
             const results = props.searchFn(actualQuery)
-            console.debug("Set results: ", version, scopeName, results)
             updateSearchResults(results)
         }
     }, [version, activeFile, actualQuery, scopeName.instance])

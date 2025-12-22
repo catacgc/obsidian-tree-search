@@ -1,8 +1,10 @@
-import {MarkdownPostProcessorContext, MarkdownRenderChild, parseYaml, TFile} from "obsidian";
-import {createRoot} from "react-dom/client";
-import {GraphContextProvider} from "../react-context/GraphContextProvider";
-import {InlineMarkdownResults} from "./InlineMarkdownResults";
-import {GlobalAtoms, GlobalStore} from "../react-context/global";
+import { MarkdownPostProcessorContext, MarkdownRenderChild, parseYaml, TFile } from "obsidian";
+import { createRoot } from "react-dom/client";
+import { GraphContextProvider } from "../react-context/GraphContextProvider";
+import { InlineMarkdownResults } from "./InlineMarkdownResults";
+import { getDefaultInjector } from "bunshi";
+import { GlobalAppMolecule } from "../react-context/global";
+import { getDefaultStore } from "jotai";
 
 export class MarkdownContextSettings {
     depth: number
@@ -13,21 +15,20 @@ export class MarkdownContextSettings {
     name?: string
 }
 
-export class ContextCodeBlock extends MarkdownRenderChild {
+export class MarkdownCodeBlock extends MarkdownRenderChild {
     constructor(private source: string,
-                private context: MarkdownPostProcessorContext,
-                element: HTMLElement,
-                private store: GlobalStore
+        private context: MarkdownPostProcessorContext,
+        element: HTMLElement,
+        private store: ReturnType<typeof getDefaultStore>
     ) {
         super(element);
     }
 
     async onload() {
-        this.containerEl.createEl("h1", {text: ""});
+        this.containerEl.createEl("h1", { text: "" });
         const root = createRoot(this.containerEl);
 
-
-        let app = this.store.get(GlobalAtoms.appAtom);
+        let app = this.store.get(getDefaultInjector().get(GlobalAppMolecule).appAtom);
         if (!app) return
 
         const findHeading = () => {
@@ -90,7 +91,7 @@ export class ContextCodeBlock extends MarkdownRenderChild {
                 {hasErrors && (
                     <div className="context-block-warning">
                         {noQueriableSource && <p>Please provide a valid "file" or "query" setting</p>}
-                        {unexpectedKeys.length > 0 && <p>Unknown settings found: {unexpectedKeys.join(', ')}</p>}   
+                        {unexpectedKeys.length > 0 && <p>Unknown settings found: {unexpectedKeys.join(', ')}</p>}
                         <p>Valid settings are:</p>
                         <ul>
                             {validKeys.map(key => (
@@ -99,7 +100,7 @@ export class ContextCodeBlock extends MarkdownRenderChild {
                         </ul>
                     </div>
                 )}
-                {!hasErrors && <InlineMarkdownResults settings={settings}/>}
+                {!hasErrors && <InlineMarkdownResults settings={settings} />}
             </GraphContextProvider>
         );
     }

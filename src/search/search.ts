@@ -1,6 +1,6 @@
-import {DirectedGraphOfNotes, ParsedNode} from "../graph";
-import {firstPassInclude, matchQuery, parseQuery, QueryExpr} from "./query";
-import {TFile} from "obsidian";
+import { DirectedGraphOfNotes, ParsedNode } from "../graph";
+import { firstPassInclude, matchQuery, parseQuery, QueryExpr } from "./query";
+import { TFile } from "obsidian";
 
 export type ResultNode = {
     node: ParsedNode,
@@ -9,11 +9,11 @@ export type ResultNode = {
 }
 
 function filterTreeByWord(
-    node: ResultNode, 
-    expr: QueryExpr, 
+    node: ResultNode,
+    expr: QueryExpr,
     showOnlyMatchingChildren = true,
     pruneMatchingTree = false): ResultNode | null {
-    
+
     const nodeMatches = matchQuery(node.node, expr)
     if (!nodeMatches && pruneMatchingTree) {
         return null
@@ -42,7 +42,7 @@ function filterTreeByWord(
 
 function isPageOrHeaderOrFolder(expr: QueryExpr): boolean {
     return (expr.type == "modifier" && (expr.value == ":page" || expr.value == ":header" || expr.value == ":folder"))
-    || (expr.type == "or" && expr.exprs.every(e => isPageOrHeaderOrFolder(e)))
+        || (expr.type == "or" && expr.exprs.every(e => isPageOrHeaderOrFolder(e)))
 }
 
 function isNegation(expr: QueryExpr): boolean {
@@ -91,7 +91,7 @@ function buildTree(node: string, graph: DirectedGraphOfNotes, roots: Map<string,
             childNode = buildTree(edge.target, graph, roots, traversedAlready)
         }
 
-        childNode.node = {...childNode.node, ...{location: edge.attributes.location}}
+        childNode.node = { ...childNode.node, ...{ location: edge.attributes.location } }
         childNode.parents.push(newNode.node.location.path)
 
         newNode.children.push(childNode)
@@ -115,7 +115,7 @@ export function searchParents(graph: DirectedGraphOfNotes, file: TFile): ResultN
         const newNode = {
             value: edge.source,
             children: [],
-            node: {...attrs, ...{location: edge.attributes.location}},
+            node: { ...attrs, ...{ location: edge.attributes.location } },
             parents: [],
             index: 0
         }
@@ -127,9 +127,9 @@ export function searchParents(graph: DirectedGraphOfNotes, file: TFile): ResultN
 
 
 export function advancedSearch(graph: DirectedGraphOfNotes,
-                               exactRef: string, 
-                               query: string,
-                               separator: string): ResultNode[] {
+    exactRef: string,
+    query: string,
+    separator: string): ResultNode[] {
 
     const node = exactRef.toLowerCase()
     if (!graph.hasNode(node)) return []
@@ -163,7 +163,7 @@ export function flattenTasks(nodes: ResultNode[]): IndexedResult {
     const result: ResultNode[] = []
     search(nodes, result)
 
-    return {nodes: result, total: 0}
+    return { nodes: result, total: 0 }
 }
 
 export type IndexedResult = { nodes: ResultNode[], total: number }
@@ -179,9 +179,9 @@ export function searchIndex(graph: DirectedGraphOfNotes, qs: string, separator: 
 
     const firstPass = expressions[0]
 
-    let firstPageCandidates =  graph
-            .filterNodes((_, attrs) => attrs.nodeType !== "pointer" && firstPassInclude(attrs, firstPass))
-            .sort((a, b) => b.length - a.length);
+    let firstPageCandidates = graph
+        .filterNodes((_, attrs) => attrs.nodeType !== "pointer" && firstPassInclude(attrs, firstPass))
+        .sort((a, b) => b.length - a.length);
 
     const traversed = new Set<string>()
 
@@ -205,4 +205,87 @@ export type SearchQuery = {
     query: string,
     file?: string,
     heading?: string
+}
+
+export function getAllFoldersTree(graph: DirectedGraphOfNotes): ResultNode[] {
+    const nodes = graph.mapNodes((key, attrs) => {
+        return attrs
+    }).filter(it => it.nodeType == "page" || it.nodeType == "folder")
+
+    const nodeMap = new Map<string, ResultNode>()
+    const roots: ResultNode[] = []
+
+    // Create ResultNodes for all pages and folders
+    nodes.forEach(node => {
+        const resultNode: ResultNode = {
+            node: node,
+            children: [],
+            parents: []
+        }
+        // Use the file path as the key. 
+        // For folders, path is "folder/subfolder"
+        // For pages, location.path is "folder/subfolder/file.md"
+        const path = node.nodeType === "folder" ? node.path : node.location.path
+        nodeMap.set(path, resultNode)
+    })
+
+    // Build the tree
+    for (const resultNode of nodeMap.values()) {
+        const node = resultNode.node
+        const path = node.nodeType === "folder" ? node.path : node.location.path
+
+        // Find parent path
+        const parts = path.split("/")
+        if (parts.length > 1) {
+            // Has parent
+            const parentPath = parts.slice(0, -1).join("/")
+            const parentNode = nodeMap.get(parentPath)
+
+            if (parentNode) {
+                parentNode.children.push(resultNode)
+                resultNode.parents.push(parentPath)
+            } else {
+                // Parent not found in map (maybe it's a root folder that wasn't created as a node?)
+                // Or maybe the parent folder node doesn't exist in the graph for some reason.
+                // In this case, treat as root or try to find a higher level parent?
+                // For now, let's add to roots if direct parent is missing, 
+                // but ideally all folder nodes should exist if they contain files.
+                // However, if we just add to roots, we might have a flat list if folders are missing.
+                // Let's assume folders exist.
+                roots.push(resultNode)
+            }
+        } else if (parts.length == 1) {
+            // Is root
+            resultNode.parents.push("/")
+            const parentNode = nodeMap.get("/")
+            parentNode?.children.push(resultNode)
+            // roots.push(resultNode)
+        }
+        else {
+            // Is root
+            roots.push(resultNode)
+        }
+    }
+
+    // Sort children and roots
+    const sortFn = (a: ResultNode, b: ResultNode) => {
+        // Folders first, then files
+        if (a.node.nodeType === "folder" && b.node.nodeType !== "folder") return -1
+        if (a.node.nodeType !== "folder" && b.node.nodeType === "folder") return 1
+
+        // Alphabetical
+        const nameA = a.node.nodeType === "folder" ? a.node.name : (a.node.nodeType === "page" ? a.node.page : "")
+        const nameB = b.node.nodeType === "folder" ? b.node.name : (b.node.nodeType === "page" ? b.node.page : "")
+        return nameA.localeCompare(nameB)
+    }
+
+    const sortRecursive = (node: ResultNode) => {
+        node.children.sort(sortFn)
+        node.children.forEach(sortRecursive)
+    }
+
+    roots.sort(sortFn)
+    roots.forEach(sortRecursive)
+
+    return roots
 }

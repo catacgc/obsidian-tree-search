@@ -1,16 +1,18 @@
-import {Modal} from "obsidian";
-import {createRoot, Root} from "react-dom/client";
-import {GraphContextProvider} from "../../react-context/GraphContextProvider";
-import {SearchModalContainer} from "../../search/SearchModalContainer";
+import { Modal } from "obsidian";
+import { createRoot, Root } from "react-dom/client";
+import { GraphContextProvider } from "../../react-context/GraphContextProvider";
+import { SearchModalContainer } from "../SearchModalContainer";
 import React from "react";
-import {getDefaultStore} from "jotai";
-import {GlobalAtoms} from "../../react-context/global";
+import { getDefaultStore } from "jotai";
+import { getDefaultInjector } from "bunshi";
+import { GlobalAppMolecule } from "../../react-context/global";
 
 export class QuickLinkModal extends Modal {
     root: Root | null = null;
 
     constructor(private store: ReturnType<typeof getDefaultStore>) {
-        super(store.get(GlobalAtoms.appAtom));
+        const { appAtom } = getDefaultInjector().get(GlobalAppMolecule)
+        super(store.get(appAtom));
 
         this.modalEl.addClass("tree-search-modal");
         this.contentEl.addClass("tree-search-modal-content");
@@ -34,13 +36,13 @@ export class QuickLinkModal extends Modal {
             inputEl?.select();
         }, 0);
 
-        this.store.set(GlobalAtoms.currentModalAtom, this)
+        this.store.set(getDefaultInjector().get(GlobalAppMolecule).currentModalAtom, this)
 
     }
 
     async onClose() {
         this.root?.unmount();
 
-        this.store.set(GlobalAtoms.currentModalAtom, null)
+        this.store.set(getDefaultInjector().get(GlobalAppMolecule).currentModalAtom, null)
     }
 }

@@ -1,35 +1,33 @@
-import {App, debounce, EventRef, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf} from 'obsidian';
+import { App, debounce, EventRef, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf } from 'obsidian';
 
-import {SEARCH_VIEW, SearchViewPanel} from './view/search/SearchViewPanel';
-import {QuickLinkModal} from './view/search-modal/link-selector/QuickLinkModal';
-import {getAPI} from "obsidian-dataview";
+import { SEARCH_VIEW, SearchViewPanel } from './view/search-view-panel/search-view-panel';
+import { QuickLinkModal } from './view/search-modal/link-selector/QuickLinkModal';
+import { getAPI } from "obsidian-dataview";
 
-import {IndexedTree} from "./indexing/indexed-tree";
-import {FILE_CONTEXT, FileContextView} from "./view/file-context/file-context";
-import {ContextCodeBlock} from "./view/markdown-code-block/ContextCodeBlock";
-import {SearchModal} from "./view/search-modal/SearchModal";
-import {highlightLine, insertLine, moveToFolder, openFileByName, revealFolder, showFolder} from './obsidian-utils';
-import {createStore} from 'jotai';
-import {getSettings, updateSettings} from './view/react-context/settings';
-import {RaycastServer} from './view/raycast/raycast-server';
-import {MarkdownIndexer} from './indexing/markdown';
-import {CanvasIndexer} from './indexing/canvas';
+import { IndexedTree } from "./indexing/indexed-tree";
+import { FILE_CONTEXT, FileContextView } from "./view/search-file-context/file-context";
+import { MarkdownCodeBlock } from "./view/search-markdown-code-block/markdown-code-block";
+import { SearchModal } from "./view/search-modal/search-modal";
+import { highlightLine, insertLine, moveToFolder, openFileByName, revealFolder, showFolder } from './obsidian-utils';
+import { createStore } from 'jotai';
+import { getSettings, updateSettings } from './view/react-context/settings';
+import { RaycastServer } from './view/raycast/raycast-server';
+import { MarkdownIndexer } from './indexing/markdown';
+import { CanvasIndexer } from './indexing/canvas';
 import './view/styles.css';
-import {GlobalAtoms} from "./view/react-context/global";
-import {resetDefaultInjector} from "bunshi";
+import { GlobalAppMolecule } from "./view/react-context/global";
+import { getDefaultInjector, MoleculeInterface, resetDefaultInjector } from "bunshi";
 
 export default class TreeSearchPlugin extends Plugin {
     index: IndexedTree
     private changedRef: EventRef
     private finishedRef: EventRef;
     private server: RaycastServer | null = null;
-    globalStore = createStore();
     private refreshInterval: number | null = null;
 
     async onunload() {
         console.log("Cleaning up after")
 
-        this.globalStore = createStore()
 
         this.changedRef && this.app.metadataCache.offref(this.changedRef)
         this.finishedRef && this.app.metadataCache.offref(this.finishedRef)
@@ -41,8 +39,9 @@ export default class TreeSearchPlugin extends Plugin {
 
     async onload() {
         resetDefaultInjector()
-        this.globalStore = createStore()
-        this.globalStore.set(GlobalAtoms.appAtom, this.app)
+        const { setApp } = getDefaultInjector().get(GlobalAppMolecule)
+
+        setApp(this.app)
 
         if (!await this.waitForDataview()) {
             // @ts-ignore
@@ -57,19 +56,20 @@ export default class TreeSearchPlugin extends Plugin {
         }
 
         console.debug("Enabling tree search; dataview index ready")
+        const { store } = getDefaultInjector().get(GlobalAppMolecule)
 
         const markdown = new MarkdownIndexer(api, this.app);
         const canvas = new CanvasIndexer(this.app);
-        this.index = new IndexedTree(this.globalStore, markdown, canvas);
+        this.index = new IndexedTree(store, markdown, canvas);
 
         this.registerView(
             SEARCH_VIEW,
-            (leaf) => new SearchViewPanel(leaf, this.globalStore)
+            (leaf) => new SearchViewPanel(leaf, store)
         );
 
         this.registerView(
             FILE_CONTEXT,
-            (leaf) => new FileContextView(leaf, this.globalStore)
+            (leaf) => new FileContextView(leaf, store)
         );
 
         this.addCommand({
@@ -84,10 +84,10 @@ export default class TreeSearchPlugin extends Plugin {
             callback: () => this.activateView(FILE_CONTEXT)
         });
 
-        const quickLinkModal = new QuickLinkModal(this.globalStore);
+        const quickLinkModal = new QuickLinkModal(store);
         quickLinkModal.setTitle("Insert Link");
 
-        const searchModal = new SearchModal(this.globalStore);
+        const searchModal = new SearchModal(store);
         searchModal.setTitle("Search");
 
         this.addCommand({
@@ -119,12 +119,13 @@ export default class TreeSearchPlugin extends Plugin {
         this.addSettingTab(new SettingsTab(this.app, this));
         await this.loadSettings();
 
+        const { isGraphLoadingAtom } = getDefaultInjector().get(GlobalAppMolecule)
+
         /**
          * Load the graph when the plugin is loaded
          */
-        const store = this.globalStore
-        store.sub(GlobalAtoms.isGraphLoadingAtom, async () => {
-            const reload = store.get(GlobalAtoms.isGraphLoadingAtom)
+        store.sub(isGraphLoadingAtom, async () => {
+            const reload = store.get(isGraphLoadingAtom)
 
             // anything changed
             if (reload) {
@@ -134,10 +135,11 @@ export default class TreeSearchPlugin extends Plugin {
         })
 
         this.refreshInterval = setInterval(() => {
-            const loading = store.get(GlobalAtoms.isGraphLoadingAtom)
-            const graph = store.get(GlobalAtoms.graphAtom)
-            
-            if (!loading && graph.graph.nodes().length === 0) store.set(GlobalAtoms.isGraphLoadingAtom, true)
+            const loading = store.get(isGraphLoadingAtom)
+            const { graphAtom } = getDefaultInjector().get(GlobalAppMolecule)
+            const graph = store.get(graphAtom)
+
+            if (!loading && graph.graph.nodes().length === 0) store.set(isGraphLoadingAtom, true)
 
 
         }, 2000, 5);
@@ -148,13 +150,13 @@ export default class TreeSearchPlugin extends Plugin {
         }, 200, true);
 
         this.registerEvent(this.app.vault.on('modify', async (file) => {
-            if (file instanceof TFile) {    
+            if (file instanceof TFile) {
                 debouncer(file)
             }
         }))
 
         this.registerMarkdownCodeBlockProcessor("tree-context", (source, element, context) => {
-            context.addChild(new ContextCodeBlock(source, context, element, this.globalStore));
+            context.addChild(new MarkdownCodeBlock(source, context, element, store));
         });
 
         // this will handle the tree-search-uri protocol coming from raycast
@@ -166,7 +168,7 @@ export default class TreeSearchPlugin extends Plugin {
                     end: { line: parseInt(uri.el), ch: parseInt(uri.ec) }
                 }
             }
-            
+
             if (uri.raycastaction === "insert") {
                 await insertLine(this.app, location)
             } else if (uri.raycastaction == "revealFolder") {
@@ -180,7 +182,7 @@ export default class TreeSearchPlugin extends Plugin {
             }
         })
 
-        this.server = new RaycastServer(this.globalStore)
+        this.server = new RaycastServer(store)
         this.server.start()
 
         return true
@@ -216,12 +218,14 @@ export default class TreeSearchPlugin extends Plugin {
     }
 
     async loadSettings() {
-        updateSettings(this.globalStore, await this.loadData())
+        const { store } = getDefaultInjector().get(GlobalAppMolecule)
+        updateSettings(store, await this.loadData())
         await this.saveSettings(); // do this to make sure to create data.json
     }
 
     async saveSettings() {
-        await this.saveData(getSettings(this.globalStore));
+        const { store } = getDefaultInjector().get(GlobalAppMolecule)
+        await this.saveData(getSettings(store));
     }
 }
 
@@ -234,7 +238,8 @@ class SettingsTab extends PluginSettingTab {
     }
 
     display(): void {
-        const settings = getSettings(this.plugin.globalStore)
+        const { store } = getDefaultInjector().get(GlobalAppMolecule)
+        const settings = getSettings(store)
         const { containerEl } = this;
 
         containerEl.empty();

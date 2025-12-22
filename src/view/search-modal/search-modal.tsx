@@ -1,15 +1,18 @@
-import {Modal} from "obsidian";
-import {createRoot, Root} from "react-dom/client";
-import {GraphContextProvider} from "../react-context/GraphContextProvider";
-import {SearchModalContainer} from "../search/SearchModalContainer";
-import {GlobalAtoms, GlobalStore} from "../react-context/global";
+import { Modal } from "obsidian";
+import { createRoot, Root } from "react-dom/client";
+import { GraphContextProvider } from "../react-context/GraphContextProvider";
+import { SearchModalContainer } from "./SearchModalContainer";
+import { GlobalStore } from "../react-context/global";
+import { getDefaultInjector } from "bunshi";
+import { GlobalAppMolecule } from "../react-context/global";
 
 export class SearchModal extends Modal {
 
     root: Root | null = null;
 
     constructor(private store: GlobalStore) {
-        super(store.get(GlobalAtoms.appAtom));
+        const { appAtom } = getDefaultInjector().get(GlobalAppMolecule)
+        super(store.get(appAtom));
 
         this.modalEl.addClass("tree-search-modal");
         this.contentEl.addClass("tree-search-modal-content");
@@ -22,7 +25,7 @@ export class SearchModal extends Modal {
             <GraphContextProvider store={this.store}>
                 <div className="tree-search-modal-container">
                     <div className="workspace-leaf-content">
-                        <SearchModalContainer isQuickLink={false}/>
+                        <SearchModalContainer isQuickLink={false} />
                     </div>
                 </div>
             </GraphContextProvider>
@@ -35,11 +38,13 @@ export class SearchModal extends Modal {
             inputEl?.focus();
         }, 0);
 
-        this.store.set(GlobalAtoms.currentModalAtom, this)
+        const { currentModalAtom } = getDefaultInjector().get(GlobalAppMolecule)
+        this.store.set(currentModalAtom, this)
     }
 
     async onClose() {
-        this.store.set(GlobalAtoms.currentModalAtom, null)
+        const { currentModalAtom } = getDefaultInjector().get(GlobalAppMolecule)
+        this.store.set(currentModalAtom, null)
         this.root?.unmount();
     }
 }

@@ -1,7 +1,7 @@
 import { reverseMarkdownParsing } from "../copy";
-import { TreeNode } from "../search/SearchViewFlatten";
+import { TreeNode } from "../search-common/SearchViewFlatten";
 import { ObsidianLinkToken, ParsedTextToken } from "src/graph";
-import {App} from "obsidian";
+import { App } from "obsidian";
 
 export interface VaultResults {
     vault: string;
@@ -72,10 +72,10 @@ export function createRaycastResponse(app: App, results: TreeNode[]): VaultResul
         vault: vault,
         results: results.map((result, index) => {
             const actions: RaycastAction[] = []
-            
+
             const ret = {
                 title: renderTitleAndAge(result, actions, app),
-                level: result.indent,   
+                level: result.indent,
                 index: result.index,
                 nodeType: result.node.nodeType,
                 actions: actions
@@ -84,7 +84,7 @@ export function createRaycastResponse(app: App, results: TreeNode[]): VaultResul
             ret.actions = [...ret.actions, ...getDefaultActions(result, vault)]
 
             return ret;
-    })
+        })
     }
 }
 
@@ -152,7 +152,7 @@ function renderTitle(result: TreeNode, actions: RaycastAction[], app: App): stri
         case "page":
             actions.push({
                 type: "browse",
-                url: getOpenUrl({tokenType: "obsidian_link", source: result.node.page, pageTarget: result.node.page}, vault),
+                url: getOpenUrl({ tokenType: "obsidian_link", source: result.node.page, pageTarget: result.node.page }, vault),
                 title: `Open ${result.node.page}`,
                 icon: Icons.blankDocument,
                 shortcut: { key: "enter", modifiers: [] }
@@ -177,7 +177,7 @@ function renderTitle(result: TreeNode, actions: RaycastAction[], app: App): stri
 
             actions.push({
                 type: "browse",
-                url: getOpenUrl({tokenType: "obsidian_link", source: result.node.folderNote, pageTarget: result.node.folderNote}, vault),
+                url: getOpenUrl({ tokenType: "obsidian_link", source: result.node.folderNote, pageTarget: result.node.folderNote }, vault),
                 title: folderNoteExists ? `Open ${result.node.folderNote}` : `Create Folder Note ${result.node.folderNote}`,
                 icon: Icons.blankDocument
             })
@@ -218,7 +218,7 @@ function getHighlightUrl(item: TreeNode["node"]["location"], vault: string): str
 
 function getOpenUrl(item: ObsidianLinkToken, vault: string): string {
     const target = item.pageTarget + (item.headerName ? `#${item.headerName}` : "")
-            
+
     const uri = `raycastaction=open&vault=${vault}&filepath=${target}`;
     return `obsidian://tree-search-uri?${encodeURI(uri)}`;
 }
@@ -227,10 +227,10 @@ function nodeRenderer(
     tokens: ParsedTextToken[],
     actions: RaycastAction[],
     vault: string
-  ): string {
-  
+): string {
+
     if (tokens.length == 0) return "";
-  
+
     const token = tokens[0];
 
     switch (token.tokenType) {
@@ -270,7 +270,7 @@ function nodeRenderer(
                     icon: Icons.blankDocument
                 }
             );
-            return  "🔹" + token.source + nodeRenderer(tokens.slice(1), actions, vault);
+            return "🔹" + token.source + nodeRenderer(tokens.slice(1), actions, vault);
         case "link":
             actions.push(
                 {
@@ -284,4 +284,4 @@ function nodeRenderer(
         case "image":
             return "🖼️ " + (token.alt || token.src) + nodeRenderer(tokens.slice(1), actions, vault);
     }
-  }
+}

@@ -1,4 +1,4 @@
-import { App, TFile } from 'obsidian';
+import { App, TFile, TFolder } from 'obsidian';
 import { DvList } from './markdown';
 import { Indexer } from './indexed-tree';
 import { HeaderNode, NotesGraph, PageNode, ParsedNode, toLocation, Location } from 'src/graph';
@@ -13,29 +13,29 @@ interface CanvasBox {
 }
 
 type CanvasNode = {
-  id: string;
-  type: 'text' | 'file' | 'link' | 'group';
-  color?: string;
-  text?: string;
-  file?: string;
-  subpath?: string;
-  url?: string;
-  label?: string;
+    id: string;
+    type: 'text' | 'file' | 'link' | 'group';
+    color?: string;
+    text?: string;
+    file?: string;
+    subpath?: string;
+    url?: string;
+    label?: string;
 } & CanvasBox;
 
 interface CanvasEdge {
-  id: string;
-  fromNode: string;
-  fromSide: 'top' | 'right' | 'bottom' | 'left';
-  toNode: string;
-  toSide: 'top' | 'right' | 'bottom' | 'left';
-  color?: string;
-  label?: string;
+    id: string;
+    fromNode: string;
+    fromSide: 'top' | 'right' | 'bottom' | 'left';
+    toNode: string;
+    toSide: 'top' | 'right' | 'bottom' | 'left';
+    color?: string;
+    label?: string;
 }
 
 export interface CanvasData {
-  nodes: CanvasNode[];
-  edges: CanvasEdge[];
+    nodes: CanvasNode[];
+    edges: CanvasEdge[];
 }
 
 interface CanvasFile {
@@ -60,7 +60,7 @@ export interface NodeTextLine {
     location: Location;
     box: CanvasBox,
     parent?: NodeTextLine
-    type: 'header'  | 'list'
+    type: 'header' | 'list'
     task?: 'task' | 'completed'
     indent: number
 }
@@ -76,7 +76,7 @@ function parseNode(node: CanvasNode, path: string): ParsedCanvasNode {
                     text: `[[${basename}${node.subpath ? `${node.subpath}` : ''}]]`,
                     location: {
                         path: path,
-                        position: {start: {line: 0, ch: 0}, end: {line: 0, ch: 0}},
+                        position: { start: { line: 0, ch: 0 }, end: { line: 0, ch: 0 } },
                         canvasNode: node.id
                     },
                     box: {
@@ -100,7 +100,7 @@ function parseNode(node: CanvasNode, path: string): ParsedCanvasNode {
                     text: `${node.label}`,
                     location: {
                         path: path,
-                        position: {start: {line: 0, ch: 0}, end: {line: 0, ch: 0}},
+                        position: { start: { line: 0, ch: 0 }, end: { line: 0, ch: 0 } },
                         canvasNode: node.id
                     },
                     box: {
@@ -194,7 +194,7 @@ export class CanvasIndexer implements Indexer<TFile> {
         try {
             // Read the file content
             const content = await this.app.vault.read(source);
-            
+
             // Parse the JSON content
             canvasData = JSON.parse(content) as CanvasData;
         } catch (error) {
@@ -202,24 +202,30 @@ export class CanvasIndexer implements Indexer<TFile> {
             return graph;
         }
 
-        return parseCanvasData(source.path, source.basename, canvasData, graph)
+        return parseCanvasData(source, canvasData, graph)
     }
 }
 
-export function parseCanvasData(path: string, basename: string, canvasData: CanvasData, graph: NotesGraph): NotesGraph {
+export function parseCanvasData(source: TFile, canvasData: CanvasData, graph: NotesGraph): NotesGraph {
     // map the canvas text nodes to dvlist
-    const canvas: CanvasFile = {data: canvasData, path: path};
+    const canvas: CanvasFile = { data: canvasData, path: source.path };
 
     const parsed: ParsedCanvasFile = {
-        nodes: canvas.data.nodes.map(node => parseNode(node, path)),
+        nodes: canvas.data.nodes.map(node => parseNode(node, source.path)),
         edges: canvas.data.edges,
-        path: path,
-        basename: `${basename}.canvas` // obsidian chooses to have a different convention for canvas files
+        path: source.path,
+        basename: `${source.basename}.canvas` // obsidian chooses to have a different convention for canvas files
     }
 
     const withParents = addGroupParents(parsed)
 
     const pageNode = createCanvasNode(withParents, graph)
+
+    if (source.parent instanceof TFolder) {
+        const folderNode = graph.createFolderNode(source.parent)
+        graph.addOrUpdateNode(folderNode)
+        graph.addChild(folderNode, pageNode, pageNode.location, source.stat.mtime)
+    }
 
     for (const node of withParents.nodes) {
         createNodes(node.lines, pageNode, graph)
@@ -237,7 +243,7 @@ function createCanvasNode(page: ParsedCanvasFile, graph: NotesGraph): PageNode {
         tags: [],
         location: {
             path: page.path,
-            position: {start: {line: 0, ch: 0}, end: {line: 0, ch: 0}}
+            position: { start: { line: 0, ch: 0 }, end: { line: 0, ch: 0 } }
         },
         searchKey: `${page.basename}`.toLowerCase(),
         boost: 0, // Default boost for canvas nodes
@@ -252,13 +258,13 @@ function createCanvasNode(page: ParsedCanvasFile, graph: NotesGraph): PageNode {
 
 function addGroupParents(parsed: ParsedCanvasFile): ParsedCanvasFile {
     for (const node of parsed.nodes) {
-        const groupParent = parsed.nodes.find(groupCandidate =>{
+        const groupParent = parsed.nodes.find(groupCandidate => {
             if (groupCandidate.block.type != 'group') {
                 return false;
             }
-    
+
             return groupCandidate.block.x < node.block.x && groupCandidate.block.x + groupCandidate.block.width > node.block.x + node.block.width
-            && groupCandidate.block.y < node.block.y && groupCandidate.block.y + groupCandidate.block.height > node.block.y + node.block.height
+                && groupCandidate.block.y < node.block.y && groupCandidate.block.y + groupCandidate.block.height > node.block.y + node.block.height
         })
 
         node.lines = addParentsWithinNode(node.lines, groupParent?.lines[0])
@@ -304,10 +310,10 @@ function addParentsWithinNode(lines: NodeTextLine[], groupParent?: NodeTextLine)
 
 // not interested in plain text or random paragraphs
 function shouldInclude(text: string) {
-	return text.includes("[[")
-		|| text.includes('http')
-		|| text.includes('![[')
-		|| text.includes('#')
+    return text.includes("[[")
+        || text.includes('http')
+        || text.includes('![[')
+        || text.includes('#')
         || text.includes('- [')
-		;
+        ;
 }

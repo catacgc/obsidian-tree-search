@@ -1,9 +1,10 @@
-import {NotesGraph} from "../graph";
-import {TFile, TFolder} from "obsidian";
-import {MarkdownIndexer} from "./markdown";
-import {getSettings, TreeSearchSettings} from "../view/react-context/settings";
-import {CanvasIndexer} from "./canvas";
-import {GlobalAtoms, GlobalStore} from "../view/react-context/global";
+import { NotesGraph } from "../graph";
+import { TFile, TFolder } from "obsidian";
+import { MarkdownIndexer } from "./markdown";
+import { getSettings, TreeSearchSettings } from "../view/react-context/settings";
+import { CanvasIndexer } from "./canvas";
+import { GlobalAppMolecule, GlobalStore } from "../view/react-context/global";
+import { getDefaultInjector } from "bunshi";
 
 export interface Indexer<T> {
 	index(source: T, graph: NotesGraph, settings: TreeSearchSettings): Promise<NotesGraph>
@@ -11,13 +12,13 @@ export interface Indexer<T> {
 
 export class IndexedTree {
 	private graph: NotesGraph;
-    private isLoading = false;
+	private isLoading = false;
 	private version = 0;
 
-    constructor(private store: GlobalStore,
-			private markdown: MarkdownIndexer,
-			private canvas: CanvasIndexer,
-			private extensions: Indexer<any>[] = []) {
+	constructor(private store: GlobalStore,
+		private markdown: MarkdownIndexer,
+		private canvas: CanvasIndexer,
+		private extensions: Indexer<any>[] = []) {
 		this.graph = new NotesGraph();
 	}
 
@@ -28,12 +29,12 @@ export class IndexedTree {
 	}
 
 	async refresh() {
-        if (this.isLoading) return;
-        this.isLoading = true;
+		if (this.isLoading) return;
+		this.isLoading = true;
 		const newGraph = await this.rebuildEntireGraph()
-		console.debug(`built new graph with ${newGraph.graph.size} nodes` )
+		console.debug(`built new graph with ${newGraph.graph.size} nodes`)
 		this.setState(newGraph)
-        this.isLoading = false
+		this.isLoading = false
 	}
 
 	getState() {
@@ -42,13 +43,15 @@ export class IndexedTree {
 
 	private setState(graph: NotesGraph) {
 		this.graph = graph
-		this.store.set(GlobalAtoms.graphAtom, graph)
-		this.store.set(GlobalAtoms.graphVersionAtom, ++this.version)
-		this.store.set(GlobalAtoms.isGraphLoadingAtom, false)
+		const { graphAtom, graphVersionAtom, isGraphLoadingAtom } = getDefaultInjector().get(GlobalAppMolecule)
+		this.store.set(graphAtom, graph.copy())
+		this.store.set(graphVersionAtom, ++this.version)
+		this.store.set(isGraphLoadingAtom, false)
 	}
 
 	isIgnored(file: TFile | TFolder) {
-        const app = this.store.get(GlobalAtoms.appAtom)
+		const { appAtom } = getDefaultInjector().get(GlobalAppMolecule)
+		const app = this.store.get(appAtom)
 		return app.metadataCache.isUserIgnored && app.metadataCache.isUserIgnored(file.path)
 	}
 
@@ -56,16 +59,19 @@ export class IndexedTree {
 	 * Gets all files from the Obsidian vault
 	 */
 	* getAllFiles(): Generator<TFile | TFolder> {
-        const app = this.store.get(GlobalAtoms.appAtom)
-        if (!app) {
-            return
-        }
+		const { appAtom } = getDefaultInjector().get(GlobalAppMolecule)
+		const app = this.store.get(appAtom)
+		if (!app) {
+			return
+		}
 
 		const folders: TFolder[] = [app.vault.getRoot()];
-		
+
 		while (folders.length > 0) {
 			const folder = folders[0];
 			folders.shift();
+
+
 
 			for (const child of folder.children) {
 				if (child instanceof TFile && !this.isIgnored(child)) {
@@ -79,9 +85,9 @@ export class IndexedTree {
 	}
 
 	// index all pages in async batches to not block the main thread
-	async * batchPages(batchSize: number): AsyncGenerator<(TFile|TFolder)[]> {
+	async * batchPages(batchSize: number): AsyncGenerator<(TFile | TFolder)[]> {
 		const pages = this.getAllFiles();
-		let batch: (TFile|TFolder)[] = [];
+		let batch: (TFile | TFolder)[] = [];
 
 		for (const fileOrFolder of pages) {
 			if (fileOrFolder instanceof TFolder) {
@@ -113,7 +119,7 @@ export class IndexedTree {
 		return graph;
 	}
 
-	private indexBatch(batch: (TFile|TFolder)[], graph: NotesGraph) : Promise<boolean> {
+	private indexBatch(batch: (TFile | TFolder)[], graph: NotesGraph): Promise<boolean> {
 		const settings = getSettings(this.store)
 		return new Promise((resolve) => {
 			setTimeout(async () => {
@@ -126,12 +132,12 @@ export class IndexedTree {
 	}
 
 	private async indexFolder(folder: TFolder, graph: NotesGraph, settings: TreeSearchSettings) {
-		// if (folder.isRoot()) {
-		// 	return;
-		// }
-
 		const node = graph.createFolderNode(folder)
 		graph.addOrUpdateNode(node)
+
+		if (folder.isRoot()) {
+			return node;
+		}
 
 		if (folder.parent instanceof TFolder) {
 			const parent = await this.indexFolder(folder.parent, graph, settings)
@@ -144,7 +150,7 @@ export class IndexedTree {
 
 	}
 
-	private async indexSinglePage(page: TFile|TFolder, graph: NotesGraph, settings: TreeSearchSettings) {
+	private async indexSinglePage(page: TFile | TFolder, graph: NotesGraph, settings: TreeSearchSettings) {
 		if (page instanceof TFolder) {
 			await this.indexFolder(page, graph, settings)
 			return;
@@ -157,14 +163,14 @@ export class IndexedTree {
 			case "canvas":
 				await this.canvas.index(page, graph, settings);
 				break;
-            default:
-                const node = graph.addAttachmentNode(page)
-                if (page.parent instanceof TFolder /*&& source.parent.path != "/"*/) {
-                    const folderNode = graph.createFolderNode(page.parent)
-                    graph.addOrUpdateNode(folderNode)
-                    graph.addChild(folderNode, node, node.location, page.stat.mtime)
-                }
-                break;
+			default:
+				const node = graph.addAttachmentNode(page)
+				if (page.parent instanceof TFolder) {
+					const folderNode = graph.createFolderNode(page.parent)
+					graph.addOrUpdateNode(folderNode)
+					graph.addChild(folderNode, node, node.location, page.stat.mtime)
+				}
+				break;
 
 		}
 	}

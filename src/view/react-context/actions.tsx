@@ -1,21 +1,20 @@
-import {atom, useAtomValue} from "jotai";
-import {Notice} from "obsidian";
-import {highlightLine} from "../../obsidian-utils";
-import {getTreeNodeActions, RaycastAction} from "../raycast/raycast-response";
-import {molecule} from "bunshi";
-import {GlobalAppMolecule, SearchViewMolecule, SearchViewScope} from "./state";
-import {GlobalAtoms} from "./global";
-
+import { atom, useAtomValue } from "jotai";
+import { Notice } from "obsidian";
+import { highlightLine } from "../../obsidian-utils";
+import { getTreeNodeActions, RaycastAction } from "../raycast/raycast-response";
+import { molecule } from "bunshi";
+import { SearchViewMolecule, SearchViewScope } from "./state";
+import { GlobalAppMolecule } from "./global";
 
 export const ActionsMolecule = molecule((mol, scope) => {
-    const {selectedNodeAtom, hoveredLineAtom, selectedLineAtom} = mol(SearchViewMolecule)
-    const { appAtom } = mol(GlobalAppMolecule)
+    const { selectedNodeAtom, hoveredLineAtom, selectedLineAtom } = mol(SearchViewMolecule)
+    const { appAtom, currentModalAtom } = mol(GlobalAppMolecule)
 
     /**
      * Close the currently opened modal
      */
     const closeModalAtom = atom(null, (get, set) => {
-        const modal = get(GlobalAtoms.currentModalAtom)
+        const modal = get(currentModalAtom)
         if (modal) {
             modal.close()
         }
@@ -40,7 +39,7 @@ export const ActionsMolecule = molecule((mol, scope) => {
         const actions = get(selectedTreeNodeActionsAtom)
         if (actions.length == 0) return
 
-        const highlightAction = actions.find(it => it.shortcut && it.shortcut.modifiers.includes("shift") )
+        const highlightAction = actions.find(it => it.shortcut && it.shortcut.modifiers.includes("shift"))
         if (!highlightAction) return
 
         await set(executeActionAtom, highlightAction)

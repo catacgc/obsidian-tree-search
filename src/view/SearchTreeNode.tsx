@@ -1,11 +1,11 @@
-import {useEffect, useRef} from "react";
-import {ParsedNode} from "../graph";
-import {NodeRenderer} from "./NodeRenderer";
-import {TreeNode} from "./search/SearchViewFlatten";
-import {useAtomValue, useSetAtom} from "jotai";
-import {useMolecule} from "bunshi/react";
-import {SearchViewMolecule} from "./react-context/state";
-import {ActionsMolecule} from "./react-context/actions";
+import { useEffect, useRef } from "react";
+import { ParsedNode } from "../graph";
+import { NodeRenderer } from "./NodeRenderer";
+import { TreeNode } from "./search-common/SearchViewFlatten";
+import { useAtomValue, useSetAtom } from "jotai";
+import { useMolecule } from "bunshi/react";
+import { SearchViewMolecule } from "./react-context/state";
+import { ActionsMolecule } from "./react-context/actions";
 
 type SearchTreeNodePropsFlatten = {
     node: TreeNode;
@@ -13,8 +13,8 @@ type SearchTreeNodePropsFlatten = {
 
 export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
 
-    const {expandNodeAtom, selectedLineAtom, updateHoveredLineAtom} = useMolecule(SearchViewMolecule)
-    const {selectHoveredLineAtom} = useMolecule(ActionsMolecule)
+    const { expandNodeAtom, selectedLineAtom, updateHoveredLineAtom } = useMolecule(SearchViewMolecule)
+    const { selectHoveredLineAtom } = useMolecule(ActionsMolecule)
 
     const nodeRef = useRef<HTMLDivElement>(null);
     const selectedLine = useAtomValue(selectedLineAtom);
@@ -66,8 +66,8 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
 
     return (
         <div className="tree-node"
-                onMouseMove={(ev) => handleMouseMove(ev)}
-                onClick={handleTreeNodeClick}
+            onMouseMove={(ev) => handleMouseMove(ev)}
+            onClick={handleTreeNodeClick}
         >
             <div
                 ref={nodeRef}
@@ -76,16 +76,16 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
                 style={{ '--indent-level': indentLevel } as React.CSSProperties}
             >
                 <div className="ts-list-guides" onClick={handleUserExpandClicked}>
-                    <GuideLines indent={indentLevel}/>
+                    <GuideLines indent={indentLevel} />
                     <BulletOrTask
                         indent={indentLevel}
                         node={props.node.node}
                     />
                 </div>
                 <div className="ts-list-content flex flex-row justify-between"
-                     area-label={props.node.node.location.path} title={props.node.node.location.path}>
+                    area-label={props.node.node.location.path} title={props.node.node.location.path}>
                     <div>
-                    <NodeRenderer node={props.node.node}/>
+                        <NodeRenderer node={props.node.node} />
                     </div>
 
                     {/*<div className="flex justify-end text-xs">*/}
@@ -103,15 +103,15 @@ type BulletOrTaskProps = {
     node: ParsedNode;
 }
 
-const BulletOrTask = ({indent, node}: BulletOrTaskProps) => {
+const BulletOrTask = ({ indent, node }: BulletOrTaskProps) => {
 
     if (node.nodeType === "text" && node.isTask && !node.isCompleted) {
         return <label className="task-list-label">
-            <input className="task-list-item-checkbox" type="checkbox" data-task=""/>
+            <input className="task-list-item-checkbox" type="checkbox" data-task="" />
         </label>;
     } else if (node.nodeType === "text" && node.isTask && node.isCompleted) {
         return <label className="task-list-label">
-            <input className="task-list-item-checkbox" type="checkbox" checked={true} readOnly={true} data-task="x"/>
+            <input className="task-list-item-checkbox" type="checkbox" checked={true} readOnly={true} data-task="x" />
         </label>;
     }
 
@@ -120,14 +120,14 @@ const BulletOrTask = ({indent, node}: BulletOrTaskProps) => {
     </span>;
 };
 
-const GuideLines = ({indent}: { indent: number }) => {
+const GuideLines = ({ indent }: { indent: number }) => {
     if (indent === 1) return <></>;
 
     // Create guide lines for all levels up to current indent
     return <>
-        {Array.from({length: indent - 1}, (_, i) => (
-            <div 
-                key={i} 
+        {Array.from({ length: indent - 1 }, (_, i) => (
+            <div
+                key={i}
                 className="ts-guide-line"
                 style={{ '--guide-index': i + 1 } as React.CSSProperties}
             />

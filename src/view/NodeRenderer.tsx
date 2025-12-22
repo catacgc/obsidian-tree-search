@@ -1,15 +1,16 @@
 import { highlightLine, openFileByName } from "../obsidian-utils";
 import { ParsedNode, ParsedTextToken, TextTokenWithLocationLink } from "src/graph";
-import {useMolecule} from "bunshi/react";
-import {GlobalAppMolecule, SearchViewMolecule} from "./react-context/state";
-import {useAtomValue} from "jotai";
+import { useMolecule } from "bunshi/react";
+import { SearchViewMolecule, GlobalSearchMolecule } from "./react-context/state";
+import { GlobalAppMolecule } from "./react-context/global";
+import { useAtomValue } from "jotai";
 
 export const NodeRenderer = (
     props: { node: ParsedNode }
 ) => {
 
     return <>
-        <BaseNodeRender {...props}/>
+        <BaseNodeRender {...props} />
         <span> ({props.node.ageDays} days ago) </span>
         <span> ({props.node.boost} days ago) </span>
     </>
@@ -19,7 +20,7 @@ export const NodeRenderer = (
 const BaseNodeRender = (
     props: { node: ParsedNode }
 ) => {
-    const {appAtom} = useMolecule(GlobalAppMolecule)
+    const { appAtom } = useMolecule(GlobalAppMolecule)
 
     const app = useAtomValue(appAtom)
 
@@ -43,7 +44,7 @@ const BaseNodeRender = (
         case "header":
             return <span>{`${props.node.page} > ${props.node.header}`}</span>
         case "text":
-            return <TextNodeRenderer parsedTokens={props.node.parsedTokens}/>
+            return <TextNodeRenderer parsedTokens={props.node.parsedTokens} />
         case "month":
             return <span>{props.node.monthLiteral} {props.node.year}</span>
         case "folder":
@@ -53,7 +54,7 @@ const BaseNodeRender = (
                     await openFile(folderNote)
                     ev.preventDefault()
                 }}>
-                {props.node.path} 📂
+                    📂 {props.node.path}
                 </a>
             </span>
         case "folderNote":
@@ -81,7 +82,7 @@ const BaseNodeRender = (
 }
 
 export const TextNodeRenderer = (props: { parsedTokens: ParsedTextToken[] }) => {
-    const {appAtom} = useMolecule(GlobalAppMolecule)
+    const { appAtom } = useMolecule(GlobalAppMolecule)
     const app = useAtomValue(appAtom)
 
     async function openFile(name: string) {
@@ -95,24 +96,24 @@ export const TextNodeRenderer = (props: { parsedTokens: ParsedTextToken[] }) => 
     switch (token.tokenType) {
         case "obsidian_link":
             return <span>
-            <a className={"obsidian-link " + (false ? "cm-underline" : "")} href="#" onClick={async ev => {
-                await openFile(token.pageTarget)
-                ev.preventDefault()
-            }}>
-                {(token.alias && !parseInt(token.alias)) ? token.alias : token.pageTarget}
-                {token.headerName ? ` > ${token.headerName.trim()}` : ""}
-            </a>
-            <TextNodeRenderer parsedTokens={props.parsedTokens.slice(1)}/>
+                <a className={"obsidian-link " + (false ? "cm-underline" : "")} href="#" onClick={async ev => {
+                    await openFile(token.pageTarget)
+                    ev.preventDefault()
+                }}>
+                    {(token.alias && !parseInt(token.alias)) ? token.alias : token.pageTarget}
+                    {token.headerName ? ` > ${token.headerName.trim()}` : ""}
+                </a>
+                <TextNodeRenderer parsedTokens={props.parsedTokens.slice(1)} />
             </span>
         case "link":
             return <>
                 <a className={"external-link"} href={token.href}>{token.content}</a>
-                <TextNodeRenderer parsedTokens={props.parsedTokens.slice(1)}/>
+                <TextNodeRenderer parsedTokens={props.parsedTokens.slice(1)} />
             </>
         case "image":
             return <>
                 <a href={token.src} target="_blank">{token.alt || token.src}</a>
-                <TextNodeRenderer parsedTokens={props.parsedTokens.slice(1)}/>
+                <TextNodeRenderer parsedTokens={props.parsedTokens.slice(1)} />
             </>
         case "text":
             let decorated = <span>{token.text}</span>
@@ -141,12 +142,12 @@ export const TextNodeRenderer = (props: { parsedTokens: ParsedTextToken[] }) => 
                         await highlightLine(app, token.location)
                         ev.preventDefault()
                     }}> {decorated} </a>
-                    <TextNodeRenderer parsedTokens={props.parsedTokens.slice(1)}/>
+                    <TextNodeRenderer parsedTokens={props.parsedTokens.slice(1)} />
                 </>
             }
             return <>
                 {decorated}
-                <TextNodeRenderer parsedTokens={props.parsedTokens.slice(1)}/>
+                <TextNodeRenderer parsedTokens={props.parsedTokens.slice(1)} />
             </>
     }
 }
