@@ -7,6 +7,8 @@ import { ScopeProvider, useMolecule } from "bunshi/react";
 import { SearchViewMolecule, SearchViewScope } from "../react-context/state";
 import { SEARCH_ICON } from "../icons";
 import { GlobalAppMolecule } from "../react-context/global";
+import { ExpandFunctionsMolecule } from "../react-context/state";
+import { molecule } from "bunshi";
 
 type SearchPageProps = {
     sectionName: string
@@ -15,6 +17,15 @@ type SearchPageProps = {
     searchFn?: (q: string) => ResultNode[]
     children?: React.ReactNode
 }
+
+const SearchPageMolecule = molecule((mol, scope) => {
+    return {
+        ...mol(SearchViewMolecule),
+        ...mol(ExpandFunctionsMolecule),
+        ...mol(GlobalAppMolecule),
+    }
+})
+
 const SearchPage = (props: SearchPageProps) => {
     return <ScopeProvider scope={SearchViewScope} value={{ showSearch: props.showSearch || false, isQuickLink: false, name: props.sectionName, isModal: false }}>
         <_SearchPage {...props} />
@@ -22,22 +33,21 @@ const SearchPage = (props: SearchPageProps) => {
 }
 
 const _SearchPage = (props: SearchPageProps) => {
-    const { actualQueryAtom, searchVisibleAtom, setDefaultExpandLevelAtom, updateSearchResultsAtom, scopeName } = useMolecule(SearchViewMolecule)
-    const { pinAtom } = useMolecule(GlobalAppMolecule)
-    const [pin, setPin] = useAtom(pinAtom);
+    const mol = useMolecule(SearchPageMolecule)
+    const { actualQueryAtom, searchVisibleAtom, updateSearchResultsAtom, scopeName, pinAtom } = mol
+    const { activeFileAtom, graphVersionAtom } = mol
 
     const [showSearch, setShowSearch] = useAtom(searchVisibleAtom)
     const updateSearchResults = useSetAtom(updateSearchResultsAtom)
     const actualQuery = useAtomValue(actualQueryAtom)
-    const setDefaultExpand = useSetAtom(setDefaultExpandLevelAtom)
+    const setDefaultExpand = useSetAtom(mol.setDefaultExpandLevelAtom)
+
+    const activeFile = useAtomValue(activeFileAtom)
+    const version = useAtomValue(graphVersionAtom)
 
     useEffect(() => {
         setDefaultExpand(props.maxExpand || 0)
     }, [])
-
-    const { activeFileAtom, graphVersionAtom } = useMolecule(GlobalAppMolecule)
-    const activeFile = useAtomValue(activeFileAtom)
-    const version = useAtomValue(graphVersionAtom)
 
     useEffect(() => {
         if (props.searchFn) {

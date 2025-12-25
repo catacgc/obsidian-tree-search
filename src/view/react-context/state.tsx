@@ -2,8 +2,7 @@ import { TreeNode } from '../search-common/SearchViewFlatten'
 import { advancedSearch, flattenTasks, getAllFoldersTree, ResultNode, searchIndex, searchParents, SearchQuery } from '../../search/search'
 import { atom, useAtomValue } from 'jotai'
 import { ParsedNode, ParsedTextToken, TextNode, TextTokenWithLocationLink } from '../../graph'
-import { ComponentScope, createScope, molecule } from "bunshi";
-import { App } from "obsidian";
+import { ComponentScope, createScope, molecule, onMount, onUnmount } from "bunshi";
 import { separatorAtom } from "./settings";
 import { atomWithDefault } from "jotai/utils";
 import { withAtomEffect } from "jotai-effect";
@@ -145,8 +144,108 @@ export const SearchModalMolecule = molecule((mol, scope) => {
     return { searchResultsComputeAtom }
 })
 
+export const ExpandFunctionsMolecule = molecule((mol, scope) => {
+    scope(SearchViewScope)
+    const { treeNodesAtom, treeNodesInstance } = mol(TreeNodesMolecule)
+    const userExpandLevel = atom<number | null>(null)
+    const defaultExpandLevelAtom = atom(0)
+    const dynamicExpandAtom = atom(-1)
+
+    const setDefaultExpandLevelAtom = atom(
+        (get) => get(defaultExpandLevelAtom),
+        (get, set, newValue: number) => {
+            set(defaultExpandLevelAtom, newValue)
+            set(expandVisibleNodesAtom) // Trigger the expand nodes
+        }
+    )
+
+    const getExpandLevel = atom((get) => {
+        if (get(dynamicExpandAtom) > 0)
+            return get(dynamicExpandAtom)
+        return get(userExpandLevel) ?? get(defaultExpandLevelAtom)
+    })
+
+    const incExpandAtom = atom(null, (get, set) => {
+        set(userExpandLevel, get(getExpandLevel) + 1)
+        set(dynamicExpandAtom, -1)
+        set(expandVisibleNodesAtom)
+    })
+
+    const decExpandAtom = atom(null, (get, set) => {
+        set(userExpandLevel, Math.max(0, get(getExpandLevel) - 1))
+        set(dynamicExpandAtom, -1)
+        set(expandVisibleNodesAtom)
+    })
+
+    const resetCollapseAtom = atom(null, (get, set) => {
+        set(userExpandLevel, 0)
+        set(dynamicExpandAtom, -1)
+        set(expandVisibleNodesAtom)
+    })
+
+    const expandVisibleNodesAtom = atom(null, (get, set) => {
+        const level = get(getExpandLevel)
+        const treeNodes = get(treeNodesAtom)
+        const newNodes = treeNodes.map(it => { return { ...it, ...{ visible: it.indent <= level } } })
+        set(treeNodesAtom, newNodes)
+    })
+
+    //  make all children  of the current node visible or invisible
+    const expandNodeAtom = atom(null, (get, set, index: number) => {
+
+        const treeNodes = get(treeNodesAtom)
+        console.log("Expand node", treeNodesInstance, treeNodes)
+        const startIndex = treeNodes.findIndex(it => it.index == index)
+
+        if (startIndex == -1) return
+
+        const nodeToExpand = treeNodes[index]
+        const childVisible = treeNodes[startIndex + 1]?.visible
+
+        for (let i = index + 1; i < treeNodes.length; i++) {
+            if (treeNodes[i].indent <= nodeToExpand.indent) {
+                break
+            }
+
+            if (!childVisible && treeNodes[i].indent == nodeToExpand.indent + 1) {
+                treeNodes[i].visible = !childVisible
+            } else {
+                treeNodes[i].visible = false
+            }
+        }
+
+        console.log("Expand node", index, treeNodes)
+
+        set(treeNodesAtom, [...treeNodes])
+    })
+
+    return {
+        getExpandLevel,
+        setDefaultExpandLevelAtom,
+        expandVisibleNodesAtom,
+        incExpandAtom,
+        decExpandAtom,
+        resetCollapseAtom,
+        dynamicExpandAtom,
+        expandNodeAtom
+    }
+})
+
+export const TreeNodesMolecule = molecule((mol, scope) => {
+    scope(SearchViewScope)
+    const treeNodesAtom = atom<TreeNode[]>([])
+    const debug = Math.random()
+
+    onMount(() => console.log("Mount", debug))
+    onUnmount(() => console.log("Unmount", debug))
+
+    return { treeNodesAtom, treeNodesInstance: debug }
+})
+
 export const SearchViewMolecule = molecule((mol, scope) => {
     const scp = scope(SearchViewScope)
+    const expandMol = mol(ExpandFunctionsMolecule)
+    const { treeNodesAtom, treeNodesInstance } = mol(TreeNodesMolecule)
 
     const instance = Math.random()
 
@@ -165,7 +264,6 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     const selectedLineAtom = atom(-1)
     const searchVisibleAtom = atom(scp.showSearch)
     const hoveredLineAtom = atom(0)
-    const treeNodesAtom = atom<TreeNode[]>([])
 
     const pageSizeAtom = atom(50)
     const pagesAtom = atom(1)
@@ -175,6 +273,8 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         const treeNodes = get(treeNodesAtom)
         const pageSize = get(pageSizeAtom)
         const pages = get(pagesAtom)
+
+        console.log("Search results state", treeNodes.length, treeNodesInstance)
 
         const visibleNodes = treeNodes.filter(node => node.visible)
         const renderableNodes = visibleNodes.slice(0, pages * pageSize)
@@ -206,21 +306,6 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         }
     })
 
-    // Keep individual atoms for backward compatibility
-    const visibleNodesAtom = atom((get) => get(searchResultsStateAtom).visibleNodes)
-    const renderableTreeNodesAtom = atom((get) => get(searchResultsStateAtom).renderableNodes)
-    const hasMoreTreeNodesAtom = atom((get) => get(searchResultsStateAtom).hasMore)
-
-    const searchPlaceholderAtom = atom((get) => {
-        const { totalNodes } = get(searchResultsStateAtom)
-        const graph = get(graphAtom)
-        if (totalNodes > 0) {
-            return `Search ${totalNodes} nodes`
-        }
-
-        return `Search ${graph.graph.nodes().length} nodes and ${graph.graph.edges().length} edges`
-    })
-
     const incrementPagesAtom = atom(
         null,
         (get, set) => set(pagesAtom, get(pagesAtom) + 1)
@@ -233,16 +318,18 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     })
 
     const updateSearchResultsAtom = atom(null, (get, set, result: ResultNode[]) => {
+        console.log("Update search results", scp, result.length, treeNodesInstance)
+
         // Calculate dynamic expand level first
         const dynamicExpand = get(searchQueryAtom).query
             ? Math.round(Math.max(0, 10 - result.length / 20))
             : -1
 
         // Set dynamic expand level before getting the expand level
-        set(dynamicExpandAtom, dynamicExpand)
+        set(expandMol.dynamicExpandAtom, dynamicExpand)
 
         // Get the current expand level (which now includes the updated dynamic expand)
-        const expandLevel = get(getExpandLevel)
+        const expandLevel = get(expandMol.getExpandLevel)
 
         // Flatten nodes with the correct expand level
         const nodes = flattenIndex(result, expandLevel, !!get(searchQueryAtom).query)
@@ -282,95 +369,20 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         set(hoveredLineAtom, index)
     })
 
-    //  make all children  of the current node visible or invisible
-    const expandNodeAtom = atom(null, (get, set, index: number) => {
-
-        const treeNodes = get(treeNodesAtom)
-        const startIndex = treeNodes.findIndex(it => it.index == index)
-        if (startIndex == -1) return
-
-        const nodeToExpand = treeNodes[index]
-        const childVisible = treeNodes[startIndex + 1]?.visible
-
-        for (let i = index + 1; i < treeNodes.length; i++) {
-            if (treeNodes[i].indent <= nodeToExpand.indent) {
-                break
-            }
-
-            if (!childVisible && treeNodes[i].indent == nodeToExpand.indent + 1) {
-                treeNodes[i].visible = !childVisible
-            } else {
-                treeNodes[i].visible = false
-            }
-        }
-
-        set(treeNodesAtom, [...treeNodes])
-    })
-
-    const userExpandLevel = atom<number | null>(null)
-    const defaultExpandLevelAtom = atom(0)
-    const dynamicExpandAtom = atom(-1)
-
-    const setDefaultExpandLevelAtom = atom(
-        (get) => get(defaultExpandLevelAtom),
-        (get, set, newValue: number) => {
-            set(defaultExpandLevelAtom, newValue)
-            set(expandVisibleNodesAtom) // Trigger the expand nodes
-        }
-    )
-
-    const getExpandLevel = atom((get) => {
-        if (get(dynamicExpandAtom) > 0)
-            return get(dynamicExpandAtom)
-        return get(userExpandLevel) ?? get(defaultExpandLevelAtom)
-    })
-
-    const incExpandAtom = atom(null, (get, set) => {
-        set(userExpandLevel, get(getExpandLevel) + 1)
-        set(dynamicExpandAtom, -1)
-        set(expandVisibleNodesAtom)
-    })
-
-    const decExpandAtom = atom(null, (get, set) => {
-        set(userExpandLevel, Math.max(0, get(getExpandLevel) - 1))
-        set(dynamicExpandAtom, -1)
-        set(expandVisibleNodesAtom)
-    })
-
-    const expandVisibleNodesAtom = atom(null, (get, set) => {
-        const level = get(getExpandLevel)
-        const treeNodes = get(treeNodesAtom)
-        const newNodes = treeNodes.map(it => { return { ...it, ...{ visible: it.indent <= level } } })
-        set(treeNodesAtom, newNodes)
-    })
-
-    const resetCollapseAtom = atom(null, (get, set) => {
-        set(userExpandLevel, 0)
-        set(dynamicExpandAtom, -1)
-        set(expandVisibleNodesAtom)
-    })
-
     return {
         scopeName: { name: scp.name, instance: instance },
         actualQueryAtom,
         searchQueryAtom,
         searchResultsStateAtom,
         searchViewStateAtom,
-        renderableTreeNodesAtom,
         incrementPagesAtom,
-        hasMoreTreeNodesAtom,
         searchVisibleAtom,
         updateSearchResultsAtom,
         arrowUpAtom,
         arrowDownAtom,
-        decExpandAtom,
-        incExpandAtom,
-        resetCollapseAtom,
         selectedNodeAtom,
-        getExpandLevel,
-        searchPlaceholderAtom,
-        setDefaultExpandLevelAtom,
-        expandNodeAtom, selectedLineAtom, updateHoveredLineAtom, hoveredLineAtom,
+        treeNodesAtom,
+        selectedLineAtom, updateHoveredLineAtom, hoveredLineAtom,
         lastSearchAtom
     }
 })

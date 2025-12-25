@@ -3,25 +3,31 @@ import { ParsedNode } from "../graph";
 import { NodeRenderer } from "./NodeRenderer";
 import { TreeNode } from "./search-common/SearchViewFlatten";
 import { useAtomValue, useSetAtom } from "jotai";
-import { useMolecule } from "bunshi/react";
-import { SearchViewMolecule } from "./react-context/state";
+import { molecule, useMolecule } from "bunshi/react";
+import { ExpandFunctionsMolecule, SearchViewMolecule } from "./react-context/state";
 import { ActionsMolecule } from "./react-context/actions";
 
 type SearchTreeNodePropsFlatten = {
     node: TreeNode;
 };
 
-export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
+export const SearchTreeNodeMolecule = molecule((mol, scope) => {
+    return {
+        ...mol(SearchViewMolecule),
+        ...mol(ExpandFunctionsMolecule),
+        ...mol(ActionsMolecule)
+    }
+})
 
-    const { expandNodeAtom, selectedLineAtom, updateHoveredLineAtom } = useMolecule(SearchViewMolecule)
-    const { selectHoveredLineAtom } = useMolecule(ActionsMolecule)
+export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
+    const molecule = useMolecule(SearchTreeNodeMolecule)
 
     const nodeRef = useRef<HTMLDivElement>(null);
-    const selectedLine = useAtomValue(selectedLineAtom);
+    const selectedLine = useAtomValue(molecule.selectedLineAtom);
 
-    const expandNode = useSetAtom(expandNodeAtom);
-    const updateHovered = useSetAtom(updateHoveredLineAtom);
-    const selectHovered = useSetAtom(selectHoveredLineAtom);
+    const expandNode = useSetAtom(molecule.expandNodeAtom);
+    const updateHovered = useSetAtom(molecule.updateHoveredLineAtom);
+    const selectHovered = useSetAtom(molecule.selectHoveredLineAtom);
 
     const expandableClass = props.node.hasChildren ? "is-collapsed " : ""
     const highlighted = selectedLine == props.node.index ? "highlight" : "";

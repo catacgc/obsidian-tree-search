@@ -15,11 +15,9 @@ export type GraphContextProps = {
 export const GraphContextProvider = ({ store, children }: GraphContextProps) => {
     const { appAtom } = useMolecule(GlobalAppMolecule)
 
-    return <StrictMode>
-        <Provider store={store}>
-            {/* <ScopeProvider scope={GlobalAppScope} value={{ obsidianApp: store.get(appAtom) }} uniqueValue={true}> */}
-            {children}
-            {/* </ScopeProvider> */}
-        </Provider>
-    </StrictMode>
+    return <Provider store={store}>
+        {/* <ScopeProvider scope={GlobalAppScope} value={{ obsidianApp: store.get(appAtom) }} uniqueValue={true}> */}
+        {children}
+        {/* </ScopeProvider> */}
+    </Provider>
 }

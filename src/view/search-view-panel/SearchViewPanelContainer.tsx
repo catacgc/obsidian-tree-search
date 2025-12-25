@@ -22,11 +22,9 @@ export const _SearchViewPanelContainer = () => {
 
     const { searchResultsComputeAtom } = useMolecule(SearchModalMolecule)
 
-    const height = (Platform.isMobile || Platform.isTablet) ? "100vh" : "calc(100vh * 0.75)"
-
     useAtom(searchResultsComputeAtom)
 
-    return <div style={{ height: height }}>
+    return <div style={{ height: "100vh" }}>
         <div className="flex flex-col w-full h-full">
             <SearchViewFlatten />
         </div>

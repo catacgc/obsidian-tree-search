@@ -11,8 +11,8 @@ export const NodeRenderer = (
 
     return <>
         <BaseNodeRender {...props} />
-        <span> ({props.node.ageDays} days ago) </span>
-        <span> ({props.node.boost} days ago) </span>
+        {/* <span> ({props.node.ageDays} days ago) </span> */}
+        {/* <span> ({props.node.boost} days ago) </span> */}
     </>
 }
 

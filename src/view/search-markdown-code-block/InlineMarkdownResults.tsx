@@ -1,7 +1,7 @@
 import React, { useCallback } from "react";
 import { advancedSearch, ResultNode, searchIndex } from "../../search/search";
 import { MarkdownContextSettings } from "./markdown-code-block";
-import { useAtom, useAtomValue } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { separatorAtom } from "../react-context/settings";
 import { createScope, molecule } from "bunshi";
 import { ScopeProvider, useMolecule } from "bunshi/react";
@@ -24,6 +24,8 @@ export const InlineMarkdownScope = createScope({
 export const InlineMarkdownMolecule = molecule((mol, scope) => {
     const { settings } = scope(InlineMarkdownScope)
     const { actualQueryAtom, updateSearchResultsAtom } = mol(SearchViewMolecule)
+    const { searchVisibleAtom } = mol(SearchViewMolecule)
+
     const { graphAtom } = mol(GlobalAppMolecule)
 
     const searchResultsAtom = atom<ResultNode[]>([])
@@ -48,18 +50,26 @@ export const InlineMarkdownMolecule = molecule((mol, scope) => {
         }
     })
 
-    return { searchResultsComputeAtom }
+
+    const toggleSearchBarAtom = atom(null, (get, set) => {
+        const showSearch = get(searchVisibleAtom)
+        set(searchVisibleAtom, !showSearch)
+    })
+
+    return { searchResultsComputeAtom, toggleSearchBarAtom }
 })
 
 export const InlineMarkdownResults = (props: InlineMarkdownResultsProps) => {
 
-    return <ScopeProvider scope={InlineMarkdownScope} value={{ settings: props.settings }}>
+    return <>
         <ScopeProvider scope={SearchViewScope} value={{ name: "inline " + props.settings.basename, isQuickLink: false, showSearch: true, isModal: true }}>
-            <KeyComboWrapper>
-                <_InlineMarkdownResults {...props} />
-            </KeyComboWrapper>
+            <ScopeProvider scope={InlineMarkdownScope} value={{ settings: props.settings }}>
+                <KeyComboWrapper>
+                    <_InlineMarkdownResults {...props} />
+                </KeyComboWrapper>
+            </ScopeProvider>
         </ScopeProvider>
-    </ScopeProvider>
+    </>
 }
 
 export const _InlineMarkdownResults: React.FC<InlineMarkdownResultsProps> = (props) => {
@@ -70,12 +80,13 @@ export const _InlineMarkdownResults: React.FC<InlineMarkdownResultsProps> = (pro
 
     sectionName = [settings.name, sectionName].filter(Boolean).join(" > ")
 
-    const { searchResultsComputeAtom } = useMolecule(InlineMarkdownMolecule)
+    const { searchResultsComputeAtom, toggleSearchBarAtom } = useMolecule(InlineMarkdownMolecule)
 
     useAtom(searchResultsComputeAtom)
+    const toggleSearchBar = useSetAtom(toggleSearchBarAtom)
 
     return <>
-        <h5>{sectionName}</h5>
+        <h5 onClick={() => toggleSearchBar()}>{sectionName}</h5>
         <SearchViewFlatten />
     </>
 };

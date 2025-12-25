@@ -6,7 +6,6 @@ import { SearchViewFlatten } from "../search-common/SearchViewFlatten";
 import { settingsAtom } from "../react-context/settings";
 import { Platform } from "obsidian";
 import { ScopeProvider, useMolecule } from "bunshi/react";
-import { GlobalAtoms } from "../react-context/global";
 import { KeyComboWrapper } from "../search-common/KeyComboWrapper";
 
 export const SearchModalContainer = ({ isQuickLink = false }: { isQuickLink?: boolean }) => {

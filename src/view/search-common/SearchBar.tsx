@@ -3,19 +3,45 @@ import { SEARCH_ICON, REFRESH_ICON } from "../icons";
 import { useUrlOpener } from "./useUrlOpener";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { molecule, useMolecule } from "bunshi/react";
-import { SearchViewMolecule } from "../react-context/state";
+import { ExpandFunctionsMolecule, SearchViewMolecule, SearchViewScope } from "../react-context/state";
 import { GlobalAppMolecule } from "../react-context/global";
 import { GlobalSearchMolecule } from "../react-context/state";
+import { atom } from "jotai/index";
 
 export type SearchBarProps = {
     isQuickLink: boolean
 }
 
-export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
+export const SearchBarMolecule = molecule((mol, scope) => {
+    scope(SearchViewScope)
+    const { searchResultsStateAtom } = mol(SearchViewMolecule)
+    const { graphAtom } = mol(GlobalAppMolecule)
 
-    const { isGraphLoadingAtom } = useMolecule(GlobalAppMolecule)
-    const { lastSearchAtom, decExpandAtom, incExpandAtom, resetCollapseAtom, searchQueryAtom, selectedNodeAtom, getExpandLevel, searchPlaceholderAtom }
-        = useMolecule(SearchViewMolecule)
+    const searchPlaceholderAtom = atom((get) => {
+        const { totalNodes } = get(searchResultsStateAtom)
+        const graph = get(graphAtom)
+        if (totalNodes > 0) {
+            return `Filter ${totalNodes} nodes`
+        }
+
+        return `Search ${graph.graph.nodes().length} nodes and ${graph.graph.edges().length} edges`
+    })
+
+    return {
+        searchPlaceholderAtom,
+        ...mol(SearchViewMolecule),
+        ...mol(ExpandFunctionsMolecule),
+        ...mol(GlobalAppMolecule),
+    }
+})
+
+export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
+    const mol = useMolecule(SearchBarMolecule)
+
+    const { isGraphLoadingAtom } = mol
+    const { searchPlaceholderAtom } = mol
+    const { lastSearchAtom, searchQueryAtom } = mol
+    const { resetCollapseAtom, getExpandLevel, incExpandAtom, decExpandAtom } = mol
 
     const decExpand = useSetAtom(decExpandAtom)
     const incExpand = useSetAtom(incExpandAtom)
