@@ -242,5 +242,17 @@ describe("scanMarkdown", () => {
       )
       expect(lists).toHaveLength(0)
     })
+
+    it("rawText for a task item is post-task-marker-strip, pre-meta-action-strip", () => {
+      const { lists } = scan(
+        "- [ ] do [[thing]] (meta-action-name::Open)(meta-action-url::https://x.com)",
+      )
+      expect(lists).toHaveLength(1)
+      expect(lists[0].task).toBe(true)
+      // rawText has no "[ ] " prefix but still has meta-action syntax
+      expect(lists[0].rawText).toBe("do [[thing]] (meta-action-name::Open)(meta-action-url::https://x.com)")
+      // text has meta-actions stripped
+      expect(lists[0].text).toBe("do [[thing]]")
+    })
   })
 })
