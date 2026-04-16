@@ -1,5 +1,6 @@
 {
 	"name": "obsidian-tree-search",
+	"workspaces": ["packages/*"],
 	"version": "0.12.0",
 	"description": "All in one graph search, quick switcher, bookmark manager and MOC manager",
 	"main": "main.js",
@@ -7,7 +8,10 @@
 		"test": "jest",
 		"test:watch": "jest --watch",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-		"dev": "node esbuild.config.mjs"
+		"dev": "node esbuild.config.mjs",
+		"mdtree:build": "bun build --compile --target=bun packages/cli/src/main.ts --outfile=dist/mdtree",
+		"mdtree:test": "bun test packages/core/src/__tests__",
+		"mdtree:dev": "bun run packages/cli/src/main.ts"
 	},
 	"keywords": [],
 	"author": "",

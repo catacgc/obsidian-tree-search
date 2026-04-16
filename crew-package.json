@@ -1,0 +1,5 @@
+{
+  "plugins": {
+    "superpowers": "github:obra/superpowers"
+  }
+}
