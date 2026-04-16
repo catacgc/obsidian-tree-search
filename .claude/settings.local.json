@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "crew-plugins": {
+      "source": {
+        "source": "directory",
+        "path": "/Users/costache/dev/src/costache/obsidian-tree-search/.crew/claude-marketplace"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "superpowers@crew-plugins": true
+  }
+}
