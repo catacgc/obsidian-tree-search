@@ -28,6 +28,9 @@ function shouldSkip(lst: DvList, archiveTag: string): boolean {
 
   if (lst.tags.length > 0) return false
 
+  // If meta-actions were stripped (rawText !== text), don't skip — we have parsedTokens to render
+  if (lst.rawText !== lst.text) return false
+
   return isOnlyText(lst.text)
 }
 

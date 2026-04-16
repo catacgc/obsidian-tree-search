@@ -216,3 +216,64 @@ describe("search integration", () => {
     expect(results.length).toBeGreaterThan(0)
   })
 })
+
+describe("todoist meta-action integration", () => {
+  it("task with meta-action: searchKey clean, parsedTokens has meta_action", () => {
+    const taskLine =
+      "- [Project](https://app.todoist.com/app/project/abc123)\n" +
+      "  - Buy milk https://app.todoist.com/app/task/task1 (meta-action-name::Open Task)(meta-action-url::https://app.todoist.com/app/task/task1)(meta-action-icon::globe-01-16)"
+
+    const g = buildGraph(parse(taskLine, "todoist.md"))
+
+    // Find the task text node
+    const nodes = g.filterNodes((_, attrs) => {
+      if (attrs.nodeType !== "text") return false
+      const t = attrs as { searchKey: string }
+      return t.searchKey.includes("buy milk")
+    })
+    expect(nodes.length).toBe(1)
+
+    const node = g.getNodeAttributes(nodes[0]) as {
+      searchKey: string
+      parsedTokens: Array<{ tokenType: string; name?: string; url?: string }>
+    }
+
+    // searchKey must not contain meta-action syntax
+    expect(node.searchKey).not.toContain("meta-action")
+    expect(node.searchKey).not.toContain("Open Task")
+
+    // parsedTokens must include the meta_action token
+    const metaToken = node.parsedTokens.find(t => t.tokenType === "meta_action")
+    expect(metaToken).toBeDefined()
+    expect(metaToken?.name).toBe("Open Task")
+    expect(metaToken?.url).toBe("https://app.todoist.com/app/task/task1")
+  })
+
+  it("project link node has no meta-action tokens", () => {
+    const g = buildGraph(
+      parse("- [My Project](https://app.todoist.com/app/project/abc)", "todoist.md"),
+    )
+    // Pure link collapses to a virtual page — no meta_action tokens
+    const nodes = g.filterNodes((_, attrs) => attrs.nodeType === "page")
+    expect(nodes.length).toBeGreaterThan(0)
+  })
+
+  it("plain-text task (no URL) with meta-action is indexed and searchable", () => {
+    const g = buildGraph(
+      parse(
+        "- Buy groceries (meta-action-name::Open Task)(meta-action-url::https://app.todoist.com/app/task/42)(meta-action-icon::globe-01-16)",
+        "todoist.md",
+      ),
+    )
+    // Should be indexed (not dropped by shouldSkip)
+    const nodes = g.filterNodes((_, attrs) => {
+      if (attrs.nodeType !== "text") return false
+      return (attrs as { searchKey: string }).searchKey.includes("buy groceries")
+    })
+    expect(nodes.length).toBe(1)
+    const node = g.getNodeAttributes(nodes[0]) as {
+      parsedTokens: Array<{ tokenType: string }>
+    }
+    expect(node.parsedTokens.some(t => t.tokenType === "meta_action")).toBe(true)
+  })
+})
