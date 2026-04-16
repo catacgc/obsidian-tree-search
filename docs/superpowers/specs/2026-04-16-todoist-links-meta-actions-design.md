@@ -106,9 +106,8 @@ text = text.replace(META_ACTION_RE, "").trim()
 This ensures:
 - `searchKey` (built from `item.text`) never contains meta-action syntax.
 - Tags, inline links, and `shouldSkip` all operate on clean text.
-- Meta-action tokens still appear in `parsedTokens` because `parseTokens` is called in `indexer.ts` on the original text before list-scanner stripping.
 
-> **Note:** `createNodeFromText` in `indexer.ts` calls `parseTokens(item.text)` — `item.text` at that point is the already-stripped value from `list-scanner`. Therefore the stripping must happen in `list-scanner` before the `DvList` is constructed, and `parseTokens` must receive the **pre-strip** original. Implementation must ensure `parseTokens` is called on the raw line text, not the stripped `item.text`. One clean approach: store the original text as `item.rawText` alongside the stripped `item.text`, and pass `item.rawText` to `parseTokens` in `createNodeFromText`.
+`createNodeFromText` in `indexer.ts` calls `parseTokens(item.text)` — by the time it receives `item`, `item.text` is already stripped. To preserve meta-action triples for token parsing, `list-scanner` stores the pre-strip line as `item.rawText` on `DvList`, and `createNodeFromText` passes `item.rawText` to `parseTokens` instead of `item.text`.
 
 ---
 
@@ -141,10 +140,9 @@ case "meta_action": {
 | File | Change |
 |------|--------|
 | `plugins/todoist/run.ts` | Render projects/sub-projects/sections as `- [Name](url)` list items; append meta-action triples to task lines |
-| `packages/core/src/graph/types.ts` | Add `MetaActionToken`; extend `ParsedTextToken` union |
+| `packages/core/src/graph/types.ts` | Add `MetaActionToken`; extend `ParsedTextToken` union; add `rawText` to `DvList` |
 | `packages/core/src/parser/inline-tokens.ts` | Extract meta-action triples before markdown-it; return as `MetaActionToken`s |
-| `packages/core/src/parser/list-scanner.ts` | Strip `(meta-action-*::...)` groups from `text`; add `rawText` field to `DvList` |
-| `packages/core/src/graph/types.ts` | Add `rawText` to `DvList` |
+| `packages/core/src/parser/list-scanner.ts` | Strip `(meta-action-*::...)` groups from `text`; populate `rawText` on `DvList` |
 | `packages/core/src/graph/indexer.ts` | Pass `item.rawText` (not `item.text`) to `parseTokens` |
 | `packages/cli/src/server/response.ts` | Handle `meta_action` token case in `nodeRenderer` |
 | `src/view/raycast/raycast-response.ts` | Handle `meta_action` token case in `nodeRenderer` |
