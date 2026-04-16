@@ -1,0 +1,13 @@
+{
+  "name": "crew-plugins",
+  "owner": {
+    "name": "crew"
+  },
+  "plugins": [
+    {
+      "name": "superpowers",
+      "source": "./plugins/superpowers",
+      "description": "Core skills library for Claude Code: TDD, debugging, collaboration patterns, and proven techniques"
+    }
+  ]
+}
