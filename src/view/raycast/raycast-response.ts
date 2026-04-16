@@ -276,11 +276,11 @@ function nodeRenderer(
                 {
                     type: "browse",
                     url: token.href,
-                    title: `Browse 🔗 ${token.content}`,
+                    title: `Browse 🔗 ${token.content ?? token.href}`,
                     icon: Icons.globe
                 }
             );
-            return "🔗 " + token.content + nodeRenderer(tokens.slice(1), actions, vault);
+            return "🔗 " + (token.content ?? token.href) + nodeRenderer(tokens.slice(1), actions, vault);
         case "image":
             return "🖼️ " + (token.alt || token.src) + nodeRenderer(tokens.slice(1), actions, vault);
         case "meta_action":
@@ -292,4 +292,5 @@ function nodeRenderer(
             });
             return nodeRenderer(tokens.slice(1), actions, vault);
     }
+    return ""
   }

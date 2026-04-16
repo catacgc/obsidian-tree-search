@@ -115,7 +115,7 @@ export function scanMarkdown(
       tags.push(`#${m[1]}`)
     }
 
-    if (shouldSkip(text, "#" + archiveTag)) continue
+    if ((rawText === text || text === "") && shouldSkip(text, "#" + archiveTag)) continue
 
     // parent: pop stack entries with >= current indent
     while (indentStack.length > 0 && indentStack[indentStack.length - 1].indent >= indent) {

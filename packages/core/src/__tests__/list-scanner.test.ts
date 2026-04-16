@@ -235,6 +235,17 @@ describe("scanMarkdown", () => {
       expect(lists[0].rawText).toBe(lists[0].text)
     })
 
+    it("plain-text task with meta-action triple is not skipped by shouldSkip", () => {
+      const { lists } = scan(
+        "- Buy milk (meta-action-name::Open Task)(meta-action-url::https://todoist.com/task/1)(meta-action-icon::globe-01-16)",
+      )
+      // "Buy milk" alone would be skipped by shouldSkip (pure prose), but the meta-action
+      // triple means it has value → must be kept
+      expect(lists).toHaveLength(1)
+      expect(lists[0].text).toBe("Buy milk")
+      expect(lists[0].rawText).toContain("meta-action-name::Open Task")
+    })
+
     it("meta-action-only line (no other content) is skipped by shouldSkip", () => {
       // A line that is ONLY meta-action props and no real content → skipped
       const { lists } = scan(

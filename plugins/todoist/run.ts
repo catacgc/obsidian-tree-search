@@ -156,7 +156,6 @@ function renderSection(
 
 function renderProject(
   project: TodoistProject,
-  allProjects: TodoistProject[],
   subprojectsByParent: Map<string, TodoistProject[]>,
   sectionsByProject: Map<string, TodoistSection[]>,
   tasksByProject: Map<string, TodoistTask[]>,
@@ -185,7 +184,6 @@ function renderProject(
     lines.push(
       renderProject(
         sub,
-        allProjects,
         subprojectsByParent,
         sectionsByProject,
         tasksByProject,
@@ -270,7 +268,6 @@ async function main() {
     lines.push(
       renderProject(
         project,
-        activeProjects,
         subprojectsByParent,
         sectionsByProject,
         tasksByProject,
