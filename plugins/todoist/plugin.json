@@ -1,0 +1,8 @@
+{
+  "namespace": "todoist",
+  "name": "Todoist",
+  "version": "1.0.0",
+  "description": "Pulls open tasks from Todoist into the mdtree graph",
+  "author": "mdtree-community",
+  "entrypoint": "run.ts"
+}
