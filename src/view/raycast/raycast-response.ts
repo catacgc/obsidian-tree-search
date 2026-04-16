@@ -283,5 +283,13 @@ function nodeRenderer(
             return "🔗 " + token.content + nodeRenderer(tokens.slice(1), actions, vault);
         case "image":
             return "🖼️ " + (token.alt || token.src) + nodeRenderer(tokens.slice(1), actions, vault);
+        case "meta_action":
+            actions.push({
+                type: "browse",
+                url: token.url,
+                title: truncateActionTitle(token.name),
+                icon: token.icon ?? Icons.globe
+            });
+            return nodeRenderer(tokens.slice(1), actions, vault);
     }
   }

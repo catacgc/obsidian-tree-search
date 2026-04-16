@@ -182,7 +182,14 @@ export type ImageToken = {
 	alt?: string,
 }
 
-export type ParsedTextToken = TextToken | ObsidianLinkToken | LinkToken | ImageToken | TextTokenWithLocationLink
+export type MetaActionToken = {
+	tokenType: "meta_action",
+	name: string,
+	url: string,
+	icon?: string,
+}
+
+export type ParsedTextToken = TextToken | ObsidianLinkToken | LinkToken | ImageToken | TextTokenWithLocationLink | MetaActionToken
 
 function getKey(node: ParsedNode): string {
 	switch(node.nodeType) {
