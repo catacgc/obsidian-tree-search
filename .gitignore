@@ -26,3 +26,6 @@ data.json
 
 # crew plugin management (local tooling)
 .crew/
+
+# git worktrees
+.worktrees/
