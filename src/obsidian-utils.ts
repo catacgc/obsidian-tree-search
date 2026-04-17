@@ -1,5 +1,5 @@
 import {App, normalizePath, TFile, FuzzySuggestModal, TFolder, FuzzyMatch} from "obsidian";
-import {Location} from "./graph";
+import {Location} from "@mdtree/core";
 
 // Reverse engineer the Canvas api
 interface CanvasNode {

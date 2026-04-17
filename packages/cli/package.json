@@ -5,6 +5,10 @@
   "bin": {
     "mdtree": "./src/main.ts"
   },
+  "exports": {
+    ".": "./src/main.ts",
+    "./vault": "./src/vault/indexer.ts"
+  },
   "scripts": {
     "dev": "bun run src/main.ts",
     "build": "bun build --compile --target=bun src/main.ts --outfile=../../dist/mdtree",

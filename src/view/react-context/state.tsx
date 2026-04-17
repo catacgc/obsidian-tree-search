@@ -1,7 +1,10 @@
 import {TreeNode} from '../search/SearchViewFlatten'
-import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, SearchQuery} from '../../search/search'
+import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents} from '@mdtree/core'
 import {atom, useAtomValue} from 'jotai'
-import {ParsedNode, ParsedTextToken, TextNode, TextTokenWithLocationLink} from '../../graph'
+import {ParsedNode, ParsedTextToken, TextNode, Location} from '@mdtree/core'
+
+type SearchQuery = { query: string; file?: string; heading?: string }
+type TextTokenWithLocationLink = { tokenType: "text"; text: string; decoration: "italic" | "bold" | "underline" | "strikethrough" | "code" | "none"; location: Location }
 import {createScope, molecule} from "bunshi";
 import {App} from "obsidian";
 import {GlobalAtoms} from "./global";
@@ -64,7 +67,7 @@ export const GlobalAppMolecule = molecule((_, scope) => {
             }
 
             return advancedSearch(
-                graph.graph,
+                graph,
                 `[[${activeFile.basename}]]`.toLowerCase(),
                 query,
                 separator
@@ -81,7 +84,7 @@ export const GlobalAppMolecule = molecule((_, scope) => {
                 return []
             }
 
-            return searchParents(graph.graph, activeFile)
+            return searchParents(graph, activeFile.basename)
         }
     })
 
@@ -96,13 +99,13 @@ export const GlobalAppMolecule = molecule((_, scope) => {
             }
 
             const searchResults = advancedSearch(
-                graph.graph,
+                graph,
                 `[[${activeFile.basename}]]`.toLowerCase(),
                 query,
                 separator
             )
 
-            return flattenTasks(searchResults).nodes
+            return flattenTasks(searchResults)
         }
     })
 
@@ -132,7 +135,7 @@ export const SearchModalMolecule = molecule((mol, scope) => {
 
         const search = (isQuickLink && searchQuery.length > 0) ? `${searchQuery} . :page | :header` : searchQuery
 
-        const searchResults = searchIndex(graph.graph, search, separator)
+        const searchResults = searchIndex(graph, search, separator)
         set(searchMol.updateSearchResultsAtom, searchResults)
     })
 
@@ -211,7 +214,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             return `Search ${totalNodes} nodes`
         }
 
-        return `Search ${graph.graph.nodes().length} nodes and ${graph.graph.edges().length} edges`
+        return `Search ${graph.order} nodes and ${graph.size} edges`
     })
 
     const incrementPagesAtom = atom(
@@ -443,13 +446,14 @@ function mergeTokens(node1: TextNode, node2: TextNode): TextNode {
         decoration: "none",
         location: node2.location
     }
-    const tokens = [...node1.parsedTokens, separator, ...node2.parsedTokens]
+    const tokens = [...node1.parsedTokens, separator as unknown as ParsedTextToken, ...node2.parsedTokens]
     return {
-        nodeType: "text",
+        nodeType: "text" as const,
         location: node1.location,
         parsedTokens: tokens,
         tags: [],
         ageDays: Math.min(node1.ageDays, node2.ageDays),
+        boost: node1.boost,
         isTask: false,
         isCompleted: false,
         searchKey: node1.searchKey

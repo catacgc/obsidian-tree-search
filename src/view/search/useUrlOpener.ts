@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import { App } from 'obsidian';
 import {highlightLine, openFileByName, revealFolder} from '../../obsidian-utils';
-import { ParsedNode } from 'src/graph';
+import { ParsedNode } from '@mdtree/core';
 
 export const useUrlOpener = () => {
     const linkRef = useRef<HTMLAnchorElement>(null);

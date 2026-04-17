@@ -1,7 +1,7 @@
 import {atom, useAtomValue} from "jotai";
 import {Notice} from "obsidian";
 import {highlightLine} from "../../obsidian-utils";
-import {getTreeNodeActions, RaycastAction} from "../raycast/raycast-response";
+import {getTreeNodeActions, RaycastAction} from "../node-actions";
 import {molecule} from "bunshi";
 import {GlobalAppMolecule, SearchViewMolecule, SearchViewScope} from "./state";
 import {GlobalAtoms} from "./global";
