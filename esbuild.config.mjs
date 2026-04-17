@@ -37,6 +37,7 @@ const esbuildOptions = {
 	external: [
 		"obsidian",
 		"electron",
+		"jotai/vanilla/internals",
 		"@codemirror/autocomplete",
 		"@codemirror/collab",
 		"@codemirror/commands",

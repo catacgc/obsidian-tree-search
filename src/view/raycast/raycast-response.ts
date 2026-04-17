@@ -1,6 +1,6 @@
 import { reverseMarkdownParsing } from "../copy";
 import { TreeNode } from "../search/SearchViewFlatten";
-import { ObsidianLinkToken, ParsedTextToken } from "src/graph";
+import { ObsidianLinkToken, ParsedTextToken } from "@mdtree/core";
 import {App} from "obsidian";
 
 export interface VaultResults {

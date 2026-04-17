@@ -35,6 +35,8 @@ function reverseMarkdown(tokens: ParsedTextToken[]): string {
       return `[${token.content}](${token.href})` + rest
     case "image":
       return `![${token.alt}](${token.src})` + rest
+    case "meta_action":
+      return token.name + rest
   }
 }
 
