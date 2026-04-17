@@ -25,25 +25,32 @@ export class IndexedTree {
     async refresh(): Promise<void> {
         if (this.isLoading) return
         this.isLoading = true
-        const settings = getSettings(this.store)
-        const graph = await buildGraph(this.vaultPath, {
-            parentRelation: settings.parentRelation,
-            archiveTag: settings.archiveTag,
-            searchSeparator: settings.searchSeparator,
-        })
-        this.setState(graph)
-        this.isLoading = false
+        try {
+            const settings = getSettings(this.store)
+            const graph = await buildGraph(this.vaultPath, {
+                parentRelation: settings.parentRelation,
+                archiveTag: settings.archiveTag,
+                searchSeparator: settings.searchSeparator,
+            })
+            this.setState(graph)
+        } finally {
+            this.isLoading = false
+        }
     }
 
     async refreshPage(file: TFile): Promise<void> {
-        const absPath = join(this.vaultPath, file.path)
-        const settings = getSettings(this.store)
-        await reindexFile(absPath, this.vaultPath, this.graph, {
-            parentRelation: settings.parentRelation,
-            archiveTag: settings.archiveTag,
-            searchSeparator: settings.searchSeparator,
-        })
-        this.setState(this.graph)
+        try {
+            const absPath = join(this.vaultPath, file.path)
+            const settings = getSettings(this.store)
+            await reindexFile(absPath, this.vaultPath, this.graph, {
+                parentRelation: settings.parentRelation,
+                archiveTag: settings.archiveTag,
+                searchSeparator: settings.searchSeparator,
+            })
+            this.setState(this.graph)
+        } catch (err) {
+            console.warn(`[mdtree] Failed to reindex ${file.path}:`, err)
+        }
     }
 
     private setState(graph: NotesGraph): void {
