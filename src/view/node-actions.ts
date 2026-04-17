@@ -1,21 +1,7 @@
-import { reverseMarkdownParsing } from "../copy";
-import { TreeNode } from "../search/SearchViewFlatten";
+import { reverseMarkdownParsing } from "./copy";
+import { TreeNode } from "./search/SearchViewFlatten";
 import { ObsidianLinkToken, ParsedTextToken } from "@mdtree/core";
 import {App} from "obsidian";
-
-export interface VaultResults {
-    vault: string;
-    results: IndividualListItemModel[];
-    error?: string;
-}
-
-export interface IndividualListItemModel {
-    title: string,
-    level: number,
-    index: number,
-    nodeType: string,
-    actions: RaycastAction[]
-}
 
 export type RaycastAction = Copy | Browse
 
@@ -35,8 +21,6 @@ export interface Browse extends BaseAction {
     url: string
 }
 
-/* ======= ABOVE IS THE RAYCAST RESPONSE MODEL ======= */
-
 /** Icon.* values in the Raycast API */
 const Icons = {
     pencil: "pencil-16",
@@ -55,37 +39,16 @@ function truncateActionTitle(title: string): string {
 }
 
 export function getTreeNodeActions(app: App, treeNode: TreeNode): RaycastAction[] {
-
-    const result = createRaycastResponse(app, [treeNode])
-    const actions = result.results[0].actions
-
-    // Apply truncation to all action titles
-    return actions.map(action => ({
+    const vault = app.vault.getName()
+    const actions: RaycastAction[] = []
+    const title = renderTitle(treeNode, actions, app)
+    void title
+    const defaults = getDefaultActions(treeNode, vault)
+    const allActions = [...actions, ...defaults]
+    return allActions.map(action => ({
         ...action,
         title: truncateActionTitle(action.title)
     }))
-}
-
-export function createRaycastResponse(app: App, results: TreeNode[]): VaultResults {
-    const vault = app.vault.getName()
-    return {
-        vault: vault,
-        results: results.map((result, index) => {
-            const actions: RaycastAction[] = []
-            
-            const ret = {
-                title: renderTitleAndAge(result, actions, app),
-                level: result.indent,   
-                index: result.index,
-                nodeType: result.node.nodeType,
-                actions: actions
-            }
-
-            ret.actions = [...ret.actions, ...getDefaultActions(result, vault)]
-
-            return ret;
-    })
-    }
 }
 
 function getDefaultActions(result: TreeNode, vault: string): RaycastAction[] {
@@ -126,7 +89,6 @@ function getDefaultActions(result: TreeNode, vault: string): RaycastAction[] {
             title: `Copy Node`,
             icon: Icons.copy,
             shortcut: { modifiers: ["ctrl"], key: "c" }
-
         },
         {
             type: "browse",
@@ -139,13 +101,7 @@ function getDefaultActions(result: TreeNode, vault: string): RaycastAction[] {
     return [...defaults, ...moveFolderAction]
 }
 
-function renderTitleAndAge(result: TreeNode, actions: RaycastAction[], app: App) {
-    return renderTitle(result, actions, app) + ` (${result.node.ageDays} days ago)`
-
-}
-
 function renderTitle(result: TreeNode, actions: RaycastAction[], app: App): string {
-    const isFolder = result.node.nodeType == "folder"
     const vault = app.vault.getName()
 
     switch (result.node.nodeType) {
@@ -218,7 +174,6 @@ function getHighlightUrl(item: TreeNode["node"]["location"], vault: string): str
 
 function getOpenUrl(item: ObsidianLinkToken, vault: string): string {
     const target = item.pageTarget + (item.headerName ? `#${item.headerName}` : "")
-            
     const uri = `raycastaction=open&vault=${vault}&filepath=${target}`;
     return `obsidian://tree-search-uri?${encodeURI(uri)}`;
 }
@@ -228,13 +183,13 @@ function nodeRenderer(
     actions: RaycastAction[],
     vault: string
   ): string {
-  
+
     if (tokens.length == 0) return "";
-  
+
     const token = tokens[0];
 
     switch (token.tokenType) {
-        case "text":
+        case "text": {
             let decorate = ""
             if (token.decoration == "code") {
                 decorate = "📋 "
@@ -259,8 +214,8 @@ function nodeRenderer(
                 );
             }
             return decorate + token.text + nodeRenderer(tokens.slice(1), actions, vault);
-
-        case "obsidian_link":
+        }
+        case "obsidian_link": {
             const url = token.pageTarget + (token.headerName ? `#${token.headerName}` : "");
             actions.push(
                 {
@@ -270,7 +225,8 @@ function nodeRenderer(
                     icon: Icons.blankDocument
                 }
             );
-            return  "🔹" + token.source + nodeRenderer(tokens.slice(1), actions, vault);
+            return "🔹" + token.source + nodeRenderer(tokens.slice(1), actions, vault);
+        }
         case "link":
             actions.push(
                 {
