@@ -3,7 +3,8 @@
         "types": [
             "react",
             "node",
-            "obsidian-typings"
+            "obsidian-typings",
+            "bun"
         ],
         "baseUrl": ".",
         "jsx": "react-jsx",
