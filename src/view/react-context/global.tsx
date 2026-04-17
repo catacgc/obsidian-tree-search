@@ -1,4 +1,4 @@
-import {NotesGraph} from "../../graph";
+import {NotesGraph} from "@mdtree/core";
 import {App, Modal, TFile} from "obsidian";
 import {getDefaultStore, atom} from "jotai";
 

@@ -47,6 +47,7 @@
 		"typescript": "^5.8.3"
 	},
 	"dependencies": {
+		"@mdtree/core": "workspace:*",
 		"graphology": "^0.25.4",
 		"jotai": "^2.11.0",
 		"jotai-effect": "^2.0.4",
