@@ -1,5 +1,5 @@
 import { highlightLine, openFileByName } from "../obsidian-utils";
-import { ParsedNode, ParsedTextToken, TextTokenWithLocationLink } from "src/graph";
+import { ParsedNode, ParsedTextToken, Location } from "@mdtree/core";
 import {useMolecule} from "bunshi/react";
 import {GlobalAppMolecule, SearchViewMolecule} from "./react-context/state";
 import {useAtomValue} from "jotai";
@@ -136,9 +136,10 @@ export const TextNodeRenderer = (props: { parsedTokens: ParsedTextToken[] }) => 
                     break;
             }
             if ("location" in token) {
+                const locatedToken = token as ParsedTextToken & { location: Location }
                 return <>
                     <a href="#" className="cm-underline obsidian-link" onClick={async ev => {
-                        await highlightLine(app, token.location)
+                        await highlightLine(app, locatedToken.location)
                         ev.preventDefault()
                     }}> {decorated} </a>
                     <TextNodeRenderer parsedTokens={props.parsedTokens.slice(1)}/>

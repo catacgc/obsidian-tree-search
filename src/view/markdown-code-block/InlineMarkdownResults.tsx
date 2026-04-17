@@ -1,5 +1,5 @@
 import React, {useCallback} from "react";
-import {advancedSearch, ResultNode, searchIndex} from "../../search/search";
+import {advancedSearch, ResultNode, searchIndex} from "@mdtree/core";
 import SearchPage from "../SearchPage";
 import {MarkdownContextSettings} from "./ContextCodeBlock";
 import {useAtom, useAtomValue} from "jotai";
@@ -35,11 +35,11 @@ export const InlineMarkdownMolecule = molecule((mol, scope) => {
         console.log(settings, scp)
 
         if (settings.query && settings.inferred) {
-            const searchResults = searchIndex(graph.graph, `${settings.query} . ${query}`, separator)
+            const searchResults = searchIndex(graph, `${settings.query} . ${query}`, separator)
             set(searchMol.updateSearchResultsAtom, searchResults)
         } else {
             const reference = settings.heading ? `${settings.basename}#${settings.heading}` : `[[${settings.basename}]]`
-            const searchResults = advancedSearch(graph.graph, reference,
+            const searchResults = advancedSearch(graph, reference,
                 `${settings.query} . ${query}`,
                 separator)
             set(searchMol.updateSearchResultsAtom, searchResults)

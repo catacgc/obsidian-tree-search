@@ -1,5 +1,5 @@
 import {useAtomValue, useSetAtom} from "jotai";
-import {ParsedNode} from "../../graph";
+import {ParsedNode} from "@mdtree/core";
 import {useMolecule} from "bunshi/react";
 import {SearchViewMolecule} from "../react-context/state";
 import {SearchTreeNode} from "../SearchTreeNode";

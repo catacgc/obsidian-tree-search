@@ -1,5 +1,5 @@
 import {useEffect, useRef} from "react";
-import {ParsedNode} from "../graph";
+import {ParsedNode} from "@mdtree/core";
 import {NodeRenderer} from "./NodeRenderer";
 import {TreeNode} from "./search/SearchViewFlatten";
 import {useAtomValue, useSetAtom} from "jotai";

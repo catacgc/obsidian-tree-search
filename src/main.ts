@@ -24,7 +24,8 @@ export default class TreeSearchPlugin extends Plugin {
     private finishedRef: EventRef;
     private server: RaycastServer | null = null;
     globalStore = createStore();
-    private refreshInterval: number | null = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    private refreshInterval: any = null;
 
     async onunload() {
         console.log("Cleaning up after")
@@ -137,7 +138,7 @@ export default class TreeSearchPlugin extends Plugin {
             const loading = store.get(GlobalAtoms.isGraphLoadingAtom)
             const graph = store.get(GlobalAtoms.graphAtom)
             
-            if (!loading && graph.graph.nodes().length === 0) store.set(GlobalAtoms.isGraphLoadingAtom, true)
+            if (!loading && graph.order === 0) store.set(GlobalAtoms.isGraphLoadingAtom, true)
 
 
         }, 2000, 5);

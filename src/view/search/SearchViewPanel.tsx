@@ -4,7 +4,7 @@ import {GraphContextProvider} from "../react-context/GraphContextProvider";
 import {createStore} from "jotai";
 import {GlobalStore} from "../react-context/global";
 import SearchPage from "../SearchPage";
-import {ResultNode} from "../../search/search";
+import {ResultNode} from "@mdtree/core";
 
 export const SEARCH_VIEW = "tree-search";
 

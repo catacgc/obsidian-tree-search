@@ -1,6 +1,6 @@
 import {useAtom, useAtomValue, useSetAtom} from "jotai";
 import {useEffect} from "react";
-import {ResultNode} from "src/search/search";
+import {ResultNode} from "@mdtree/core";
 import {SearchViewFlatten} from "./search/SearchViewFlatten";
 import {KeyComboWrapper} from "./search/KeyComboWrapper";
 import {ScopeProvider, useMolecule} from "bunshi/react";

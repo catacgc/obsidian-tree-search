@@ -1,6 +1,6 @@
 import {useAtom, useAtomValue, useSetAtom} from "jotai";
 import {useEffect} from "react";
-import {advancedSearch, searchIndex} from "../../search/search";
+import {advancedSearch, searchIndex} from "@mdtree/core";
 import {SearchModalMolecule, SearchViewMolecule, SearchViewScope,} from "../react-context/state";
 import {SearchViewFlatten} from "./SearchViewFlatten";
 import {settingsAtom} from "../react-context/settings";
