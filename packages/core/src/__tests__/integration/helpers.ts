@@ -11,7 +11,7 @@ const MTIME = 1_700_000_000_000
 export function loadFixture(scenario: string): NotesGraph {
   const dir = join(FIXTURES_DIR, scenario)
   const g = new NotesGraph()
-  for (const file of readdirSync(dir).filter(f => f.endsWith(".md"))) {
+  for (const file of readdirSync(dir).filter(f => f.endsWith(".md")).sort()) {
     const content = readFileSync(join(dir, file), "utf8")
     const page = parseVaultFile(content, file, MTIME)
     indexSinglePage(page, g, DEFAULT_SETTINGS)

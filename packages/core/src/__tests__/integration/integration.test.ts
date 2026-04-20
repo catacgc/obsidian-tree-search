@@ -37,13 +37,17 @@ describe("deep-nesting", () => {
   })
 
   it("page.backend finds results under the Backend header", () => {
-    const results = search(g, "architecture.backend")
-    expect(results.length).toBeGreaterThan(0)
+    const keys = searchKeys(g, "architecture.backend")
+    expect(keys.some(k => k.includes("schema"))).toBe(true)
+    expect(keys.some(k => k.includes("migrations"))).toBe(true)
+    expect(keys.some(k => k.includes("endpoints"))).toBe(true)
   })
 
   it("page.backend.database finds results under Database subheader", () => {
-    const results = search(g, "architecture.backend.database")
-    expect(results.length).toBeGreaterThan(0)
+    const keys = searchKeys(g, "architecture.backend.database")
+    expect(keys.some(k => k.includes("schema"))).toBe(true)
+    expect(keys.some(k => k.includes("migrations"))).toBe(true)
+    expect(keys.some(k => k.includes("endpoints"))).toBe(false)
   })
 
   it("page.backend.database.schema finds Schema link under Database", () => {
@@ -115,8 +119,10 @@ describe("page-header-link", () => {
   })
 
   it("page.active finds results under Active header", () => {
-    const results = search(g, "projects.active")
-    expect(results.length).toBeGreaterThan(0)
+    const keys = searchKeys(g, "projects.active")
+    expect(keys.some(k => k.includes("alpha"))).toBe(true)
+    expect(keys.some(k => k.includes("beta"))).toBe(true)
+    expect(keys.some(k => k.includes("old"))).toBe(false)
   })
 
   // This is the bug: page.active.alpha should find Alpha (under Active header)
