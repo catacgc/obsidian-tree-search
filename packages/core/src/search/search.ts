@@ -52,16 +52,15 @@ function buildTree(
 function filterTreeByWord(
   node: ResultNode,
   expr: QueryExpr,
-  showOnlyMatchingChildren = true,
   pruneMatchingTree = false,
 ): ResultNode | null {
   const nodeMatches = matchQuery(node.node, expr)
 
   if (!nodeMatches && pruneMatchingTree) return null
-  if (nodeMatches && !showOnlyMatchingChildren && !pruneMatchingTree) return node
+  if (nodeMatches && !pruneMatchingTree) return node  // matched: keep entire subtree
 
   const matchingChildren = node.children
-    .map(child => filterTreeByWord(child, expr, showOnlyMatchingChildren, pruneMatchingTree))
+    .map(child => filterTreeByWord(child, expr, pruneMatchingTree))
     .filter((c): c is ResultNode => c !== null)
 
   if (!nodeMatches && matchingChildren.length === 0) return null
@@ -82,7 +81,7 @@ function filterDown(results: ResultNode[], search: QueryExpr[]): ResultNode[] {
   const pruneMatchingTree = isNegation(expr)
 
   const filtered = results
-    .map(r => filterTreeByWord(r, expr, true, pruneMatchingTree))
+    .map(r => filterTreeByWord(r, expr, pruneMatchingTree))
     .filter((r): r is ResultNode => r !== null)
 
   return filterDown(filtered, search.slice(1))
