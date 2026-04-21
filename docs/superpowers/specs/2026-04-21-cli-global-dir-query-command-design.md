@@ -20,7 +20,9 @@ mdtree --dir ~/Documents/vault index
 mdtree --dir ~/Documents/vault watch --fresh
 mdtree --dir ~/Documents/vault serve --port 28888
 
-# Multi-vault (serve and query only)
+# Multi-vault (all subcommands)
+mdtree --dir ~/vault1 --dir ~/vault2 index
+mdtree --dir ~/vault1 --dir ~/vault2 watch --fresh
 mdtree --dir ~/vault1 --dir ~/vault2 serve
 mdtree --dir ~/vault1 --dir ~/vault2 query "work.tasks" --limit 20
 
@@ -32,20 +34,20 @@ mdtree --dir ~/vault query "work.tasks" --json
 
 `--dir <path>` is declared on the root `program` (Commander) as a repeatable option using the accumulator pattern `(v, acc) => [...acc, v]`. Default is `[]`; all subcommands read `program.opts().dir`.
 
-## Subcommand Constraints
+## Subcommand Behaviour with Multiple Dirs
 
-| Command | Multi-dir support | Behaviour when >1 dir given |
-|---------|-------------------|------------------------------|
-| `index` | No | Error with message |
-| `watch` | No | Error with message |
-| `serve` | Yes | Each vault gets its own index + socket |
-| `query` | Yes | Results merged across vaults |
+| Command | Behaviour |
+|---------|-----------|
+| `index` | Indexes each dir sequentially, writes a separate SQLite db per vault |
+| `watch` | Starts a watcher for each dir, each with its own SQLite db |
+| `serve` | Each vault gets its own index + socket (existing behaviour) |
+| `query` | Results merged across all vaults |
 
 ## `query` Command
 
 **Options:**
 - `--limit <n>` — max results to return (default: 100)
-- `--out <path>` — override SQLite path (single vault only; error if >1 dir with --out)
+- `--out <path>` — override SQLite path; only valid with a single `--dir` (error if >1 dir)
 - `--json` — emit JSON array instead of one-result-per-line text
 
 **Algorithm:**
@@ -66,8 +68,8 @@ The raw `TreeNode[]` array serialized as JSON — full objects including `node`,
 | File | Change |
 |------|--------|
 | `packages/cli/src/main.ts` | Move `--vault` → global `--dir`; wire dirs into each subcommand; add `query` registration |
-| `packages/cli/src/commands/index.ts` | Accept `dir` instead of `vault`; error if multiple dirs |
-| `packages/cli/src/commands/watch.ts` | Accept `dir` instead of `vault`; error if multiple dirs |
+| `packages/cli/src/commands/index.ts` | Accept `dirs[]` instead of `vault`; loop over each dir |
+| `packages/cli/src/commands/watch.ts` | Accept `dirs[]` instead of `vault`; start watcher per dir |
 | `packages/cli/src/commands/serve.ts` | Accept `dirs` instead of `vaults` (rename only) |
 | `packages/cli/src/commands/query.ts` | New file — `QueryOptions` type + `runQuery` implementation |
 
