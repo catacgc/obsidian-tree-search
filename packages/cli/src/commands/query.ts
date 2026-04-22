@@ -1,5 +1,5 @@
 import { resolve, basename } from "node:path"
-import { DEFAULT_SETTINGS, NotesGraph, searchIndex, flattenIndex } from "@mdtree/core"
+import { DEFAULT_SETTINGS, NotesGraph, searchIndex, flattenIndex, reverseMarkdownParsing } from "@mdtree/core"
 import type { TreeNode } from "@mdtree/core"
 import { VaultStore, defaultDbPath } from "../store/sqlite.ts"
 
@@ -40,7 +40,9 @@ export async function runQuery(opts: QueryOptions): Promise<void> {
     process.stdout.write(JSON.stringify(limited, null, 2) + "\n")
   } else {
     for (const item of limited) {
-      process.stdout.write(item.node.searchKey + "\n")
+      const indent = "  ".repeat(item.indent)
+      const label = reverseMarkdownParsing(item.node)
+      process.stdout.write(indent + label + "\n")
     }
   }
 }
