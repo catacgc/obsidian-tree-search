@@ -7,40 +7,52 @@ import { AsyncQueue } from "../util/async-queue.ts"
 import { enqueuePluginRuns } from "../plugins/trigger.ts"
 
 export type WatchOptions = {
-  vault: string
+  dirs: string[]
   out?: string
   fresh?: boolean
 }
 
 export async function runWatch(opts: WatchOptions): Promise<void> {
-  const vaultRoot = resolve(opts.vault)
-  const vaultName = basename(vaultRoot)
-  const dbPath = opts.out ?? defaultDbPath(vaultName)
+  if (opts.out && opts.dirs.length > 1) {
+    console.error("[mdtree] --out cannot be used with multiple --dir arguments")
+    process.exit(1)
+  }
 
-  const { graph, store } = await loadOrBuild(vaultRoot, vaultName, dbPath, opts.fresh)
+  const stoppers: (() => void)[] = []
 
-  console.log(`[mdtree] Watching ${vaultRoot} ...`)
+  for (const dir of opts.dirs) {
+    const vaultRoot = resolve(dir)
+    const vaultName = basename(vaultRoot)
+    const dbPath = opts.out ?? defaultDbPath(vaultName)
 
-  const queue = new AsyncQueue()
-  enqueuePluginRuns(vaultRoot, vaultName, graph, DEFAULT_SETTINGS, store, queue)
-  const stop = watchVault(vaultRoot, event => {
-    queue.enqueue(async () => {
-      if (event.type === "unlink") {
-        const relPath = event.path.slice(vaultRoot.length + 1)
-        graph.removeByPath(relPath)
-        store.deleteByPath(vaultName, relPath)
-        console.log(`[mdtree] Removed: ${relPath}`)
-      } else {
-        console.log(`[mdtree] Re-indexing: ${event.path.slice(vaultRoot.length + 1)}`)
-        await reindexFile(event.path, vaultRoot, graph, DEFAULT_SETTINGS, store, vaultName)
-      }
+    const { graph, store } = await loadOrBuild(vaultRoot, vaultName, dbPath, opts.fresh)
+
+    console.log(`[mdtree] Watching ${vaultRoot} ...`)
+
+    const queue = new AsyncQueue()
+    enqueuePluginRuns(vaultRoot, vaultName, graph, DEFAULT_SETTINGS, store, queue)
+    const stop = watchVault(vaultRoot, event => {
+      queue.enqueue(async () => {
+        if (event.type === "unlink") {
+          const relPath = event.path.slice(vaultRoot.length + 1)
+          graph.removeByPath(relPath)
+          store.deleteByPath(vaultName, relPath)
+          console.log(`[${vaultName}] Removed: ${relPath}`)
+        } else {
+          console.log(`[${vaultName}] Re-indexing: ${event.path.slice(vaultRoot.length + 1)}`)
+          await reindexFile(event.path, vaultRoot, graph, DEFAULT_SETTINGS, store, vaultName)
+        }
+      })
     })
-  })
 
-  // Keep alive until SIGINT
+    stoppers.push(() => {
+      stop()
+      store.close()
+    })
+  }
+
   await waitForSignal()
-  stop()
-  store.close()
+  for (const stop of stoppers) stop()
 }
 
 // Stale threshold: warn (but still use cache) if older than 24 h
@@ -85,4 +97,3 @@ function waitForSignal(): Promise<void> {
     process.once("SIGTERM", resolve)
   })
 }
-
