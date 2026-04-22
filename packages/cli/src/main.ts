@@ -22,8 +22,7 @@ program
   .description("Parse vault(s) and write the graph index to SQLite, then exit")
   .option("--out <path>", "SQLite output path (single vault only)")
   .action(async opts => {
-    const dirs: string[] = program.opts().dir
-    if (dirs.length === 0) dirs.push(process.cwd())
+    const dirs: string[] = program.opts().dir.length > 0 ? program.opts().dir : [process.cwd()]
     await runIndex({ dirs, out: opts.out })
   })
 
@@ -33,8 +32,7 @@ program
   .option("--out <path>", "SQLite output path (single vault only)")
   .option("--fresh", "Ignore cached index and rebuild from scratch")
   .action(async opts => {
-    const dirs: string[] = program.opts().dir
-    if (dirs.length === 0) dirs.push(process.cwd())
+    const dirs: string[] = program.opts().dir.length > 0 ? program.opts().dir : [process.cwd()]
     await runWatch({ dirs, out: opts.out, fresh: opts.fresh })
   })
 
@@ -45,8 +43,7 @@ program
   .option("--port <number>", "TCP port to serve on (default: Unix socket)", parseInt)
   .option("--fresh", "Ignore cached index and rebuild from scratch")
   .action(async opts => {
-    const dirs: string[] = program.opts().dir
-    if (dirs.length === 0) dirs.push(process.cwd())
+    const dirs: string[] = program.opts().dir.length > 0 ? program.opts().dir : [process.cwd()]
     await runServe({ dirs, out: opts.out, port: opts.port, fresh: opts.fresh })
   })
 
@@ -57,9 +54,8 @@ program
   .option("--out <path>", "SQLite path (single vault only)")
   .option("--json", "Output full JSON instead of plain text")
   .action(async (queryStr, opts) => {
-    const dirs: string[] = program.opts().dir
-    if (dirs.length === 0) dirs.push(process.cwd())
-    await runQuery({ dirs, queryStr, limit: opts.limit ?? 100, out: opts.out, json: opts.json ?? false })
+    const dirs: string[] = program.opts().dir.length > 0 ? program.opts().dir : [process.cwd()]
+    await runQuery({ dirs, queryStr, limit: opts.limit, out: opts.out, json: opts.json ?? false })
   })
 
 addPluginCommands(program)
