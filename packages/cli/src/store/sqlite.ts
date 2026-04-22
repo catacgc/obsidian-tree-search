@@ -239,13 +239,6 @@ export class VaultStore {
     ).map(r => ({ namespace: r.namespace, enabled: r.enabled !== 0, outputPath: r.output_path }))
   }
 
-  listVaults(): string[] {
-    const rows = this.db
-      .query("SELECT DISTINCT vault FROM meta")
-      .all() as { vault: string }[]
-    return rows.map(r => r.vault)
-  }
-
   close(): void {
     this.db.close()
   }

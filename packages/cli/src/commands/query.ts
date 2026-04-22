@@ -26,13 +26,7 @@ export async function runQuery(opts: QueryOptions): Promise<void> {
 
     const store = new VaultStore(dbPath)
     const graph = new NotesGraph()
-
-    // When --out is given we load every vault stored in that DB file;
-    // otherwise we load only the vault whose name matches the directory.
-    const vaultNames = opts.out ? store.listVaults() : [vaultName]
-    for (const name of vaultNames) {
-      store.loadIntoGraph(name, graph)
-    }
+    store.loadIntoGraph(vaultName, graph)
     store.close()
 
     const results = searchIndex(graph, opts.queryStr, DEFAULT_SETTINGS.searchSeparator)

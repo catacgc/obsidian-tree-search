@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test"
-import { join } from "node:path"
+import { join, basename } from "node:path"
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { VaultStore } from "../store/sqlite.ts"
@@ -8,10 +8,8 @@ import { runQuery } from "../commands/query.ts"
 
 let vaultDir: string
 let dbPath: string
-const VAULT_NAME = "test-vault"
 
 beforeAll(async () => {
-  // Create a temp dir that acts as a vault
   vaultDir = mkdtempSync(join(tmpdir(), "mdtree-query-vault-"))
   writeFileSync(join(vaultDir, "work.md"), "# tasks\n- Buy groceries\n- Write report\n")
 
@@ -19,7 +17,7 @@ beforeAll(async () => {
 
   const graph = await buildGraph(vaultDir)
   const store = new VaultStore(dbPath)
-  store.saveGraph(VAULT_NAME, graph)
+  store.saveGraph(basename(vaultDir), graph)
   store.close()
 })
 
