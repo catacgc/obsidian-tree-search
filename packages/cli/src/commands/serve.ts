@@ -9,22 +9,27 @@ import { AsyncQueue } from "../util/async-queue.ts"
 import { enqueuePluginRuns } from "../plugins/trigger.ts"
 
 export type ServeOptions = {
-  vaults: string[]          // one or more vault paths
-  out?: string              // shared SQLite path (or per-vault auto if omitted)
-  port?: number             // if set, TCP; else Unix socket
-  fresh?: boolean           // force rebuild ignoring cached index
+  dirs: string[]
+  out?: string
+  port?: number
+  fresh?: boolean
 }
 
 export async function runServe(opts: ServeOptions): Promise<void> {
-  if (opts.vaults.length === 0) {
-    console.error("[mdtree] No vaults specified.")
+  if (opts.dirs.length === 0) {
+    console.error("[mdtree] No directories specified.")
+    process.exit(1)
+  }
+
+  if (opts.out && opts.dirs.length > 1) {
+    console.error("[mdtree] --out cannot be used with multiple --dir arguments")
     process.exit(1)
   }
 
   const stoppers: (() => void)[] = []
 
-  for (const rawVault of opts.vaults) {
-    const vaultRoot = resolve(rawVault)
+  for (const rawDir of opts.dirs) {
+    const vaultRoot = resolve(rawDir)
     const vaultName = basename(vaultRoot)
     const dbPath = opts.out ?? defaultDbPath(vaultName)
 
@@ -36,17 +41,14 @@ export async function runServe(opts: ServeOptions): Promise<void> {
       vaultName,
     }
 
-    // Start HTTP server for this vault
     const server = startServer(vaultIndex, {
-      port: opts.vaults.length === 1 ? opts.port : undefined,
-      // Multi-vault: each gets its own socket regardless of --port
+      port: opts.dirs.length === 1 ? opts.port : undefined,
       socketPath:
-        opts.vaults.length > 1 || !opts.port
+        opts.dirs.length > 1 || !opts.port
           ? `/tmp/mdtree-${vaultName}.sock`
           : undefined,
     })
 
-    // Run plugins after initial index, then watch for file changes
     const queue = new AsyncQueue()
     enqueuePluginRuns(vaultRoot, vaultName, graph, DEFAULT_SETTINGS, store, queue)
     const stopWatch = watchVault(vaultRoot, event => {
@@ -70,7 +72,7 @@ export async function runServe(opts: ServeOptions): Promise<void> {
     })
   }
 
-  console.log(`[mdtree] Serving ${opts.vaults.length} vault(s). Press Ctrl+C to stop.`)
+  console.log(`[mdtree] Serving ${opts.dirs.length} vault(s). Press Ctrl+C to stop.`)
 
   await waitForSignal()
   for (const stop of stoppers) stop()
