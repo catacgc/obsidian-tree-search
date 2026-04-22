@@ -33,10 +33,12 @@ describe("runQuery", () => {
     // @ts-ignore
     process.stdout.write = (chunk: string) => { lines.push(chunk); return true }
 
-    await runQuery({ dirs: [vaultDir], queryStr: "tasks", limit: 100, out: dbPath, json: false })
-
-    // @ts-ignore
-    process.stdout.write = origWrite
+    try {
+      await runQuery({ dirs: [vaultDir], queryStr: "tasks", limit: 100, out: dbPath, json: false })
+    } finally {
+      // @ts-ignore
+      process.stdout.write = origWrite
+    }
 
     const output = lines.join("")
     expect(output).toContain("tasks")
@@ -48,10 +50,12 @@ describe("runQuery", () => {
     // @ts-ignore
     process.stdout.write = (chunk: string) => { output += chunk; return true }
 
-    await runQuery({ dirs: [vaultDir], queryStr: "tasks", limit: 100, out: dbPath, json: true })
-
-    // @ts-ignore
-    process.stdout.write = origWrite
+    try {
+      await runQuery({ dirs: [vaultDir], queryStr: "tasks", limit: 100, out: dbPath, json: true })
+    } finally {
+      // @ts-ignore
+      process.stdout.write = origWrite
+    }
 
     const parsed = JSON.parse(output)
     expect(Array.isArray(parsed)).toBe(true)
