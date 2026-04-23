@@ -1,6 +1,28 @@
 import { describe, it, expect } from "bun:test"
 import { loadFixture, search, searchKeys } from "./helpers.ts"
 
+// ── aliases ───────────────────────────────────────────────────────────────────
+
+describe("aliases", () => {
+  const g = loadFixture("aliases")
+
+  it("page node stores aliases from frontmatter", () => {
+    const node = g.getNodeAttributes("[[meeting notes]]") as { aliases: string[] }
+    expect(node.aliases).toContain("Meeting1")
+    expect(node.aliases).toContain("Meeting2")
+  })
+
+  it("searchable by alias Meeting1", () => {
+    const keys = searchKeys(g, "meeting1")
+    expect(keys).toContain("meeting notes|meeting1 meeting2")
+  })
+
+  it("searchable by alias Meeting2", () => {
+    const keys = searchKeys(g, "meeting2")
+    expect(keys).toContain("meeting notes|meeting1 meeting2")
+  })
+})
+
 // ── basic-search ──────────────────────────────────────────────────────────────
 
 describe("basic-search", () => {

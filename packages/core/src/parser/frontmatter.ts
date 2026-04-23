@@ -33,7 +33,7 @@ export function parseFrontmatter(content: string): {
 export function extractAliases(fm: Frontmatter): string[] {
   const raw = fm["aliases"]
   if (!raw) return []
-  if (Array.isArray(raw)) return raw.map(String)
+  if (Array.isArray(raw)) return raw.filter((item): item is string => typeof item === "string")
   if (typeof raw === "string") return [raw]
   return []
 }
@@ -45,7 +45,7 @@ export function extractAliases(fm: Frontmatter): string[] {
 export function extractTags(fm: Frontmatter): string[] {
   const raw = fm["tags"]
   if (!raw) return []
-  if (Array.isArray(raw)) return raw.map(String)
+  if (Array.isArray(raw)) return raw.filter((item): item is string => typeof item === "string")
   if (typeof raw === "string") return [raw]
   return []
 }

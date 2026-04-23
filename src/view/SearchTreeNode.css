@@ -141,3 +141,11 @@
 .ts-list-text {
     margin-left: 4px;
 }
+
+.suggestion-highlight {
+    background-color: transparent;
+    font-weight: inherit;
+    text-decoration: underline;
+    text-decoration-color: rgb(var(--text-highlight-bg-rgb));
+    text-underline-offset: 2px;
+}

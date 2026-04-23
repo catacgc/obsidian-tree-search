@@ -1,5 +1,5 @@
 import {TreeNode} from '../search/SearchViewFlatten'
-import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents} from '@mdtree/core'
+import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, type QueryExpr} from '@mdtree/core'
 import {atom, useAtomValue} from 'jotai'
 import {ParsedNode, ParsedTextToken, TextNode, Location} from '@mdtree/core'
 
@@ -355,6 +355,12 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         set(expandVisibleNodesAtom)
     })
 
+    const matchTermsAtom = atom<string[]>((get) => {
+        const query = get(actualQueryAtom)
+        if (!query) return []
+        return extractTerms(parseQuery(query))
+    })
+
     return {
             scopeName: {name: scp.name, instance: instance},
             actualQueryAtom,
@@ -375,11 +381,25 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             getExpandLevel,
             searchPlaceholderAtom,
             setDefaultExpandLevelAtom,
-            expandNodeAtom, selectedLineAtom, updateHoveredLineAtom, hoveredLineAtom
+            expandNodeAtom, selectedLineAtom, updateHoveredLineAtom, hoveredLineAtom,
+            matchTermsAtom
     }
 })
 
 
+
+function extractTerms(expr: QueryExpr): string[] {
+    switch (expr.type) {
+        case "contains":   return [expr.value]
+        case "startsWith": return [expr.value]
+        case "equals":     return [expr.value]
+        case "and":        return expr.exprs.flatMap(extractTerms)
+        case "or":         return expr.exprs.flatMap(extractTerms)
+        case "not":        return []
+        case "modifier":   return []
+        case "empty":      return []
+    }
+}
 
 function transformToText(node: ParsedNode): TextNode {
     let tokens: ParsedTextToken[] = []

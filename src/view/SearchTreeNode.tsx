@@ -13,11 +13,12 @@ type SearchTreeNodePropsFlatten = {
 
 export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
 
-    const {expandNodeAtom, selectedLineAtom, updateHoveredLineAtom} = useMolecule(SearchViewMolecule)
+    const {expandNodeAtom, selectedLineAtom, updateHoveredLineAtom, matchTermsAtom} = useMolecule(SearchViewMolecule)
     const {selectHoveredLineAtom} = useMolecule(ActionsMolecule)
 
     const nodeRef = useRef<HTMLDivElement>(null);
     const selectedLine = useAtomValue(selectedLineAtom);
+    const matchTerms = useAtomValue(matchTermsAtom);
 
     const expandNode = useSetAtom(expandNodeAtom);
     const updateHovered = useSetAtom(updateHoveredLineAtom);
@@ -85,7 +86,7 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
                 <div className="ts-list-content flex flex-row justify-between"
                      area-label={props.node.node.location.path} title={props.node.node.location.path}>
                     <div>
-                    <NodeRenderer node={props.node.node}/>
+                    <NodeRenderer node={props.node.node} matchTerms={matchTerms}/>
                     </div>
 
                     {/*<div className="flex justify-end text-xs">*/}

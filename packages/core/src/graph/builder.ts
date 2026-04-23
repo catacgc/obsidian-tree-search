@@ -66,13 +66,12 @@ export async function buildGraphFromScanner(
   }
 
   for (let i = 0; i < files.length; i++) {
+    if (i % BATCH_SIZE === 0) {
+      await new Promise<void>(resolve => setTimeout(resolve, 0))
+    }
     const file = files[i]
     const { content, mtime } = await scanner.readFile(file.path)
     await indexScannedFile(file.path, content, mtime, graph, settings)
-
-    if ((i + 1) % BATCH_SIZE === 0) {
-      await new Promise<void>(resolve => setTimeout(resolve, 0))
-    }
   }
 
   return graph

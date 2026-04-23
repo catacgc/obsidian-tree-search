@@ -3,8 +3,8 @@
 This project uses **crew** to manage plugins, MCP servers, and credentials.
 
 The following entries in `.claude/settings.local.json` are managed by crew and should not be manually edited:
-- `extraKnownMarketplaces["crew-plugins"]`
-- `enabledPlugins` entries ending in `@crew-plugins`
+- `extraKnownMarketplaces["crew-managed-eb1716d0"]`
+- `enabledPlugins` entries ending in `@crew-managed-eb1716d0`
 
 
 ## Setup & Configuration

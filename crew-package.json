@@ -1,5 +1,6 @@
 {
   "plugins": {
-    "superpowers": "github:obra/superpowers"
+    "superpowers": "github:obra/superpowers",
+    "commit-commands": "github:anthropics/claude-plugins-official/plugins/commit-commands"
   }
 }

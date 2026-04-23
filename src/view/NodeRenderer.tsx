@@ -3,25 +3,38 @@ import { ParsedNode, ParsedTextToken, Location } from "@mdtree/core";
 import {useMolecule} from "bunshi/react";
 import {GlobalAppMolecule, SearchViewMolecule} from "./react-context/state";
 import {useAtomValue} from "jotai";
+import React from "react";
+
+function highlightText(text: string, terms: string[]): React.ReactNode {
+    if (terms.length === 0) return text
+    const escaped = terms.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    const regex = new RegExp(`(${escaped.join('|')})`, 'gi')
+    const parts = text.split(regex)
+    return <>{parts.map((part, i) =>
+        terms.some(t => part.toLowerCase() === t.toLowerCase())
+            ? <mark key={i} className="suggestion-highlight">{part}</mark>
+            : part
+    )}</>
+}
 
 export const NodeRenderer = (
-    props: { node: ParsedNode }
+    props: { node: ParsedNode; matchTerms: string[] }
 ) => {
 
     return <>
         <BaseNodeRender {...props}/>
         <span> ({props.node.ageDays} days ago) </span>
-        <span> ({props.node.boost} days ago) </span>
     </>
 }
 
 
 const BaseNodeRender = (
-    props: { node: ParsedNode }
+    props: { node: ParsedNode; matchTerms: string[] }
 ) => {
     const {appAtom} = useMolecule(GlobalAppMolecule)
 
     const app = useAtomValue(appAtom)
+    const { matchTerms } = props
 
     async function openFile(name: string) {
         if (app == undefined) return
@@ -32,18 +45,18 @@ const BaseNodeRender = (
         case "page":
             const page = props.node.page
             const isRef = props.node.isReference
-            const aliases = props.node.aliases.join(",")
+            const aliases = props.node.aliases.join(", ")
             return <span className={isRef ? "is-unresolved" : ""}>
                 <a className={"obsidian-link " + (isRef ? "cm-underline" : "")} href="#" onClick={async ev => {
                     await openFile(page)
                     ev.preventDefault()
                 }
-                }>{page}{aliases ? ` (${aliases})` : ""}</a>
+                }>{highlightText(page, matchTerms)}{aliases ? <> ({highlightText(aliases, matchTerms)})</> : ""}</a>
             </span>
         case "header":
-            return <span>{`${props.node.page} > ${props.node.header}`}</span>
+            return <span>{highlightText(`${props.node.page} > ${props.node.header}`, matchTerms)}</span>
         case "text":
-            return <TextNodeRenderer parsedTokens={props.node.parsedTokens}/>
+            return <TextNodeRenderer parsedTokens={props.node.parsedTokens} matchTerms={matchTerms}/>
         case "month":
             return <span>{props.node.monthLiteral} {props.node.year}</span>
         case "folder":
@@ -53,7 +66,7 @@ const BaseNodeRender = (
                     await openFile(folderNote)
                     ev.preventDefault()
                 }}>
-                {props.node.path} 📂
+                {highlightText(props.node.path, matchTerms)} 📂
                 </a>
             </span>
         case "folderNote":
@@ -62,27 +75,27 @@ const BaseNodeRender = (
                     await openFile((props.node as any).page.page)
                     ev.preventDefault()
                 }
-                }>{(props.node as any).folder.name}</a> 📂📄
+                }>{highlightText((props.node as any).folder.name, matchTerms)}</a> 📂📄
             </span>
         case "pointer":
-            // Pointer nodes should not be rendered directly - they should be resolved first
             return <span>⚠️ Pointer node should not be rendered</span>
         case "attachment":
             const attachmentName = props.node.name
-            const attachmentAliases = props.node.aliases.join(",")
+            const attachmentAliases = props.node.aliases.join(", ")
             return <span className={""}>
                 <a className={"obsidian-link "} href="#" onClick={async ev => {
                     await openFile(page)
                     ev.preventDefault()
                 }
-                }>{attachmentName}{attachmentAliases ? ` (${attachmentAliases})` : ""}</a>
+                }>{highlightText(attachmentName, matchTerms)}{attachmentAliases ? <> ({highlightText(attachmentAliases, matchTerms)})</> : ""}</a>
             </span>
     }
 }
 
-export const TextNodeRenderer = (props: { parsedTokens: ParsedTextToken[] }) => {
+export const TextNodeRenderer = (props: { parsedTokens: ParsedTextToken[]; matchTerms: string[] }) => {
     const {appAtom} = useMolecule(GlobalAppMolecule)
     const app = useAtomValue(appAtom)
+    const { matchTerms } = props
 
     async function openFile(name: string) {
         if (app == undefined) return
@@ -91,49 +104,42 @@ export const TextNodeRenderer = (props: { parsedTokens: ParsedTextToken[] }) => 
 
     if (props.parsedTokens.length == 0) return <></>
     const token = props.parsedTokens[0]
+    const rest = <TextNodeRenderer parsedTokens={props.parsedTokens.slice(1)} matchTerms={matchTerms}/>
 
     switch (token.tokenType) {
-        case "obsidian_link":
+        case "obsidian_link": {
+            const display = (token.alias && !parseInt(token.alias)) ? token.alias : token.pageTarget
+            const header = token.headerName ? ` > ${token.headerName.trim()}` : ""
             return <span>
-            <a className={"obsidian-link " + (false ? "cm-underline" : "")} href="#" onClick={async ev => {
-                await openFile(token.pageTarget)
-                ev.preventDefault()
-            }}>
-                {(token.alias && !parseInt(token.alias)) ? token.alias : token.pageTarget}
-                {token.headerName ? ` > ${token.headerName.trim()}` : ""}
-            </a>
-            <TextNodeRenderer parsedTokens={props.parsedTokens.slice(1)}/>
+                <a className={"obsidian-link"} href="#" onClick={async ev => {
+                    await openFile(token.pageTarget)
+                    ev.preventDefault()
+                }}>
+                    {highlightText(display, matchTerms)}{header}
+                </a>
+                {rest}
             </span>
+        }
         case "link":
             return <>
                 <a className={"external-link"} href={token.href}>{token.content}</a>
-                <TextNodeRenderer parsedTokens={props.parsedTokens.slice(1)}/>
+                {rest}
             </>
         case "image":
             return <>
                 <a href={token.src} target="_blank">{token.alt || token.src}</a>
-                <TextNodeRenderer parsedTokens={props.parsedTokens.slice(1)}/>
+                {rest}
             </>
-        case "text":
-            let decorated = <span>{token.text}</span>
+        case "text": {
+            const highlighted = highlightText(token.text, matchTerms)
+            let decorated: React.ReactNode
             switch (token.decoration) {
-                case "bold":
-                    decorated = <b>{token.text}</b>
-                    break;
-                case "italic":
-                    decorated = <i>{token.text}</i>
-                    break;
-                case "underline":
-                    decorated = <u>{token.text}</u>
-                    break;
-                case "strikethrough":
-                    decorated = <s>{token.text}</s>
-                    break;
-                case "code":
-                    decorated = <code className="code-block">{token.text}</code>
-                    break;
-                default:
-                    break;
+                case "bold":        decorated = <b>{highlighted}</b>; break
+                case "italic":      decorated = <i>{highlighted}</i>; break
+                case "underline":   decorated = <u>{highlighted}</u>; break
+                case "strikethrough": decorated = <s>{highlighted}</s>; break
+                case "code":        decorated = <code className="code-block">{highlighted}</code>; break
+                default:            decorated = highlighted; break
             }
             if ("location" in token) {
                 const locatedToken = token as ParsedTextToken & { location: Location }
@@ -142,13 +148,11 @@ export const TextNodeRenderer = (props: { parsedTokens: ParsedTextToken[] }) => 
                         await highlightLine(app, locatedToken.location)
                         ev.preventDefault()
                     }}> {decorated} </a>
-                    <TextNodeRenderer parsedTokens={props.parsedTokens.slice(1)}/>
+                    {rest}
                 </>
             }
-            return <>
-                {decorated}
-                <TextNodeRenderer parsedTokens={props.parsedTokens.slice(1)}/>
-            </>
+            return <>{decorated}{rest}</>
+        }
     }
 }
 

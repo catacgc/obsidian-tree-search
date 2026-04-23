@@ -13,17 +13,20 @@ import {getSettings, updateSettings} from './view/react-context/settings';
 import './view/styles.css';
 import {GlobalAtoms} from "./view/react-context/global";
 import {resetDefaultInjector} from "bunshi";
+import {RaycastServer} from "./view/raycast/raycast-server";
 
 export default class TreeSearchPlugin extends Plugin {
     index: IndexedTree
     private changedRef: EventRef
     private finishedRef: EventRef;
     globalStore = createStore();
+    private server: RaycastServer | null = null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private refreshInterval: any = null;
 
     async onunload() {
         console.log("Cleaning up after")
+        this.server?.stop()
         this.globalStore = createStore()
         this.changedRef && this.app.metadataCache.offref(this.changedRef)
         this.finishedRef && this.app.metadataCache.offref(this.finishedRef)
@@ -94,6 +97,9 @@ export default class TreeSearchPlugin extends Plugin {
 
         this.addSettingTab(new SettingsTab(this.app, this));
         await this.loadSettings();
+
+        this.server = new RaycastServer(this.globalStore);
+        this.server.start();
 
         const store = this.globalStore
         store.sub(GlobalAtoms.isGraphLoadingAtom, async () => {
@@ -230,6 +236,22 @@ class SettingsTab extends PluginSettingTab {
                     settings.archiveTag = value;
                     await this.plugin.saveSettings();
                 }));
+
+        const socketPath = settings.socketPath.replace("{vaultname}", this.app.vault.getName())
+        new Setting(containerEl)
+            .setName('Raycast API socket path')
+            .setDesc('Copy this when configuring the companion Raycast extension')
+            .addExtraButton((component) => {
+                component.setIcon("copy")
+                component.onClick(() => {
+                    navigator.clipboard.writeText(socketPath)
+                    new Notice("Copied to clipboard")
+                })
+            })
+            .addText(text => text
+                .setPlaceholder('socket')
+                .setValue(socketPath)
+                .setDisabled(true));
 
         const div = containerEl.createDiv()
         div.setCssStyles({ fontStyle: "italic", borderTop: "1px solid #ddd" })

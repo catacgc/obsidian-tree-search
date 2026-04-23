@@ -3,6 +3,20 @@ import { TreeNode } from "./search/SearchViewFlatten";
 import { ObsidianLinkToken, ParsedTextToken } from "@mdtree/core";
 import {App} from "obsidian";
 
+export interface VaultResults {
+    vault: string;
+    results: IndividualListItemModel[];
+    error?: string;
+}
+
+export interface IndividualListItemModel {
+    title: string,
+    level: number,
+    index: number,
+    nodeType: string,
+    actions: RaycastAction[]
+}
+
 export type RaycastAction = Copy | Browse
 
 export type BaseAction = {
@@ -43,12 +57,47 @@ export function getTreeNodeActions(app: App, treeNode: TreeNode): RaycastAction[
     const actions: RaycastAction[] = []
     const title = renderTitle(treeNode, actions, app)
     void title
+
+    const reordered = prioritizeWebLinks(actions)
+
     const defaults = getDefaultActions(treeNode, vault)
-    const allActions = [...actions, ...defaults]
+    const allActions = [...reordered, ...defaults]
     return allActions.map(action => ({
         ...action,
         title: truncateActionTitle(action.title)
     }))
+}
+
+export function createRaycastResponse(app: App, results: TreeNode[]): VaultResults {
+    const vault = app.vault.getName()
+    return {
+        vault,
+        results: results.map((result, index) => {
+            const actions = getTreeNodeActions(app, result)
+            return {
+                title: renderTitle(result, [], app) + ` (${result.node.ageDays} days ago)`,
+                level: result.indent,
+                index: result.index,
+                nodeType: result.node.nodeType,
+                actions
+            }
+        })
+    }
+}
+
+export function prioritizeWebLinks(actions: RaycastAction[]): RaycastAction[] {
+    const hasEnterShortcut = actions.some(a => a.shortcut?.key === "enter")
+    const webLinks = actions.filter(a => a.type === "browse" && !a.url.startsWith("obsidian://"))
+    if (webLinks.length === 0) return actions
+
+    const rest = actions.filter(a => !(a.type === "browse" && !a.url.startsWith("obsidian://")))
+    const reordered = [...webLinks, ...rest]
+
+    if (!hasEnterShortcut) {
+        reordered[0] = { ...reordered[0], shortcut: { key: "enter", modifiers: [] } }
+    }
+
+    return reordered
 }
 
 function getDefaultActions(result: TreeNode, vault: string): RaycastAction[] {

@@ -19,6 +19,10 @@
 	width: calc(100vw * 0.60);
 }
 
+.is-mobile .tree-search-modal {
+	width: 100%;
+}
+
 .tw-reset {
 	@import "./preflight.css";
 	

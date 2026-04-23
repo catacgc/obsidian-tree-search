@@ -1,9 +1,8 @@
-import { NotesGraph } from "@mdtree/core"
-import { buildGraph, reindexFile } from "@mdtree/cli/vault"
-import { TFile, FileSystemAdapter } from "obsidian"
-import { join } from "node:path"
+import { NotesGraph, buildGraphFromScanner, reindexFileInGraph } from "@mdtree/core"
+import { TFile } from "obsidian"
 import { getSettings } from "../view/react-context/settings"
 import { GlobalAtoms, GlobalStore } from "../view/react-context/global"
+import { ObsidianVaultScanner } from "./obsidian-vault-scanner"
 
 export class IndexedTree {
     private graph: NotesGraph
@@ -14,12 +13,12 @@ export class IndexedTree {
         this.graph = new NotesGraph()
     }
 
-    private get vaultPath(): string {
-        const adapter = this.store.get(GlobalAtoms.appAtom).vault.adapter
-        if (!(adapter instanceof FileSystemAdapter)) {
-            throw new Error("IndexedTree only works on desktop (FileSystemAdapter required)")
-        }
-        return adapter.basePath
+    private get vault() {
+        return this.store.get(GlobalAtoms.appAtom).vault
+    }
+
+    private get metadataCache() {
+        return this.store.get(GlobalAtoms.appAtom).metadataCache
     }
 
     async refresh(): Promise<void> {
@@ -27,7 +26,7 @@ export class IndexedTree {
         this.isLoading = true
         try {
             const settings = getSettings(this.store)
-            const graph = await buildGraph(this.vaultPath, {
+            const graph = await buildGraphFromScanner(new ObsidianVaultScanner(this.vault, this.metadataCache), {
                 parentRelation: settings.parentRelation,
                 archiveTag: settings.archiveTag,
                 searchSeparator: settings.searchSeparator,
@@ -40,13 +39,17 @@ export class IndexedTree {
 
     async refreshPage(file: TFile): Promise<void> {
         try {
-            const absPath = join(this.vaultPath, file.path)
             const settings = getSettings(this.store)
-            await reindexFile(absPath, this.vaultPath, this.graph, {
-                parentRelation: settings.parentRelation,
-                archiveTag: settings.archiveTag,
-                searchSeparator: settings.searchSeparator,
-            })
+            await reindexFileInGraph(
+                file.path,
+                this.graph,
+                new ObsidianVaultScanner(this.vault, this.metadataCache),
+                {
+                    parentRelation: settings.parentRelation,
+                    archiveTag: settings.archiveTag,
+                    searchSeparator: settings.searchSeparator,
+                }
+            )
             this.setState(this.graph)
         } catch (err) {
             console.warn(`[mdtree] Failed to reindex ${file.path}:`, err)

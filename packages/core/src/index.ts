@@ -26,6 +26,8 @@ export type {
 export { NotesGraph, getKey } from "./graph/graph.ts"
 export { calculateBoost, getAgeDays, containsEmoji } from "./graph/boost.ts"
 export { indexSinglePage, DEFAULT_SETTINGS, type IndexSettings } from "./graph/indexer.ts"
+export { buildGraphFromScanner, reindexFileInGraph } from "./graph/builder.ts"
+export type { VaultScanner, VaultFile, VaultFolder, WalkResult } from "./graph/scanner.ts"
 
 // Parser
 export { parseVaultFile } from "./parser/vault-file.ts"

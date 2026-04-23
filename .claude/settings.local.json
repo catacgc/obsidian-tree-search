@@ -1,13 +1,35 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(bun test *)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
+    ]
+  },
+  "enabledPlugins": {
+    "superpowers@crew-managed-eb1716d0": true,
+    "commit-commands@crew-managed-eb1716d0": true
+  },
   "extraKnownMarketplaces": {
-    "crew-plugins": {
+    "crew-managed-eb1716d0": {
       "source": {
         "source": "directory",
-        "path": "/Users/costache/dev/src/costache/obsidian-tree-search/.crew/claude-marketplace"
+        "path": "/Users/costache/dev/src/costache/obsidian-tree-search/.crew/crew-managed-eb1716d0"
       }
     }
   },
-  "enabledPlugins": {
-    "superpowers@crew-plugins": true
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/costache/dev/src/costache/crew/adobe_crew/crew build",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
   }
 }

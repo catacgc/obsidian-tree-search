@@ -4,12 +4,14 @@ export interface TreeSearchSettings {
 	searchSeparator: string;
 	parentRelation: string;
 	archiveTag: string;
+	socketPath: string;
 }
 
 export const settingsAtom = atom<TreeSearchSettings>({
 	searchSeparator: ".", // better for mobile
 	parentRelation: "parent",
 	archiveTag: "archive",
+	socketPath: "/tmp/raycast-{vaultname}.sock",
 })
 
 export const separatorAtom = atom((get) => get(settingsAtom).searchSeparator)
