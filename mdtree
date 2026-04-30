@@ -1,2 +1,3 @@
 #!/usr/bin/env bash
-exec bun run packages/cli/src/main.ts "$@"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+exec bun run "$SCRIPT_DIR/packages/cli/src/main.ts" "$@"

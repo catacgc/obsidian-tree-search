@@ -19,13 +19,12 @@
     }
   },
   "hooks": {
-    "SessionStart": [
+    "WorktreeCreate": [
       {
-        "matcher": "startup",
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/costache/dev/src/costache/crew/adobe_crew/crew build",
+            "command": "/Users/costache/dev/src/costache/crew/adobe_crew/crew worktree create --hook",
             "timeout": 120
           }
         ]
