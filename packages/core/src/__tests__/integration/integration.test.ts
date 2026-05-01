@@ -1,5 +1,19 @@
 import { describe, it, expect } from "bun:test"
 import { loadFixture, search, searchKeys } from "./helpers.ts"
+import { partitionArchived } from "../../search/archive.ts"
+import type { ResultNode } from "../../search/search.ts"
+
+function collectKeysFromResults(nodes: ResultNode[]): string[] {
+  const keys: string[] = []
+  function walk(nodes: ResultNode[]): void {
+    for (const n of nodes) {
+      keys.push(n.node.searchKey)
+      walk(n.children)
+    }
+  }
+  walk(nodes)
+  return keys
+}
 
 // ── aliases ───────────────────────────────────────────────────────────────────
 
@@ -164,5 +178,34 @@ describe("page-header-link", () => {
   it("page.archive.old finds Old Project under Archive header", () => {
     const keys = searchKeys(g, "projects.archive.old")
     expect(keys.some(k => k.includes("old"))).toBe(true)
+  })
+})
+
+// ── archive ───────────────────────────────────────────────────────────────────
+
+describe("archive", () => {
+  const g = loadFixture("archive")
+
+  it("search returns archived nodes (search is unaware of archive)", () => {
+    const keys = searchKeys(g, "projects")
+    expect(keys.some(k => k.includes("beta"))).toBe(true)
+    expect(keys.some(k => k.includes("subtask"))).toBe(true)
+  })
+
+  it("partitionArchived removes the archived subtree", () => {
+    const results = search(g, "projects")
+    const { visible, archivedCount } = partitionArchived(results)
+
+    // "[[Beta]] done" (archived) + "[[SubTask]] completed" (child) = 2 archived
+    expect(archivedCount).toBe(2)
+
+    // Flatten visible keys to check Beta is gone
+    const visibleKeys = collectKeysFromResults(visible)
+    expect(visibleKeys.some(k => k.includes("beta"))).toBe(false)
+    expect(visibleKeys.some(k => k.includes("subtask"))).toBe(false)
+
+    // Alpha and Gamma should still be visible
+    expect(visibleKeys.some(k => k.includes("alpha"))).toBe(true)
+    expect(visibleKeys.some(k => k.includes("gamma"))).toBe(true)
   })
 })
