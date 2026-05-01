@@ -1,5 +1,5 @@
 import type { TreeNode, ParsedTextToken, ObsidianLinkToken } from "@mdtree/core"
-import { reverseMarkdownParsing } from "@mdtree/core"
+import { reverseMarkdownParsing, isArchived } from "@mdtree/core"
 
 // ── Response model (matches existing Raycast plugin contract) ─────────────────
 
@@ -36,6 +36,7 @@ const Icons = {
   globe: "globe-01-16",
   blankDocument: "blank-document-16",
   copy: "copy-clipboard-16",
+  bookmark: "bookmark-16",
 }
 
 // ── URL builders ──────────────────────────────────────────────────────────────
@@ -65,6 +66,20 @@ function revealFolderUrl(folderPath: string, vault: string): string {
 
 function moveToFolderUrl(filePath: string, vault: string): string {
   return obsidianUri(`raycastaction=moveToFolder&vault=${vault}&filepath=${filePath}`)
+}
+
+function archiveUrl(location: TreeNode["node"]["location"], vault: string): string {
+  const { path, position } = location
+  return obsidianUri(
+    `raycastaction=archive&vault=${vault}&filepath=${path}&sl=${position.start.line}&sc=${position.start.ch}&el=${position.end.line}&ec=${position.end.ch}`,
+  )
+}
+
+function unarchiveUrl(location: TreeNode["node"]["location"], vault: string): string {
+  const { path, position } = location
+  return obsidianUri(
+    `raycastaction=unarchive&vault=${vault}&filepath=${path}&sl=${position.start.line}&sc=${position.start.ch}&el=${position.end.line}&ec=${position.end.ch}`,
+  )
 }
 
 function obsidianUri(params: string): string {
@@ -196,6 +211,9 @@ function nodeRenderer(
       })
       return nodeRenderer(tokens.slice(1), actions, vault)
     }
+
+    case "meta_mdtree":
+      return nodeRenderer(tokens.slice(1), actions, vault)
   }
   return ""
 }
@@ -206,6 +224,7 @@ function defaultActions(result: TreeNode, vault: string): RaycastAction[] {
   const node = result.node
   const isFolder = node.nodeType === "folder"
   const isFile = node.nodeType === "page"
+  const isText = node.nodeType === "text"
 
   if (isFolder) {
     return [
@@ -251,6 +270,24 @@ function defaultActions(result: TreeNode, vault: string): RaycastAction[] {
       icon: Icons.pencil,
       shortcut: { modifiers: ["ctrl"], key: "m" },
     })
+  }
+
+  if (isText) {
+    base.push(
+      isArchived(node)
+        ? {
+            type: "browse",
+            url: unarchiveUrl(node.location, vault),
+            title: "Unarchive",
+            icon: Icons.bookmark,
+          }
+        : {
+            type: "browse",
+            url: archiveUrl(node.location, vault),
+            title: "Archive",
+            icon: Icons.bookmark,
+          },
+    )
   }
 
   return base

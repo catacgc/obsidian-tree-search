@@ -1,6 +1,6 @@
 import { reverseMarkdownParsing } from "./copy";
 import { TreeNode } from "./search/SearchViewFlatten";
-import { ObsidianLinkToken, ParsedTextToken } from "@mdtree/core";
+import { ObsidianLinkToken, ParsedTextToken, isArchived } from "@mdtree/core";
 import {App} from "obsidian";
 
 export interface VaultResults {
@@ -103,6 +103,7 @@ export function prioritizeWebLinks(actions: RaycastAction[]): RaycastAction[] {
 function getDefaultActions(result: TreeNode, vault: string): RaycastAction[] {
     const isFolder = result.node.nodeType == "folder"
     const isFile = result.node.nodeType == "page"
+    const isText = result.node.nodeType == "text"
 
     if (isFolder) {
         return [
@@ -123,6 +124,20 @@ function getDefaultActions(result: TreeNode, vault: string): RaycastAction[] {
         icon: Icons.pencil,
         shortcut: { modifiers: ["ctrl"], key: "m" }
     }] : []
+
+    const archiveAction: RaycastAction[] = isText ? [
+        isArchived(result.node) ? {
+            type: "browse",
+            url: unarchiveUrl(result.node.location, vault),
+            title: `Unarchive`,
+            icon: Icons.bookmark
+        } : {
+            type: "browse",
+            url: archiveUrl(result.node.location, vault),
+            title: `Archive`,
+            icon: Icons.bookmark
+        }
+    ] : []
 
     const defaults: RaycastAction[] = [
         {
@@ -147,7 +162,7 @@ function getDefaultActions(result: TreeNode, vault: string): RaycastAction[] {
             shortcut: { modifiers: ["ctrl"], key: "i" }
         }]
 
-    return [...defaults, ...moveFolderAction]
+    return [...defaults, ...moveFolderAction, ...archiveAction]
 }
 
 function renderTitle(result: TreeNode, actions: RaycastAction[], app: App): string {
@@ -213,6 +228,16 @@ function revealFolder(folderPath: string, vault: string): string {
 
 function moveToFolder(folderPath: string, vault: string): string {
     const uri = `raycastaction=moveToFolder&vault=${vault}&filepath=${folderPath}`;
+    return `obsidian://tree-search-uri?${encodeURI(uri)}`;
+}
+
+function archiveUrl(location: TreeNode["node"]["location"], vault: string): string {
+    const uri = `raycastaction=archive&vault=${vault}&filepath=${location.path}&sl=${location.position.start.line}&sc=${location.position.start.ch}&el=${location.position.end.line}&ec=${location.position.end.ch}`;
+    return `obsidian://tree-search-uri?${encodeURI(uri)}`;
+}
+
+function unarchiveUrl(location: TreeNode["node"]["location"], vault: string): string {
+    const uri = `raycastaction=unarchive&vault=${vault}&filepath=${location.path}&sl=${location.position.start.line}&sc=${location.position.start.ch}&el=${location.position.end.line}&ec=${location.position.end.ch}`;
     return `obsidian://tree-search-uri?${encodeURI(uri)}`;
 }
 
@@ -295,6 +320,8 @@ function nodeRenderer(
                 title: truncateActionTitle(token.name),
                 icon: token.icon ?? Icons.globe
             });
+            return nodeRenderer(tokens.slice(1), actions, vault);
+        case "meta_mdtree":
             return nodeRenderer(tokens.slice(1), actions, vault);
     }
     return ""
