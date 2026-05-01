@@ -1,6 +1,6 @@
 import http, {IncomingMessage, Server, ServerResponse} from "http";
 import {Platform} from "obsidian";
-import {searchIndex} from "@mdtree/core";
+import {searchIndex, partitionArchived} from "@mdtree/core";
 import {flattenIndex} from "../react-context/state";
 import {getSettings, separatorAtom} from "../react-context/settings";
 import fs from "fs";
@@ -60,7 +60,8 @@ export class RaycastServer {
             const separator = this.store.get(separatorAtom);
             const graph = this.store.get(GlobalAtoms.graphAtom);
             const result = searchIndex(graph, decodedQuery, separator);
-            const flattened = flattenIndex(result)
+            const { visible } = partitionArchived(result)
+            const flattened = flattenIndex(visible)
             const mapped = createRaycastResponse(app, flattened.slice(0, limit))
             const jsonContent = JSON.stringify(mapped);
             res.end(jsonContent);

@@ -1,5 +1,5 @@
 import {TreeNode} from '../search/SearchViewFlatten'
-import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, type QueryExpr} from '@mdtree/core'
+import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, type QueryExpr, partitionArchived} from '@mdtree/core'
 import {atom, useAtomValue} from 'jotai'
 import {ParsedNode, ParsedTextToken, TextNode, Location} from '@mdtree/core'
 
@@ -136,7 +136,8 @@ export const SearchModalMolecule = molecule((mol, scope) => {
         const search = (isQuickLink && searchQuery.length > 0) ? `${searchQuery} . :page | :header` : searchQuery
 
         const searchResults = searchIndex(graph, search, separator)
-        set(searchMol.updateSearchResultsAtom, searchResults)
+        const { visible, archivedCount } = partitionArchived(searchResults)
+        set(searchMol.updateSearchResultsAtom, visible, archivedCount)
     })
 
     return { searchResultsComputeAtom }
@@ -228,7 +229,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         return get(treeNodesAtom)[sel]
     })
 
-    const updateSearchResultsAtom = atom(null, (get, set, result: ResultNode[]) => {
+    const updateSearchResultsAtom = atom(null, (get, set, result: ResultNode[], archivedCount: number = 0) => {
         // Calculate dynamic expand level first
         const dynamicExpand = get(searchQueryAtom).query
             ? Math.round(Math.max(0, 10 - result.length / 20))
@@ -260,6 +261,30 @@ export const SearchViewMolecule = molecule((mol, scope) => {
 
         // Try to batch updates by doing them all synchronously
         // This should minimize the number of atom recalculations
+
+        // Add synthetic archive indicator node if there are archived items
+        if (archivedCount > 0) {
+            const archiveNode = {
+                node: {
+                    nodeType: "text",
+                    parsedTokens: [{ tokenType: "text", text: `Archive (${archivedCount} items)`, decoration: "none" }],
+                    searchKey: `archive (${archivedCount} items)`,
+                    location: { file: "", line: 0 },
+                    tags: [],
+                    isTask: false,
+                    isCompleted: false,
+                    ageDays: 0,
+                    boost: 0
+                },
+                indent: 0,
+                hasChildren: false,
+                visible: true,
+                selected: false,
+                index: nodesWithVisibility.length
+            } as any
+            nodesWithVisibility.push(archiveNode)
+        }
+
         set(treeNodesAtom, nodesWithVisibility)
         set(selectedLineAtom, searchVisible ? 0 : -1)
         set(hoveredLineAtom, -1)
