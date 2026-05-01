@@ -44,3 +44,4 @@ export { searchIndex, advancedSearch, searchParents, flattenTasks, type ResultNo
 export { parseQuery, matchQuery, firstPassInclude, containsEmoji as queryContainsEmoji, type QueryExpr, type QueryModifier } from "./search/query.ts"
 export { flattenIndex, type TreeNode } from "./search/flatten.ts"
 export { reverseMarkdownParsing } from "./search/copy.ts"
+export { isArchived, partitionArchived } from "./search/archive.ts"
