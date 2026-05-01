@@ -37,6 +37,8 @@ function reverseMarkdown(tokens: ParsedTextToken[]): string {
       return `![${token.alt}](${token.src})` + rest
     case "meta_action":
       return token.name + rest
+    case "meta_mdtree":
+      return `(meta-mdtree:: ${token.directive})` + rest
   }
 }
 

@@ -116,7 +116,12 @@ export type MetaActionToken = {
   icon?: string
 }
 
-export type ParsedTextToken = TextToken | ObsidianLinkToken | LinkToken | ImageToken | MetaActionToken
+export type MetaMdtreeToken = {
+  tokenType: "meta_mdtree"
+  directive: string
+}
+
+export type ParsedTextToken = TextToken | ObsidianLinkToken | LinkToken | ImageToken | MetaActionToken | MetaMdtreeToken
 
 // ── Edge types ────────────────────────────────────────────────────────────────
 

@@ -15,6 +15,8 @@ export type {
   ObsidianLinkToken,
   LinkToken,
   ImageToken,
+  MetaActionToken,
+  MetaMdtreeToken,
   ParsedTextToken,
   EdgeAttributes,
   EdgeEntry,
