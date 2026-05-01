@@ -1,5 +1,5 @@
 import { resolve, basename } from "node:path"
-import { DEFAULT_SETTINGS, NotesGraph, searchIndex, flattenIndex, reverseMarkdownParsing } from "@mdtree/core"
+import { DEFAULT_SETTINGS, NotesGraph, searchIndex, flattenIndex, partitionArchived, reverseMarkdownParsing } from "@mdtree/core"
 import type { TreeNode } from "@mdtree/core"
 import { VaultStore, defaultDbPath } from "../store/sqlite.ts"
 
@@ -18,6 +18,7 @@ export async function runQuery(opts: QueryOptions): Promise<void> {
   }
 
   const allResults: TreeNode[] = []
+  let totalArchived = 0
 
   for (const dir of opts.dirs) {
     const vaultRoot = resolve(dir)
@@ -30,19 +31,25 @@ export async function runQuery(opts: QueryOptions): Promise<void> {
     store.close()
 
     const results = searchIndex(graph, opts.queryStr, DEFAULT_SETTINGS.searchSeparator)
-    const flat = flattenIndex(results)
+    const { visible, archivedCount: vaultArchived } = partitionArchived(results)
+    const flat = flattenIndex(visible)
     allResults.push(...flat)
+    totalArchived += vaultArchived
   }
 
   const limited = allResults.slice(0, opts.limit)
 
   if (opts.json) {
-    process.stdout.write(JSON.stringify(limited, null, 2) + "\n")
+    const output = { results: limited, archivedCount: totalArchived }
+    process.stdout.write(JSON.stringify(output, null, 2) + "\n")
   } else {
     for (const item of limited) {
       const indent = "  ".repeat(item.indent)
       const label = reverseMarkdownParsing(item.node)
       process.stdout.write(indent + label + "\n")
+    }
+    if (totalArchived > 0) {
+      process.stdout.write(`Archive (${totalArchived} items)\n`)
     }
   }
 }

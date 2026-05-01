@@ -6,6 +6,7 @@ import { reverseMarkdownParsing } from "@mdtree/core"
 export type VaultResults = {
   vault: string
   results: IndividualListItemModel[]
+  archivedCount?: number
   error?: string
 }
 
@@ -257,7 +258,7 @@ function defaultActions(result: TreeNode, vault: string): RaycastAction[] {
 
 // ── createVaultResults ────────────────────────────────────────────────────────
 
-export function createVaultResults(vault: string, results: TreeNode[]): VaultResults {
+export function createVaultResults(vault: string, results: TreeNode[], archivedCount = 0): VaultResults {
   return {
     vault,
     results: results.map((result, index) => {
@@ -271,5 +272,6 @@ export function createVaultResults(vault: string, results: TreeNode[]): VaultRes
         actions: [...actions, ...defaultActions(result, vault)],
       }
     }),
+    ...(archivedCount > 0 ? { archivedCount } : {}),
   }
 }

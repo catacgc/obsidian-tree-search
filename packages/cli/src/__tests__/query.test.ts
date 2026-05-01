@@ -58,8 +58,10 @@ describe("runQuery", () => {
     }
 
     const parsed = JSON.parse(output)
-    expect(Array.isArray(parsed)).toBe(true)
-    expect(parsed.length).toBeGreaterThan(0)
-    expect(parsed[0]).toHaveProperty("node")
+    expect(parsed).toHaveProperty("results")
+    expect(parsed).toHaveProperty("archivedCount")
+    expect(Array.isArray(parsed.results)).toBe(true)
+    expect(parsed.results.length).toBeGreaterThan(0)
+    expect(parsed.results[0]).toHaveProperty("node")
   })
 })
