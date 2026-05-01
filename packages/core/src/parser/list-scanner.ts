@@ -6,6 +6,7 @@ const HEADER_RE = /^(#{1,6})\s+(.*)/
 const TASK_RE = /^\[([ xX])\]\s+(.*)/
 const INLINE_TAG_RE = /#([\w/]+)/g
 const META_ACTION_RE = /\(meta-action-[\w-]+::[^)]*\)/g
+const META_MDTREE_RE = /\(meta-mdtree::\s*\w+\)/g
 
 /** Lines that carry no graph-relevant information and should be skipped */
 function shouldSkip(text: string, archiveTag: string): boolean {
@@ -105,7 +106,7 @@ export function scanMarkdown(
 
     // strip meta-action properties from text (they go into rawText for token parsing)
     const rawText = text
-    text = text.replace(META_ACTION_RE, "").trim()
+    text = text.replace(META_ACTION_RE, "").replace(META_MDTREE_RE, "").trim()
 
     // inline tags
     const tags: string[] = []

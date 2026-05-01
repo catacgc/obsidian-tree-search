@@ -277,3 +277,35 @@ describe("todoist meta-action integration", () => {
     expect(node.parsedTokens.some(t => t.tokenType === "meta_action")).toBe(true)
   })
 })
+
+describe("meta-mdtree archive", () => {
+  it("meta-mdtree archive syntax does not appear in searchKey", () => {
+    const g = buildGraph(parse("- My archived item (meta-mdtree:: archive)", "n.md"))
+    const nodes = g.filterNodes((_, attrs) => attrs.nodeType === "text")
+    expect(nodes.length).toBeGreaterThan(0)
+    const textNode = g.getNodeAttributes(nodes[0]) as { searchKey: string; parsedTokens: unknown[] }
+    expect(textNode.searchKey).not.toContain("meta-mdtree")
+    expect(textNode.searchKey).toContain("my archived item")
+  })
+
+  it("parsedTokens contains meta_mdtree token with directive 'archive'", () => {
+    const g = buildGraph(parse("- My archived item (meta-mdtree:: archive)", "n.md"))
+    const nodes = g.filterNodes((_, attrs) => attrs.nodeType === "text")
+    expect(nodes.length).toBeGreaterThan(0)
+    const textNode = g.getNodeAttributes(nodes[0]) as {
+      parsedTokens: Array<{ tokenType: string; directive?: string }>
+    }
+    const metaMdtree = textNode.parsedTokens.find(t => t.tokenType === "meta_mdtree")
+    expect(metaMdtree).toBeDefined()
+    expect(metaMdtree?.directive).toBe("archive")
+  })
+
+  it("item with only meta-mdtree annotation (no links/tags) is still indexed", () => {
+    const g = buildGraph(parse("- Plain text (meta-mdtree:: archive)", "n.md"))
+    const nodes = g.filterNodes((_, attrs) => {
+      if (attrs.nodeType !== "text") return false
+      return (attrs as { searchKey: string }).searchKey.includes("plain text")
+    })
+    expect(nodes.length).toBe(1)
+  })
+})
