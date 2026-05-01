@@ -7,7 +7,7 @@ import {IndexedTree} from "./indexing/indexed-tree";
 import {FILE_CONTEXT, FileContextView} from "./view/file-context/file-context";
 import {ContextCodeBlock} from "./view/markdown-code-block/ContextCodeBlock";
 import {SearchModal} from "./view/search-modal/SearchModal";
-import {highlightLine, insertLine, moveToFolder, openFileByName, revealFolder, showFolder} from './obsidian-utils';
+import {archiveLine, highlightLine, insertLine, moveToFolder, openFileByName, revealFolder, showFolder, unarchiveLine} from './obsidian-utils';
 import {createStore} from 'jotai';
 import {getSettings, updateSettings} from './view/react-context/settings';
 import './view/styles.css';
@@ -141,12 +141,16 @@ export default class TreeSearchPlugin extends Plugin {
 
             if (uri.raycastaction === "insert") {
                 await insertLine(this.app, location)
-            } else if (uri.raycastaction == "revealFolder") {
+            } else if (uri.raycastaction === "revealFolder") {
                 await showFolder(this.app, uri.filepath)
-            } if (uri.raycastaction == "open") {
+            } else if (uri.raycastaction === "open") {
                 await openFileByName(this.app, uri.filepath + (uri.hash ? `#${uri.hash}` : ""))
-            } else if (uri.raycastaction == "moveToFolder") {
+            } else if (uri.raycastaction === "moveToFolder") {
                 moveToFolder(this.app, uri.filepath)
+            } else if (uri.raycastaction === "archive") {
+                await archiveLine(this.app, location)
+            } else if (uri.raycastaction === "unarchive") {
+                await unarchiveLine(this.app, location)
             } else {
                 await highlightLine(this.app, location)
             }

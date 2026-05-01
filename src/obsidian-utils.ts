@@ -230,3 +230,33 @@ export async function insertLine(app: App, loc: Location) {
         }, 100);
     }
 }
+
+export async function archiveLine(app: App, loc: Location) {
+    const file = app.vault.getFileByPath(loc.path)
+    if (!file) return
+
+    const content = await app.vault.read(file)
+    const lines = content.split("\n")
+    const lineIdx = loc.position.start.line
+
+    if (lineIdx >= lines.length) return
+
+    // Append the archive annotation before any trailing whitespace
+    lines[lineIdx] = lines[lineIdx].trimEnd() + " (meta-mdtree:: archive)"
+    await app.vault.modify(file, lines.join("\n"))
+}
+
+export async function unarchiveLine(app: App, loc: Location) {
+    const file = app.vault.getFileByPath(loc.path)
+    if (!file) return
+
+    const content = await app.vault.read(file)
+    const lines = content.split("\n")
+    const lineIdx = loc.position.start.line
+
+    if (lineIdx >= lines.length) return
+
+    // Remove the archive annotation and trim trailing whitespace
+    lines[lineIdx] = lines[lineIdx].replace(/\s*\(meta-mdtree::\s*archive\)/, "").trimEnd()
+    await app.vault.modify(file, lines.join("\n"))
+}
