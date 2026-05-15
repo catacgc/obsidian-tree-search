@@ -1,0 +1,19 @@
+### Critical
+(none)
+
+### Warnings
+- [ ] **Batch API output ambiguity regarding pre-computed inline tokens** — Key Decision 1 says `parseTokens` at `indexer.ts:53` is for "list items in non-batch flow," implying the batch flow pre-computes tokens. Slice 04 confirms with "exposed as both **batch-internal** and standalone callable." However, `ParserProvider.parseBatchChunk()` returns `DvPage[]` (design line 139), and the `DvList` type (`packages/core/src/graph/types.ts:152-167`) has no field to carry pre-computed `ParsedTextToken[]`. Key Decision 10 then says `indexSinglePage` uses `parseTokensFn` for `createNodeFromText` at line 53 — which implies tokens are NOT in the batch output. These statements are contradictory: either the batch includes tokens (requiring a type extension), or it doesn't (requiring 40K individual WASM calls for a 2000-note vault). The design should explicitly state which path is chosen and its implications. — `prospect/features/.../design.md:Key Decision 1 vs Key Decision 10 vs ParserProvider interface (line 139)`
+
+### Suggestions
+(none)
+
+### Confirmed Coverage
+- [x] **[Previously Critical] Canvas `parseTokens` path** — fully resolved. Design Key Decision 9 + Integration Points table now explicitly covers `parseCanvasData` → `buildNodesFromTextLines` → `createTextNode` with `parseTokensFn` parameter threading. Refined Acceptance Criteria #1 and #4 add testable requirements.
+- [x] **[Previously Critical] Frontmatter parent `parseTokens` path** — fully resolved. Design Key Decision 10 + Integration Points table explicitly covers `indexSinglePage` at line 238 with optional `parseTokensFn`. Refined Acceptance Criteria #2 adds testable requirement.
+- [x] **[Previously Warning] Batch API memory pressure** — fully resolved. Design Key Decision 3 specifies chunked processing (default 50 files), configurable `chunkSize` parameter in `buildGraphFromScanner`, memory bounded to one chunk at a time. Risk section explicitly analyzes: 50 × 5KB = ~250KB per chunk.
+- [x] **[Previously Warning] Event-loop blocking** — fully resolved. Design Key Decision 3 specifies `await setTimeout(0)` between chunks. Risk section acknowledges 4ms × 40 chunks = 160ms yielding overhead with mitigation (larger chunks on desktop/CLI).
+- [x] **[Previously Warning] Slice 06 contradicts design's injection approach** — fully resolved. Both `openspec/changes/rust-parser/proposal.md:69` and `prospect/features/.../proposal.md:53` now consistently say "externally-injected `ParserProvider` via strategy pattern" with no mention of "conditional import."
+- [x] **[Previously Warning] Custom frontmatter parser breaking YAML support** — fully resolved. Design Key Decision 6 explicitly mandates full YAML parsing ("all YAML structures (scalars, arrays, nested objects)"). Acceptance criteria require "emits all YAML key-value pairs (not just hardcoded fields)." Risk section addresses `serde_yaml` vs `js-yaml` edge cases.
+- [x] **[Previously Warning] `parseCanvasData` missing from integration points** — fully resolved. Integration Points table now includes entries for `parseCanvasData()`, `indexScannedFile()`, and step 5 of revised `buildGraphFromScanner` algorithm explicitly handles `.canvas` files with `provider.parseTokens`.
+- [x] **[Previously Suggestion] Chunked batching specification** — fully resolved. Default chunk size 50, configurable parameter, explicit yielding, memory analysis in risk section.
+- [x] **[Previously Suggestion] wasm-pack target web + esbuild CJS** — fully resolved. Design Key Decision 8 specifies bypassing the glue code's `fetch()` by providing WASM bytes directly (base64-decoded) via custom esbuild plugin. No reliance on the `web` target's standard loading mechanism.
