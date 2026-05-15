@@ -1,6 +1,7 @@
 export type WasmExports = {
   ping: () => string
   parse_frontmatter: (content: string) => string
+  scan_markdown: (content: string, file_path: string, frontmatter_body_start: number, archive_tag: string) => string
 }
 
 /**
@@ -18,10 +19,12 @@ export async function loadWasm(wasmBytes: BufferSource): Promise<WasmExports> {
     default: (input?: BufferSource) => Promise<void>
     ping: () => string
     parse_frontmatter: (content: string) => string
+    scan_markdown: (content: string, file_path: string, frontmatter_body_start: number, archive_tag: string) => string
   }
   await glue.default(wasmBytes)
   return {
     ping: glue.ping,
     parse_frontmatter: glue.parse_frontmatter,
+    scan_markdown: glue.scan_markdown,
   }
 }
