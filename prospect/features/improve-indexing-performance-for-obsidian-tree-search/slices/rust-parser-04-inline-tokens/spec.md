@@ -90,6 +90,13 @@ The Rust `parse_tokens` function SHALL correctly parse standard markdown links a
 - **And** `src` MUST be `"assets/img.png"`
 - **And** `alt` MUST be `"screenshot"`
 
+#### Scenario: Markdown image with empty alt text
+
+- **Given** the input string `"![](assets/img.png)"`
+- **When** `parse_tokens` is called
+- **Then** the output MUST contain a token with `tokenType` `"image"`
+- **And** `alt` MUST be `""` (empty string, NEVER absent/null — matching TS behavior at `inline-tokens.ts:124`)
+
 #### Scenario: Bare HTTP URL converted to link
 
 - **Given** the input string `"visit https://example.com/path for info"`
@@ -103,41 +110,57 @@ The Rust `parse_tokens` function SHALL correctly parse standard markdown links a
 - **When** `parse_tokens` is called
 - **Then** only one `"link"` token MUST be produced (the URL is not additionally extracted as a bare URL)
 
+#### Scenario: Obsidian embed is NOT an image
+
+- **Given** the input string `"![[File]]"`
+- **When** `parse_tokens` is called
+- **Then** the output MUST contain a text token with `text` `"!"` and `decoration` `"none"`
+- **And** an `obsidian_link` token with `source` `"[[File]]"` and `pageTarget` `"File"`
+- **And** no `image` token SHALL be produced
+
 ---
 
-### Requirement: Text Decoration Parsing
+### Requirement: Text Decoration Parsing (Two-Token Pattern)
 
-The Rust `parse_tokens` function SHALL detect inline text decorations and produce `TextToken` entries with the appropriate `decoration` field.
+The Rust `parse_tokens` function SHALL detect inline text decorations and produce tokens matching the exact TypeScript/markdown-it token structure. Bold, italic, and strikethrough MUST produce TWO tokens each (an empty-text opener token with the decoration name, followed by the content text with decoration "none"). Only inline code produces a SINGLE token with content.
 
-#### Scenario: Bold text
+#### Scenario: Bold text produces two tokens
 
 - **Given** the input string `"**bold content**"`
 - **When** `parse_tokens` is called
-- **Then** the output MUST contain a token `{ tokenType: "text", text: "bold content", decoration: "bold" }`
+- **Then** the output MUST contain exactly TWO tokens:
+  1. `{ tokenType: "text", text: "", decoration: "bold" }`
+  2. `{ tokenType: "text", text: "bold content", decoration: "none" }`
 
-#### Scenario: Italic text with asterisk
+#### Scenario: Italic text with asterisk produces two tokens
 
 - **Given** the input string `"*italic*"`
 - **When** `parse_tokens` is called
-- **Then** the output MUST contain a token with `decoration` `"italic"` and `text` `"italic"`
+- **Then** the output MUST contain exactly TWO tokens:
+  1. `{ tokenType: "text", text: "", decoration: "italic" }`
+  2. `{ tokenType: "text", text: "italic", decoration: "none" }`
 
-#### Scenario: Italic text with underscore
+#### Scenario: Italic text with underscore produces two tokens
 
 - **Given** the input string `"_italic_"`
 - **When** `parse_tokens` is called
-- **Then** the output MUST contain a token with `decoration` `"italic"`
+- **Then** the output MUST contain exactly TWO tokens:
+  1. `{ tokenType: "text", text: "", decoration: "italic" }`
+  2. `{ tokenType: "text", text: "italic", decoration: "none" }`
 
-#### Scenario: Strikethrough text
+#### Scenario: Strikethrough text produces two tokens
 
 - **Given** the input string `"~~struck~~"`
 - **When** `parse_tokens` is called
-- **Then** the output MUST contain a token with `decoration` `"strikethrough"` and `text` `"struck"`
+- **Then** the output MUST contain exactly TWO tokens:
+  1. `{ tokenType: "text", text: "", decoration: "strikethrough" }`
+  2. `{ tokenType: "text", text: "struck", decoration: "none" }`
 
-#### Scenario: Inline code
+#### Scenario: Inline code produces single token (exception to two-token rule)
 
 - **Given** the input string `` "`code_var`" ``
 - **When** `parse_tokens` is called
-- **Then** the output MUST contain a token with `decoration` `"code"` and `text` `"code_var"`
+- **Then** the output MUST contain exactly ONE token: `{ tokenType: "text", text: "code_var", decoration: "code" }`
 
 #### Scenario: Code span prevents inner parsing
 
@@ -146,11 +169,28 @@ The Rust `parse_tokens` function SHALL detect inline text decorations and produc
 - **Then** the output MUST contain a single text token with `decoration` `"code"` and `text` `"[[not a link]]"`
 - **And** no `obsidian_link` token SHALL be produced
 
+#### Scenario: Bold text with surrounding plain text
+
+- **Given** the input string `"plain **bold** plain"`
+- **When** `parse_tokens` is called
+- **Then** the output MUST contain tokens in order:
+  1. `{ tokenType: "text", text: "plain ", decoration: "none" }`
+  2. `{ tokenType: "text", text: "", decoration: "bold" }`
+  3. `{ tokenType: "text", text: "bold", decoration: "none" }`
+  4. `{ tokenType: "text", text: " plain", decoration: "none" }`
+
 #### Scenario: Plain text with no decoration
 
 - **Given** the input string `"just plain text"`
 - **When** `parse_tokens` is called
 - **Then** the output MUST contain exactly one token: `{ tokenType: "text", text: "just plain text", decoration: "none" }`
+
+#### Scenario: Unclosed bold treated as plain text
+
+- **Given** the input string `"**unclosed"`
+- **When** `parse_tokens` is called
+- **Then** no token with `decoration` `"bold"` SHALL be produced
+- **And** the output MUST contain text token(s) including `"**"` as literal characters
 
 ---
 
@@ -283,6 +323,6 @@ The Rust inline token parser MUST produce structurally identical output to the T
 
 #### Scenario: Conformance on synthetic edge cases
 
-- **Given** synthetic inputs including: empty string, plain text, obsidian links with all variations (alias, header, folder), markdown links, images, bare HTTP URLs, bold/italic/strikethrough/code decorations, meta-action triples (with/without icon), meta-mdtree directives, and mixed content combining multiple token types
+- **Given** synthetic inputs including: empty string, plain text, obsidian links with all variations (alias, header, folder), markdown links, images, bare HTTP URLs, text decorations matching the two-token pattern (bold/italic/strikethrough opener+content) and single-token pattern (code), meta-action triples (with/without icon), meta-mdtree directives, and mixed content combining multiple token types
 - **When** both parsers process each input
 - **Then** the outputs MUST be identical for every case

@@ -22,13 +22,13 @@ A Rust implementation of `parseTokens` compiled to WASM that produces structural
 - New Rust module `packages/parser-native/src/inline_tokens.rs` implementing `parse_tokens`
 - Serde-serializable output types mirroring all `ParsedTextToken` variants (`TextToken`, `ObsidianLinkToken`, `LinkToken`, `ImageToken`, `MetaActionToken`, `MetaMdtreeToken`)
 - Hand-written state machine for: obsidian `[[link|alias]]` with header syntax, standard markdown `[text](url)`, images `![alt](src)`, HTTP/HTTPS URL detection, text decorations (bold `**`, italic `*`/`_`, strikethrough `~~`, inline code `` ` ``), and softbreak
-- Meta-action triple extraction: `(meta-action-name::VAL)(meta-action-url::VAL)` with optional `(meta-action-icon::VAL)`
-- Meta-mdtree directive extraction: `(meta-mdtree:: WORD)`
+- Meta-action triple extraction using hand-written parsers (extending the existing `find_meta_action_end` pattern from `list_scanner.rs`) with value capture
+- Meta-mdtree directive extraction using hand-written parsers (extending the existing `find_meta_mdtree_end` pattern from `list_scanner.rs`) with value capture
 - `resolveReference` logic: if link target contains `/`, return the second segment (`split("/")[1]`) — matching the TS implementation
 - `#[wasm_bindgen]` export `parse_tokens` in `lib.rs` returning JSON
 - TypeScript adapter function `adaptParseTokens` in `packages/parser-native/ts/adapter.ts`
 - Extension of `NativeParserHandle` and `WasmExports` types to include `parse_tokens`
-- Rust unit tests (>=40) and TypeScript conformance tests
+- Rust unit tests (>=42) and TypeScript conformance tests
 
 ## In-Scope
 
@@ -38,7 +38,7 @@ A Rust implementation of `parseTokens` compiled to WASM that produces structural
 - Standard markdown link parsing: `[text](url)` producing `LinkToken`
 - Image parsing: `![alt](src)` producing `ImageToken`
 - HTTP/HTTPS URL detection: bare URLs (`https://...`) converted to `LinkToken` (matching the `inlineHttpLinkPlugin` behavior that wraps them as `[url](url)`)
-- Text decoration detection: `**bold**`, `*italic*`, `_italic_`, `~~strikethrough~~`, `` `code` ``
+- Text decoration detection matching the **exact two-token behavior** of the TS/markdown-it implementation: `**bold**` produces TWO tokens — `{ text: "", decoration: "bold" }` (from the `strong_open` token with empty content) followed by `{ text: "bold text", decoration: "none" }` (from the inner `text` token). Same pattern for italic and strikethrough. Only `code_inline` produces a SINGLE token with content.
 - Plain text segments between special tokens (producing `TextToken` with `decoration: "none"`)
 - Softbreak handling (newlines within inline content → `TextToken` with empty text and `decoration: "none"`)
 - The `.trim()` applied to cleaned text before parsing (matching TS line 153)
@@ -51,21 +51,22 @@ A Rust implementation of `parseTokens` compiled to WASM that produces structural
 - Batch API or integration with `parseVaultFile` — that is slice 05
 - Core integration or `ParserProvider` wiring — that is slice 06
 - Handling of `link_close` or `strong_close`/`em_close`/`s_close` tokens explicitly (only open markers produce decoration tokens, matching TS behavior where close tokens are skipped by the `parseTokenList` fallthrough)
+- Adding a `regex` crate dependency (hand-written parsers are used, consistent with `list_scanner.rs`, to minimize WASM binary size)
 - Nested emphasis resolution (e.g., `***bold italic***`) — the state machine handles basic non-nested cases; markdown-it edge cases with complex nesting are a known divergence risk documented in the design
 
 ## Acceptance Criteria
 
 1. `packages/parser-native/src/inline_tokens.rs` exists with a public `parse_tokens` function
-2. `cargo test` passes all Rust unit tests for the inline tokens module (>=40 tests)
+2. `cargo test` passes all Rust unit tests for the inline tokens module (>=42 tests)
 3. Obsidian links: `[[Target]]` produces `{ tokenType: "obsidian_link", source: "[[Target]]", pageTarget: "Target" }`
 4. Obsidian links with alias: `[[Target|Alias]]` produces `{ ..., pageTarget: "Target", alias: "Alias" }`
 5. Obsidian links with header: `[[Target#Section]]` produces `{ ..., pageTarget: "Target", headerName: "Section" }`
 6. Obsidian links with header and alias: `[[Target#Section|Alias]]` produces all three sub-fields
 7. Obsidian links with folder path: `[[folder/Target]]` → `pageTarget: "Target"` (resolveReference returns `split("/")[1]`)
 8. Markdown links: `[text](url)` produces `{ tokenType: "link", href: "url", content: "text" }`
-9. Images: `![alt](src)` produces `{ tokenType: "image", src: "src", alt: "alt" }`
+9. Images: `![alt](src)` produces `{ tokenType: "image", src: "src", alt: "alt" }` — `alt` is ALWAYS a string (never omitted), matching TS behavior where `token.content || token.attrs?.[1]?.[1] || ""` always yields a string value
 10. HTTP URLs: bare `https://example.com` produces `{ tokenType: "link", href: "https://example.com", content: "https://example.com" }`
-11. Text decorations: `**bold**` → decoration "bold"; `*italic*` / `_italic_` → "italic"; `~~strike~~` → "strikethrough"; `` `code` `` → "code"
+11. Text decorations produce TWO tokens matching TS/markdown-it behavior: `**bold**` → `{ text: "", decoration: "bold" }` followed by `{ text: "bold text", decoration: "none" }`. Same for italic (`*`/`_` → `"italic"`) and strikethrough (`~~` → `"strikethrough"`). Only inline code (`` ` ``) produces a SINGLE token: `{ text: "content", decoration: "code" }`
 12. Plain text: undecorated text produces `{ tokenType: "text", text: "...", decoration: "none" }`
 13. Meta-action triples: `(meta-action-name::N)(meta-action-url::U)` extracts to `{ tokenType: "meta_action", name: "N", url: "U" }` with optional `icon` field
 14. Meta-mdtree directives: `(meta-mdtree:: archive)` extracts to `{ tokenType: "meta_mdtree", directive: "archive" }`
@@ -76,8 +77,9 @@ A Rust implementation of `parseTokens` compiled to WASM that produces structural
 19. TypeScript adapter `adaptParseTokens` in `adapter.ts` converts JSON to `ParsedTextToken[]`
 20. `NativeParserHandle` and `WasmExports` types are extended with `parse_tokens`
 21. Conformance tests compare Rust vs TS output on all `rawText` values from the 8 integration fixture files
-22. Conformance tests include synthetic cases covering: plain obsidian links, links with alias/header/folder, markdown links, images, HTTP URLs, bold/italic/strikethrough/code decorations, meta-action triples (with and without icon), meta-mdtree, mixed content (link + text + meta-action), empty string input, text-only input (no special tokens)
-23. `undefined` fields in `ObsidianLinkToken` (`alias`, `headerName`) and `ImageToken` (`alt`) and `MetaActionToken` (`icon`) are omitted from JSON (not serialized as `null`)
+22. Conformance tests include synthetic cases covering: plain obsidian links, links with alias/header/folder, markdown links, images, HTTP URLs, text decorations (bold/italic/strikethrough producing two-token pairs, code producing single token), meta-action triples (with and without icon), meta-mdtree, mixed content (link + text + meta-action), empty string input, text-only input (no special tokens)
+23. `undefined` fields in `ObsidianLinkToken` (`alias`, `headerName`) and `MetaActionToken` (`icon`) are omitted from JSON (not serialized as `null`). `ImageToken.alt` is ALWAYS present as a string (using `Some("")` for empty alt, never `None`). `LinkToken.content` uses `Option<String>` with `skip_serializing_if` — matching the TS type which declares `content?: string`
+24. No `regex` crate dependency is added to `Cargo.toml` — meta extraction uses hand-written parsers with value capture (extending the existing `find_meta_action_end`/`find_meta_mdtree_end` patterns)
 
 ## Feature Mapping
 

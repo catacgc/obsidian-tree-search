@@ -4,7 +4,7 @@
 
 **Create `packages/parser-native/src/inline_tokens.rs`:**
 
-- Define serde-serializable output types using tagged enums to mirror the `ParsedTextToken` union type. Use `#[serde(tag = "tokenType")]` for the enum and rename fields as needed. Use `#[serde(skip_serializing_if = "Option::is_none")]` for optional fields (`alias`, `headerName`, `icon`, `alt`, `content`):
+- Define serde-serializable output types using tagged enums to mirror the `ParsedTextToken` union type. Use `#[serde(tag = "tokenType")]` for the enum and rename fields as needed. Use `#[serde(skip_serializing_if = "Option::is_none")]` for optional fields (`alias`, `headerName`, `icon`, `content`). Note: `alt` on `Image` is NOT optional — it is always a `String` (matching TS behavior at `inline-tokens.ts:124` where `token.content || token.attrs?.[1]?.[1] || ""` always yields a string):
 
   ```rust
   use serde::Serialize;
@@ -37,8 +37,7 @@
       #[serde(rename = "image")]
       Image {
           src: String,
-          #[serde(skip_serializing_if = "Option::is_none")]
-          alt: Option<String>,
+          alt: String,  // ALWAYS present (never Option) — matches TS which always produces a string
       },
       #[serde(rename = "meta_action")]
       MetaAction {
@@ -70,22 +69,31 @@ Implement the public function in `inline_tokens.rs`:
 pub fn parse_tokens(input: &str) -> Vec<ParsedToken>
 ```
 
-**Step 1: Meta-action triple extraction.**
+**Step 1: Meta-action triple extraction (hand-written parser with capture).**
 
-- Use the regex pattern `\(meta-action-name::([^)]*)\)\(meta-action-url::([^)]*)\)(?:\(meta-action-icon::([^)]*)\))?` (matching TS `META_ACTION_TRIPLE_RE` at line 133-134).
-- Iterate over all matches in `input`. For each match:
-  - Extract `name` (group 1), `url` (group 2), `icon` (group 3, optional).
-  - Collect into a `Vec<ParsedToken::MetaAction>`.
-  - Replace the matched substring with empty string.
-- The replacement must handle overlapping/adjacent matches correctly (global replace).
+- Extend the existing `find_meta_action_end` pattern from `list_scanner.rs:238-275` to CAPTURE the values (name, url, icon) instead of just stripping.
+- Write a function `extract_meta_actions(input: &str) -> (String, Vec<ParsedToken>)` that:
+  - Scans for `(meta-action-name::` prefix
+  - Extracts the name value up to `)` — this is group 1
+  - Immediately after, expects `(meta-action-url::` and extracts the url value up to `)` — this is group 2
+  - Optionally, immediately after, expects `(meta-action-icon::` and extracts the icon value up to `)` — this is group 3
+  - Removes the entire matched triple from the string
+  - Collects all found triples into a `Vec<ParsedToken::MetaAction>`
+  - Returns the cleaned string and the collected meta-action tokens
+- The matching pattern is equivalent to the TS regex: `\(meta-action-name::([^)]*)\)\(meta-action-url::([^)]*)\)(?:\(meta-action-icon::([^)]*)\))?`
+- This must handle multiple non-overlapping matches globally.
 
-**Step 2: Meta-mdtree directive extraction.**
+**Step 2: Meta-mdtree directive extraction (hand-written parser with capture).**
 
-- Use the regex pattern `\(meta-mdtree::\s*(\w+)\)` (matching TS `META_MDTREE_RE` at line 135).
-- Iterate over all matches in the already-cleaned string. For each match:
-  - Extract `directive` (group 1).
-  - Collect into a `Vec<ParsedToken::MetaMdtree>`.
-  - Replace the matched substring with empty string.
+- Extend the existing `find_meta_mdtree_end` pattern from `list_scanner.rs:298-329` to CAPTURE the directive word.
+- Write a function `extract_meta_mdtree(input: &str) -> (String, Vec<ParsedToken>)` that:
+  - Scans for `(meta-mdtree::` prefix
+  - Skips optional whitespace
+  - Captures the `\w+` word (the directive)
+  - Expects closing `)`
+  - Removes the matched expression from the string
+  - Returns cleaned string and collected `Vec<ParsedToken::MetaMdtree>`
+- This must handle multiple matches globally.
 
 **Step 3: Trim the cleaned string.**
 
@@ -96,30 +104,38 @@ pub fn parse_tokens(input: &str) -> Vec<ParsedToken>
 
 Implement a character-by-character state machine on `cleaned` that detects (in priority order):
 
-1. **Obsidian links** (`[[`): When `[[` is encountered, scan forward for `]]`. Extract the content between them. Split on `|` to separate `[target_with_header, alias]`. Split the target portion on `#` to get `[fileName, headerName]`. Apply `resolve_reference(fileName)`: if fileName contains `/`, return `fileName.split("/")[1]` (the second segment at index 1, matching the TS implementation at `inline-tokens.ts:57`). Produce `ParsedToken::ObsidianLink`.
+1. **Inline code** (`` ` ``): HIGHEST PRIORITY. When a backtick is encountered, scan for the next backtick. Content within backticks is NOT parsed for inner syntax (links, decorations, etc.). Produce `ParsedToken::Text { text, decoration: "code" }`. This is the one decoration type that produces a SINGLE token with the content text. If no closing backtick is found, treat the backtick as plain text.
 
-2. **Images** (`![`): When `![` is encountered (and NOT part of `![[`), scan for `]` to get alt text, then expect `(` and scan for `)` to get src. Produce `ParsedToken::Image`.
+2. **Obsidian links** (`[[`): When `[[` is encountered, scan forward for `]]`. Extract the content between them. Split on `|` to separate `[target_with_header, alias]`. Split the target portion on `#` to get `[fileName, headerName]`. Apply `resolve_reference(fileName)`: if fileName contains `/`, return `fileName.split("/")[1]` (the second segment at index 1, matching the TS implementation at `inline-tokens.ts:57`). Produce `ParsedToken::ObsidianLink`. If no closing `]]` is found, treat `[[` as plain text.
 
-3. **Markdown links** (`[` not preceded by `!`): When `[` is encountered, scan for `]` to get content text, then expect `(` and scan for `)` to get href. Produce `ParsedToken::Link`.
+3. **Images** (`![`): When `![` is encountered and the next character is NOT `[` (which would be `![[`, an obsidian embed): scan for `]` to get alt text, then expect `(` and scan for `)` to get src. Produce `ParsedToken::Image { src, alt }` where `alt` is always a `String` (use `""` if empty). If the pattern doesn't complete (no `](...)` found), treat `![` as plain text.
 
-4. **HTTP URLs**: When `http://` or `https://` is encountered as a word boundary (preceded by start-of-string or whitespace, and NOT preceded by `[` or `<`), scan forward consuming non-whitespace characters until a whitespace or end-of-string (stopping also before `)`, `]`, `>`, `,` if they appear to terminate the URL — matching the TS regex `/(^|\s)(https?:\/\/[^\s\])}>,]+)/gm`). The URL is then treated as a markdown link `[url](url)`, producing `ParsedToken::Link { href: url, content: Some(url) }`.
+4. **Markdown links** (`[` not preceded by `!`): When `[` is encountered (and not the second `[` in `[[`), scan for `]`, then expect `(` and scan for `)` to get href. The text between `[` and `]` is the content. Produce `ParsedToken::Link { href, content: Some(text) }`. If the pattern doesn't complete, treat `[` as plain text.
 
-5. **Bold** (`**`): When `**` is encountered, scan for the next `**`. The enclosed text becomes `ParsedToken::Text { text, decoration: "bold" }`. If no closing `**` is found, treat the `**` as plain text.
+5. **HTTP URLs**: When `http://` or `https://` is detected at a word boundary (preceded by start-of-string or whitespace, and NOT preceded by `[` or `<`), scan forward consuming characters matching `[^\s\])}>,]+` (non-whitespace, non-`]`, non-`)`, non-`}`, non-`>`, non-`,`). Produce `ParsedToken::Link { href: url, content: Some(url) }`. The URL detection must NOT fire when the URL is already inside markdown link `[...](URL)` syntax — this is naturally handled by the fact that URLs inside `(...)` are already consumed by the markdown link parser in rule 4.
 
-6. **Italic** (`*` or `_` single): When a single `*` or `_` is encountered (not part of `**`), scan for the matching closer. Produce `ParsedToken::Text { text, decoration: "italic" }`.
+6. **Bold** (`**`): When `**` is encountered, scan for the matching closing `**`. To match the TS/markdown-it behavior, produce TWO tokens: `ParsedToken::Text { text: "".to_string(), decoration: "bold".to_string() }` followed by the enclosed text being parsed as normal content (which typically yields a `ParsedToken::Text { text: enclosed_content, decoration: "none" }` unless it contains inner tokens like links). If no closing `**` is found, treat the `**` as plain text.
 
-7. **Strikethrough** (`~~`): When `~~` is encountered, scan for the next `~~`. Produce `ParsedToken::Text { text, decoration: "strikethrough" }`.
+7. **Italic** (single `*` or `_`): When a single `*` (not part of `**`) or `_` is encountered, scan for the matching closer. Produce TWO tokens: `ParsedToken::Text { text: "".to_string(), decoration: "italic".to_string() }` followed by the enclosed content parsed as inline. If no closing marker is found, treat it as plain text.
 
-8. **Inline code** (`` ` ``): When a backtick is encountered, scan for the next backtick. Content within backticks is NOT parsed for inner syntax (links, decorations, etc.). Produce `ParsedToken::Text { text, decoration: "code" }`.
+8. **Strikethrough** (`~~`): When `~~` is encountered, scan for the next `~~`. Produce TWO tokens: `ParsedToken::Text { text: "".to_string(), decoration: "strikethrough".to_string() }` followed by the enclosed content parsed as inline. If no closing `~~` is found, treat it as plain text.
 
-9. **Plain text**: Any characters not consumed by the above rules accumulate into a plain text buffer. When a special token is encountered (or end of input), flush the buffer as `ParsedToken::Text { text, decoration: "none" }`.
+9. **Plain text**: Any characters not consumed by the above rules accumulate into a plain text buffer. When a special token is encountered (or end of input), flush the buffer as `ParsedToken::Text { text, decoration: "none" }`. Empty text buffers should NOT produce tokens.
 
-**Important behaviors matching the TS implementation:**
+**Critical: Two-token pattern for emphasis/strikethrough (matching TS behavior).**
 
-- The `inlineHttpLinkPlugin` in TS transforms URLs in the source BEFORE markdown-it parses. It replaces `(^|\s)(https://...)` with `$1[$2]($2)` — so URLs become markdown links. The Rust parser should produce the same output: a `Link` token with both `href` and `content` set to the URL. The space character preceding the URL should remain as part of a preceding text token (if any).
-- The TS `parseTokenList` skips tokens it doesn't recognize (the `return parseTokenList(tokens.slice(1))` fallthrough at line 130). This means `strong_close`, `em_close`, `s_close`, `link_close` tokens are silently consumed. The Rust state machine should similarly not produce output for closing markers.
-- The TS code produces text tokens for `softbreak` with `{ text: "", decoration: "none" }`. In practice, this happens when markdown-it encounters a newline in the inline content. Since `parseTokens` receives single-line `rawText` strings, softbreaks are rare but the Rust parser should handle newlines in input by producing an empty text token if a bare `\n` is encountered.
-- The `resolveReference` function at `inline-tokens.ts:56-59`: `if (ref.includes("/")) return ref.split("/")[1]` — this takes the element at index 1 after splitting on `/`. For `"folder/Note"` this returns `"Note"`. For `"a/b/Note"` this returns `"b"` (NOT `"Note"`). The Rust implementation must replicate this exact behavior.
+The TypeScript `parseTokenList` function at `inline-tokens.ts:106-116` processes markdown-it tokens where `strong_open`, `em_open`, `s_open` all have `content: ""` (empty string). This means:
+- For `**bold text**`, markdown-it produces tokens: `strong_open` (content=""), `text` (content="bold text"), `strong_close`
+- The TS `parseTokenList` emits: `{ text: "", decoration: "bold" }` then `{ text: "bold text", decoration: "none" }`
+- For `*italic*`: `{ text: "", decoration: "italic" }` then `{ text: "italic", decoration: "none" }`
+- For `~~struck~~`: `{ text: "", decoration: "strikethrough" }` then `{ text: "struck", decoration: "none" }`
+- For `` `code` ``: ONLY one token: `{ text: "code", decoration: "code" }` (because `code_inline` in markdown-it is a single token with content)
+
+The Rust state machine MUST replicate this exact two-token pattern for bold/italic/strikethrough, and the single-token pattern for inline code.
+
+**Important edge case: `![[File]]` (obsidian embed).**
+
+When `!` precedes `[[`, the `!` is accumulated as plain text, and then `[[File]]` is parsed as an obsidian link. This matches the TS behavior where the obsidian_link rule only fires at the `[[` position, leaving the preceding `!` as text. The image rule (`![`) requires `![...](...)`; since `![[File]]` has no `](...)`, the image rule fails and `!` stays as text.
 
 **Step 5: Combine results.**
 
@@ -162,13 +178,13 @@ Implement a character-by-character state machine on `cleaned` that detects (in p
   ```typescript
   parse_tokens: (text: string) => string
   ```
-- Update `loadNativeParser` to include `parse_tokens` in the returned handle.
+- Update `loadNativeParser` to include `parse_tokens` in the returned handle (it is already returned from `loadWasm`).
 
 **Verification:** `wasm-pack build --target web --out-dir pkg` succeeds; TypeScript type-checks.
 
 ---
 
-## Task 4 — Write Rust unit tests (>=40 tests)
+## Task 4 — Write Rust unit tests (>=42 tests)
 
 Add `#[cfg(test)] mod tests` block at the bottom of `inline_tokens.rs`:
 
@@ -180,55 +196,57 @@ Add `#[cfg(test)] mod tests` block at the bottom of `inline_tokens.rs`:
 5. `test_obsidian_link_with_folder` — `"[[folder/Note]]"` → pageTarget="Note" (resolveReference: split("/")[1])
 6. `test_obsidian_link_deep_folder` — `"[[a/b/Note]]"` → pageTarget="b" (split("/")[1] takes index 1, NOT last segment)
 7. `test_obsidian_link_text_around` — `"before [[Link]] after"` → 3 tokens: text("before "), ObsidianLink, text(" after")
-8. `test_multiple_obsidian_links` — `"[[A]] and [[B]]"` → text, ObsidianLink(A), text, ObsidianLink(B)
-9. `test_unclosed_obsidian_link` — `"[[Unclosed"` → treated as plain text
+8. `test_multiple_obsidian_links` — `"[[A]] and [[B]]"` → ObsidianLink(A), text(" and "), ObsidianLink(B)
+9. `test_unclosed_obsidian_link` — `"[[Unclosed"` → treated as plain text (text token(s) containing the characters)
 10. `test_empty_obsidian_link` — `"[[]]"` → ObsidianLink with pageTarget=""
 
 **Markdown link and image parsing (6 tests):**
-11. `test_markdown_link` — `"[text](http://example.com)"` → Link { href, content: Some("text") }
-12. `test_markdown_link_empty_text` — `"[](http://x.com)"` → Link { href, content: Some("") }
-13. `test_image` — `"![alt text](image.png)"` → Image { src: "image.png", alt: Some("alt text") }
-14. `test_image_no_alt` — `"![](image.png)"` → Image { src: "image.png", alt: Some("") }
-15. `test_obsidian_embed_not_image` — `"![[File]]"` → ObsidianLink with source `"[[File]]"` (the `!` is consumed as text or skipped, and `[[File]]` is parsed as obsidian link — matching TS behavior where the obsidian_link rule in markdown-it only matches `[[...]]` after consuming any prefix)
+11. `test_markdown_link` — `"[text](http://example.com)"` → Link { href: "http://example.com", content: Some("text") }
+12. `test_markdown_link_empty_text` — `"[](http://x.com)"` → Link { href: "http://x.com", content: Some("") }
+13. `test_image` — `"![alt text](image.png)"` → Image { src: "image.png", alt: "alt text" }
+14. `test_image_no_alt` — `"![](image.png)"` → Image { src: "image.png", alt: "" } (NOT alt: None — TS always produces a string)
+15. `test_obsidian_embed_not_image` — `"![[File]]"` → text("!") followed by ObsidianLink with source `"[[File]]"`, pageTarget `"File"` (the `!` is plain text because `![[` is not a valid image pattern, and `[[File]]` is parsed as obsidian link)
 16. `test_link_with_special_chars` — `"[docs](https://example.com/path?q=1&r=2)"` → correct href preserved
 
 **HTTP URL detection (5 tests):**
 17. `test_bare_https_url` — `"https://example.com"` → Link { href: url, content: Some(url) }
 18. `test_bare_http_url` — `"http://example.com"` → Link token
 19. `test_url_after_text` — `"see https://x.com"` → text("see "), Link
-20. `test_url_not_in_brackets` — `"[https://x.com](https://x.com)"` → single Link (already inside markdown link syntax, URL not double-detected)
-21. `test_url_terminated_at_special_chars` — `"https://x.com/path) more"` → Link href stops before `)`, then text(" more")
+20. `test_url_not_in_brackets` — `"[https://x.com](https://x.com)"` → single Link (URL not double-detected because it's already consumed by the markdown link parser)
+21. `test_url_terminated_at_special_chars` — `"https://x.com/path) more"` → Link { href: "https://x.com/path" }, then text(") more") — the `)` terminates the URL per the `[^\s\])}>,]+` rule and remains in subsequent text
 
-**Text decoration (8 tests):**
-22. `test_bold` — `"**bold text**"` → Text { text: "bold text", decoration: "bold" }
-23. `test_italic_star` — `"*italic*"` → decoration: "italic"
-24. `test_italic_underscore` — `"_italic_"` → decoration: "italic"
-25. `test_strikethrough` — `"~~struck~~"` → decoration: "strikethrough"
-26. `test_inline_code` — `` "`code here`" `` → decoration: "code"
-27. `test_mixed_text_and_bold` — `"plain **bold** plain"` → text(none), text(bold), text(none)
-28. `test_unclosed_bold` — `"**unclosed"` → treated as plain text
-29. `test_code_preserves_special` — `` "`[[not a link]]`" `` → decoration: "code", text: "[[not a link]]", no obsidian link token
+**Text decoration — two-token pattern (10 tests):**
+22. `test_bold_two_tokens` — `"**bold text**"` → TWO tokens: Text { text: "", decoration: "bold" } then Text { text: "bold text", decoration: "none" }
+23. `test_italic_star_two_tokens` — `"*italic*"` → Text { text: "", decoration: "italic" } then Text { text: "italic", decoration: "none" }
+24. `test_italic_underscore_two_tokens` — `"_italic_"` → Text { text: "", decoration: "italic" } then Text { text: "italic", decoration: "none" }
+25. `test_strikethrough_two_tokens` — `"~~struck~~"` → Text { text: "", decoration: "strikethrough" } then Text { text: "struck", decoration: "none" }
+26. `test_inline_code_single_token` — `` "`code here`" `` → SINGLE token: Text { text: "code here", decoration: "code" } (code is the exception — one token)
+27. `test_bold_with_surrounding_text` — `"plain **bold** plain"` → text("plain "), text("", bold), text("bold", none), text(" plain")
+28. `test_unclosed_bold` — `"**unclosed"` → treated as plain text (no decoration token produced)
+29. `test_code_preserves_special` — `` "`[[not a link]]`" `` → SINGLE token: Text { text: "[[not a link]]", decoration: "code" }, no obsidian_link token
+30. `test_italic_with_link_inside` — `"*see [[Note]]*"` → text("", italic), ObsidianLink(Note), text empty pieces — or more precisely, the inner content of emphasis is parsed for inline tokens, but each still gets decoration "none" since the emphasis opener already emitted the "italic" marker
+31. `test_bold_empty_content` — `"****"` → text("", bold), no content text token (empty content after trim)
 
 **Meta-action extraction (6 tests):**
-30. `test_meta_action_triple` — `"text (meta-action-name::Open)(meta-action-url::https://x.com)"` → text token + MetaAction { name: "Open", url: "https://x.com", icon: None }
-31. `test_meta_action_with_icon` — includes `(meta-action-icon::globe-01-16)` → icon: Some("globe-01-16")
-32. `test_multiple_meta_actions` — two triples → two MetaAction tokens at end
-33. `test_meta_action_only` — `"(meta-action-name::X)(meta-action-url::Y)"` → empty after trim → only MetaAction token
-34. `test_meta_action_removed_from_inline` — text remaining after extraction is parsed for inline tokens (no meta-action syntax in inline output)
-35. `test_meta_action_name_with_spaces` — `"(meta-action-name::Open Task)(meta-action-url::U)"` → name: "Open Task"
+32. `test_meta_action_triple` — `"text (meta-action-name::Open)(meta-action-url::https://x.com)"` → text("text") token + MetaAction { name: "Open", url: "https://x.com", icon: None }
+33. `test_meta_action_with_icon` — includes `(meta-action-icon::globe-01-16)` → icon: Some("globe-01-16")
+34. `test_multiple_meta_actions` — two triples → two MetaAction tokens at end
+35. `test_meta_action_only` — `"(meta-action-name::X)(meta-action-url::Y)"` → empty after trim → only MetaAction token
+36. `test_meta_action_removed_from_inline` — text remaining after extraction is parsed for inline tokens (no meta-action syntax in inline output)
+37. `test_meta_action_name_with_spaces` — `"(meta-action-name::Open Task)(meta-action-url::U)"` → name: "Open Task"
 
 **Meta-mdtree extraction (3 tests):**
-36. `test_meta_mdtree` — `"text (meta-mdtree:: archive)"` → text token + MetaMdtree { directive: "archive" }
-37. `test_meta_mdtree_no_space` — `"text (meta-mdtree::collapse)"` → directive: "collapse"
-38. `test_multiple_meta_mdtree` — two directives → two MetaMdtree tokens
+38. `test_meta_mdtree` — `"text (meta-mdtree:: archive)"` → text token + MetaMdtree { directive: "archive" }
+39. `test_meta_mdtree_no_space` — `"text (meta-mdtree::collapse)"` → directive: "collapse"
+40. `test_multiple_meta_mdtree` — two directives → two MetaMdtree tokens
 
 **Edge cases (4+ tests):**
-39. `test_empty_input` — `""` → empty vec
-40. `test_plain_text_only` — `"hello world"` → single Text { text: "hello world", decoration: "none" }
-41. `test_trim_applied` — `"  [[Note]]  "` → after trim, produces ObsidianLink (no leading/trailing whitespace text tokens)
-42. `test_output_order` — mixed content with meta-actions → inline tokens first, then meta_action, then meta_mdtree
+41. `test_empty_input` — `""` → empty vec
+42. `test_plain_text_only` — `"hello world"` → single Text { text: "hello world", decoration: "none" }
+43. `test_trim_applied` — `"  [[Note]]  "` → after trim, produces ObsidianLink (no leading/trailing whitespace text tokens around the link)
+44. `test_output_order` — mixed content with meta-actions → inline tokens first, then meta_action, then meta_mdtree
 
-**Verification:** `cargo test` passes all tests (>=42 tests).
+**Verification:** `cargo test` passes all tests (>=44 tests).
 
 ---
 
@@ -247,6 +265,7 @@ Add `#[cfg(test)] mod tests` block at the bottom of `inline_tokens.rs`:
   - `#[serde(tag = "tokenType")]` produces `{ "tokenType": "obsidian_link", ... }`
   - `#[serde(skip_serializing_if = "Option::is_none")]` omits undefined fields
   - Field names use the correct casing via `#[serde(rename = "...")]`
+  - `Image.alt` is always a `String` (never Option), so it is always serialized
 - No null→undefined conversion needed here because optional fields are simply absent from the JSON when `None` (unlike the list scanner where `parent: null` must become `undefined`).
 
 **Update `packages/parser-native/ts/index.ts`:**
@@ -283,7 +302,7 @@ Extract all unique `rawText` values from the integration fixtures by parsing eac
 - Also test frontmatter parent strings from fixtures (e.g., `"[[Root]]"` from `multi-page/index.md`).
 - Discover fixture files dynamically (same pattern as `list-scanner.test.ts` using `findMdFiles`).
 
-**Synthetic conformance tests (>=15 tests):**
+**Synthetic conformance tests (>=19 tests):**
 
 1. Plain obsidian link: `"[[Note]]"`
 2. Obsidian link with alias: `"[[Note|Display Name]]"`
@@ -293,10 +312,10 @@ Extract all unique `rawText` values from the integration fixtures by parsing eac
 6. Markdown link: `"[text](https://example.com)"`
 7. Image: `"![screenshot](img.png)"`
 8. Bare HTTP URL: `"see https://example.com/path for details"`
-9. Bold text: `"**important** note"`
-10. Italic text: `"*emphasized* word"`
-11. Strikethrough: `"~~removed~~ text"`
-12. Inline code: `` "`variable` name" ``
+9. Bold text (two-token): `"**important** note"`
+10. Italic text (two-token): `"*emphasized* word"`
+11. Strikethrough (two-token): `"~~removed~~ text"`
+12. Inline code (single-token): `` "`variable` name" ``
 13. Meta-action triple with icon: `"task (meta-action-name::Open)(meta-action-url::https://x.com)(meta-action-icon::globe-01-16)"`
 14. Meta-action without icon: `"link (meta-action-name::Open)(meta-action-url::https://x.com)"`
 15. Meta-mdtree: `"item (meta-mdtree:: archive)"`
@@ -305,6 +324,6 @@ Extract all unique `rawText` values from the integration fixtures by parsing eac
 18. Text only (no special tokens): `"just plain text"`
 19. URL from todoist fixture: `"Buy milk https://app.todoist.com/app/task/task1 (meta-action-name::Open Task)(meta-action-url::https://app.todoist.com/app/task/task1)(meta-action-icon::globe-01-16)"`
 
-Each test asserts deep equality between Rust and TS output.
+Each test asserts deep equality between Rust and TS output. These tests are the ground truth — if the Rust output diverges from TS output, the Rust implementation is incorrect.
 
 **Verification:** `bun test packages/parser-native/ts/__tests__/inline-tokens.test.ts` passes (requires prior `wasm-pack build`).
