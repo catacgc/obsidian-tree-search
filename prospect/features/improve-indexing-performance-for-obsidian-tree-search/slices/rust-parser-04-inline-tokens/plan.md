@@ -1,0 +1,4 @@
+## Next Slice
+- **Name**: `rust-parser-05-batch-api`
+- **Description**: Add chunked batch endpoint that processes multiple files in a single WASM call, returning `DvPage[]` with pre-computed `ParsedTextToken[]` for every list item and frontmatter parent string, plus TypeScript-side chunking with event-loop yielding.
+- **Rationale**: Slices 01–04 are verified complete (Rust scaffold, frontmatter, list-scanner, and inline-tokens all implemented and exported via `wasm-bindgen`). Slice 05 is the next in the planned sequence and its prerequisites (all three parsing primitives) are now available in Rust. This slice combines the individual parsers into a single batch entry point that minimizes WASM boundary crossings — the key performance optimization for mobile indexing.
