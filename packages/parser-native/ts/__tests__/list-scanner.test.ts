@@ -178,5 +178,25 @@ describe("List Scanner Conformance: Rust vs TypeScript", () => {
       expect(rustResult.headers).toEqual(tsResult.headers)
       expect(rustResult.lists).toEqual(tsResult.lists)
     })
+
+    it("CRLF content with non-zero frontmatter bodyStart", () => {
+      const content = "---\r\ntitle: Hello\r\n---\r\n- [[Note]] text"
+      const { bodyStart } = parseFrontmatter(content)
+      expect(bodyStart).toBeGreaterThan(0) // sanity check
+      const tsResult = scanMarkdown(content, "test.md", bodyStart, "archive")
+      const rustResult = scanWithRust(content, "test.md", bodyStart, "archive")
+      expect(rustResult.lists).toEqual(tsResult.lists)
+      expect(rustResult.headers).toEqual(tsResult.headers)
+    })
+
+    it("CRLF content with frontmatter and headers", () => {
+      const content = "---\r\nparent: \"[[Root]]\"\r\n---\r\n\r\n# Index\r\n\r\n- [[Child Note]] see details"
+      const { bodyStart } = parseFrontmatter(content)
+      expect(bodyStart).toBeGreaterThan(0)
+      const tsResult = scanMarkdown(content, "test.md", bodyStart, "archive")
+      const rustResult = scanWithRust(content, "test.md", bodyStart, "archive")
+      expect(rustResult.headers).toEqual(tsResult.headers)
+      expect(rustResult.lists).toEqual(tsResult.lists)
+    })
   })
 })

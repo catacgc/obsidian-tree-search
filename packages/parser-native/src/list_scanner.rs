@@ -348,16 +348,18 @@ pub fn scan_markdown(
     frontmatter_body_start: usize,
     archive_tag: &str,
 ) -> ScanResult {
-    let lines: Vec<&str> = content.split('\n').collect();
+    let raw_lines: Vec<&str> = content.split('\n').collect();
+
+    // Find which line the body starts on BEFORE stripping \r,
+    // so that character counts align with frontmatter_body_start
+    // (which was computed from the original content including \r\n).
+    let body_start_line = find_body_start_line(&raw_lines, frontmatter_body_start);
 
     // Strip \r from line endings (handles CRLF)
-    let lines: Vec<&str> = lines
+    let lines: Vec<&str> = raw_lines
         .iter()
         .map(|l| l.strip_suffix('\r').unwrap_or(l))
         .collect();
-
-    // Find which line the body starts on (skip frontmatter lines)
-    let body_start_line = find_body_start_line(&lines, frontmatter_body_start);
 
     let mut lists: Vec<DvListItem> = Vec::new();
     let mut headers: Vec<HeadingCacheItem> = Vec::new();
@@ -478,7 +480,9 @@ fn find_body_start_line(lines: &[&str], frontmatter_body_start: usize) -> usize 
         chars += line.len() + 1; // +1 for newline
     }
 
-    lines.len()
+    // Fallback: if we couldn't find the offset, scan from the beginning.
+    // This matches the TypeScript behavior where bodyStartLine defaults to 0.
+    0
 }
 
 /// Wire the children arrays from parent line references.
@@ -861,5 +865,49 @@ mod tests {
         let content = "####### not a header";
         let result = scan_markdown(content, "test.md", 0, "archive");
         assert_eq!(result.headers.len(), 0);
+    }
+
+    #[test]
+    fn crlf_with_frontmatter_body_start() {
+        // CRLF content with non-zero frontmatter_body_start.
+        // "---\r\ntitle: Hello\r\n---\r\n" is 22 bytes.
+        // After that comes "- [[Note]]"
+        let content = "---\r\ntitle: Hello\r\n---\r\n- [[Note]]";
+        let result = scan_markdown(content, "test.md", 22, "archive");
+        assert_eq!(result.lists.len(), 1);
+        assert_eq!(result.lists[0].text, "[[Note]]");
+        assert_eq!(result.lists[0].line, 3); // line 3 (0-indexed: "---", "title: Hello", "---", "- [[Note]]")
+    }
+
+    #[test]
+    fn crlf_with_frontmatter_body_start_multi_items() {
+        // Ensure items after frontmatter are all found in CRLF content
+        let content = "---\r\nparent: \"[[Root]]\"\r\n---\r\n\r\n# Index\r\n\r\n- [[Child Note]] see details";
+        // body_start = length of "---\r\nparent: \"[[Root]]\"\r\n---\r\n" = 5 + 19 + 5 = 29
+        // Actually let's compute: "---\r\n" = 5, "parent: \"[[Root]]\"\r\n" = 20, "---\r\n" = 5 => 30
+        // Hmm let me be precise: "---" + "\r\n" = 5; "parent: \"[[Root]]\"" = 18 + "\r\n" = 20; "---" + "\r\n" = 5 => 30
+        // But the Rust frontmatter parser would return 29 since it looks for \r\n--- pattern:
+        // after_open = 5, rest = "parent: \"[[Root]]\"\r\n---\r\n\r\n# Index..."
+        // finds \r\n--- at offset 18 (end of "parent: \"[[Root]]\"")
+        // yaml_end = 18, delimiter_end = 18 + 5 = 23
+        // body_start = 5 + 23 = 28
+        // Actually: "parent: \"[[Root]]\"" has 18 chars, then "\r\n---" is found.
+        // yaml_end = 18 (the \r), delimiter_end = 18 + 5 = 23 (after \r\n---)
+        // body_start = 5 + 23 = 28
+        let result = scan_markdown(content, "test.md", 28, "archive");
+        assert_eq!(result.headers.len(), 1);
+        assert_eq!(result.headers[0].heading, "Index");
+        assert_eq!(result.lists.len(), 1);
+        assert_eq!(result.lists[0].text, "[[Child Note]] see details");
+    }
+
+    #[test]
+    fn fallback_when_body_start_exceeds_content() {
+        // If frontmatter_body_start is larger than the content, fallback to scanning from line 0
+        let content = "- [[Note]]";
+        let result = scan_markdown(content, "test.md", 9999, "archive");
+        // Should still find the item (fallback to line 0)
+        assert_eq!(result.lists.len(), 1);
+        assert_eq!(result.lists[0].text, "[[Note]]");
     }
 }
