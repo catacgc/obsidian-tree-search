@@ -404,17 +404,37 @@ fn parse_inline(input: &str) -> Vec<ParsedToken> {
             continue;
         }
 
-        // 8b. Italic `_`
+        // 8b. Bold `__` or Italic `_` — only at word boundaries (markdown-it rule)
+        // _ can open emphasis only when preceded by non-word char or start of string
         if b == b'_' {
-            if let Some((end, inner_tokens)) = try_parse_emphasis(input, i, "_") {
-                flush_text_buf_or_bold_trailing(&mut text_buf, &mut tokens, &mut needs_trailing_text_after_bold);
-                tokens.push(ParsedToken::Text {
-                    text: "".to_string(),
-                    decoration: "italic".to_string(),
-                });
-                tokens.extend(inner_tokens);
-                i = end;
-                continue;
+            let preceded_by_word = i > 0 && is_word_char(bytes[i - 1]);
+            if !preceded_by_word {
+                // Try `__` (bold) first
+                if i + 1 < len && bytes[i + 1] == b'_' {
+                    if let Some((end, inner_tokens)) = try_parse_double_underscore_emphasis(input, i) {
+                        // Same text-padding as ** bold
+                        force_flush_text_buf(&mut text_buf, &mut tokens);
+                        tokens.push(ParsedToken::Text {
+                            text: "".to_string(),
+                            decoration: "bold".to_string(),
+                        });
+                        tokens.extend(inner_tokens);
+                        needs_trailing_text_after_bold = true;
+                        i = end;
+                        continue;
+                    }
+                }
+                // Try `_` (italic)
+                if let Some((end, inner_tokens)) = try_parse_underscore_emphasis(input, i) {
+                    flush_text_buf_or_bold_trailing(&mut text_buf, &mut tokens, &mut needs_trailing_text_after_bold);
+                    tokens.push(ParsedToken::Text {
+                        text: "".to_string(),
+                        decoration: "italic".to_string(),
+                    });
+                    tokens.extend(inner_tokens);
+                    i = end;
+                    continue;
+                }
             }
             text_buf.push('_');
             i += 1;
@@ -544,6 +564,7 @@ fn try_parse_obsidian_link(input: &str, start: usize) -> Option<(usize, ParsedTo
 
 /// Try to parse a markdown image `![alt](src)` starting at position `start`.
 /// `start` points to the `!`.
+/// Handles balanced parentheses in src URL.
 fn try_parse_image(input: &str, start: usize) -> Option<(usize, ParsedToken)> {
     let bytes = input.as_bytes();
     let len = bytes.len();
@@ -568,22 +589,33 @@ fn try_parse_image(input: &str, start: usize) -> Option<(usize, ParsedToken)> {
     }
     i += 1; // skip `(`
 
-    // Find closing `)`
+    // Find closing `)` with balanced parentheses support
     let src_start = i;
-    while i < len && bytes[i] != b')' {
-        i += 1;
+    let mut paren_depth = 1;
+    while i < len && paren_depth > 0 {
+        match bytes[i] {
+            b'(' => paren_depth += 1,
+            b')' => paren_depth -= 1,
+            _ => {}
+        }
+        if paren_depth > 0 {
+            i += 1;
+        }
     }
-    if i >= len {
+    if paren_depth != 0 {
         return None;
     }
     let src = input[src_start..i].to_string();
-    i += 1; // skip `)`
+    i += 1; // skip closing `)`
 
     Some((i, ParsedToken::Image { src, alt }))
 }
 
 /// Try to parse a markdown link `[text](url)` starting at position `start`.
 /// `start` points to `[`.
+///
+/// Handles balanced parentheses in URLs (e.g., `[text](url_(thing))`).
+/// Rejects URLs that contain spaces (matching markdown-it behavior).
 fn try_parse_markdown_link(input: &str, start: usize) -> Option<(usize, ParsedToken)> {
     let bytes = input.as_bytes();
     let len = bytes.len();
@@ -607,16 +639,28 @@ fn try_parse_markdown_link(input: &str, start: usize) -> Option<(usize, ParsedTo
     }
     i += 1; // skip `(`
 
-    // Find closing `)` — simple (no nested parens)
+    // Find closing `)` with balanced parentheses support
     let href_start = i;
-    while i < len && bytes[i] != b')' {
-        i += 1;
+    let mut paren_depth = 1;
+    while i < len && paren_depth > 0 {
+        match bytes[i] {
+            b'(' => paren_depth += 1,
+            b')' => paren_depth -= 1,
+            b' ' | b'\t' | b'\n' | b'\r' => {
+                // URLs with spaces are not valid markdown links
+                return None;
+            }
+            _ => {}
+        }
+        if paren_depth > 0 {
+            i += 1;
+        }
     }
-    if i >= len {
+    if paren_depth != 0 {
         return None;
     }
     let href = input[href_start..i].to_string();
-    i += 1; // skip `)`
+    i += 1; // skip closing `)`
 
     Some((
         i,
@@ -657,6 +701,99 @@ fn try_parse_bare_url(input: &str, start: usize) -> Option<(usize, ParsedToken)>
             content: Some(url),
         },
     ))
+}
+
+/// Check if a byte is a "word" character (alphanumeric or underscore).
+/// Used for underscore emphasis boundary detection.
+#[inline]
+fn is_word_char(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_'
+}
+
+/// Try to parse underscore emphasis `_..._`.
+/// The closing `_` must be followed by a non-word character or end of string.
+/// Returns (end_position_after_closing_marker, inner_tokens) on success.
+fn try_parse_underscore_emphasis(input: &str, start: usize) -> Option<(usize, Vec<ParsedToken>)> {
+    let bytes = input.as_bytes();
+    let len = bytes.len();
+    let search_start = start + 1; // skip opening `_`
+
+    if search_start >= len {
+        return None;
+    }
+
+    // Find closing `_`
+    let mut i = search_start;
+    while i < len {
+        if bytes[i] == b'_' {
+            // Check that closing `_` is followed by non-word char or end of string
+            let followed_by_word = i + 1 < len && is_word_char(bytes[i + 1]);
+            if !followed_by_word {
+                let inner = &input[search_start..i];
+
+                // Reject empty content or content that starts/ends with space
+                if inner.is_empty() {
+                    return None;
+                }
+                let inner_bytes = inner.as_bytes();
+                if inner_bytes[0] == b' ' || inner_bytes[0] == b'\t'
+                    || inner_bytes[inner_bytes.len() - 1] == b' '
+                    || inner_bytes[inner_bytes.len() - 1] == b'\t'
+                {
+                    return None;
+                }
+
+                let inner_tokens = parse_inline(inner);
+                return Some((i + 1, inner_tokens));
+            }
+        }
+        i += 1;
+    }
+
+    None
+}
+
+/// Try to parse double underscore emphasis `__...__`.
+/// Both opening and closing `__` must be at word boundaries.
+/// Returns (end_position_after_closing_marker, inner_tokens) on success.
+fn try_parse_double_underscore_emphasis(input: &str, start: usize) -> Option<(usize, Vec<ParsedToken>)> {
+    let bytes = input.as_bytes();
+    let len = bytes.len();
+    let search_start = start + 2; // skip opening `__`
+
+    if search_start >= len {
+        return None;
+    }
+
+    // Find closing `__`
+    let mut i = search_start;
+    while i + 1 < len {
+        if bytes[i] == b'_' && bytes[i + 1] == b'_' {
+            // Check that closing `__` is followed by non-word char or end of string
+            let followed_by_word = i + 2 < len && is_word_char(bytes[i + 2]);
+            if !followed_by_word {
+                let inner = &input[search_start..i];
+
+                // Reject empty content or content that starts/ends with space
+                if inner.is_empty() {
+                    return None;
+                }
+                let inner_bytes = inner.as_bytes();
+                if inner_bytes[0] == b' ' || inner_bytes[0] == b'\t'
+                    || inner_bytes[inner_bytes.len() - 1] == b' '
+                    || inner_bytes[inner_bytes.len() - 1] == b'\t'
+                {
+                    return None;
+                }
+
+                let inner_tokens = parse_inline(inner);
+                return Some((i + 2, inner_tokens));
+            }
+        }
+        i += 1;
+    }
+
+    None
 }
 
 /// Try to parse emphasis/decoration delimited by `marker` (e.g., `**`, `*`, `_`, `~~`).
