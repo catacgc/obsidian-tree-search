@@ -441,7 +441,18 @@ fn parse_inline(input: &str) -> Vec<ParsedToken> {
             continue;
         }
 
-        // 9. Plain text — accumulate
+        // 9. Softbreak (newline) — markdown-it produces a softbreak token with empty text
+        if b == b'\n' {
+            flush_text_buf_or_bold_trailing(&mut text_buf, &mut tokens, &mut needs_trailing_text_after_bold);
+            tokens.push(ParsedToken::Text {
+                text: "".to_string(),
+                decoration: "none".to_string(),
+            });
+            i += 1;
+            continue;
+        }
+
+        // 10. Plain text — accumulate
         let ch = input[i..].chars().next().unwrap();
         text_buf.push(ch);
         i += ch.len_utf8();
