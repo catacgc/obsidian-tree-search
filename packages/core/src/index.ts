@@ -32,8 +32,10 @@ export { buildGraphFromScanner, reindexFileInGraph } from "./graph/builder.ts"
 export type { VaultScanner, VaultFile, VaultFolder, WalkResult } from "./graph/scanner.ts"
 
 // Parser
+export type { ParserProvider, FileInput } from "./parser/parser-provider.ts"
+export { TsParserProvider, createTsParserProvider } from "./parser/parser-provider.ts"
 export { parseVaultFile } from "./parser/vault-file.ts"
-export { parseFrontmatter, extractAliases, extractTags, extractParents } from "./parser/frontmatter.ts"
+export { parseFrontmatter, extractAliases, extractTags, extractParents, type Frontmatter } from "./parser/frontmatter.ts"
 export { scanMarkdown } from "./parser/list-scanner.ts"
 export { parseTokens } from "./parser/inline-tokens.ts"
 export { parseCanvasData, type CanvasData, type NodeTextLine } from "./parser/canvas.ts"
