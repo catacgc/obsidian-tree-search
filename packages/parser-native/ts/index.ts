@@ -1,10 +1,11 @@
 export { loadWasm, type WasmExports } from "./loader.ts"
-export { adaptFrontmatter, adaptScanResult } from "./adapter.ts"
+export { adaptFrontmatter, adaptScanResult, adaptParseTokens } from "./adapter.ts"
 
 export type NativeParserHandle = {
   ping: () => string
   parse_frontmatter: (content: string) => string
   scan_markdown: (content: string, file_path: string, frontmatter_body_start: number, archive_tag: string) => string
+  parse_tokens: (text: string) => string
 }
 
 /**

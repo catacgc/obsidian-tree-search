@@ -1,4 +1,4 @@
-import type { DvList, Frontmatter, HeadingCache } from "@mdtree/core"
+import type { DvList, Frontmatter, HeadingCache, ParsedTextToken } from "@mdtree/core"
 
 /**
  * Deserialize the JSON output from the WASM `parse_frontmatter` function
@@ -61,4 +61,18 @@ function adaptListItem(raw: RawDvListItem): DvList {
     completed: raw.completed,
   }
   return item
+}
+
+/**
+ * Deserialize the JSON output from the WASM `parse_tokens` function
+ * into a typed ParsedTextToken[] matching the TS parser output shape.
+ *
+ * The JSON output from Rust already matches the TypeScript type structure:
+ * - `#[serde(tag = "tokenType")]` produces `{ "tokenType": "obsidian_link", ... }`
+ * - `#[serde(skip_serializing_if = "Option::is_none")]` omits undefined fields
+ * - Field names use correct casing via `#[serde(rename = "...")]`
+ * - `Image.alt` is always a String (never Option), so always serialized
+ */
+export function adaptParseTokens(json: string): ParsedTextToken[] {
+  return JSON.parse(json) as ParsedTextToken[]
 }

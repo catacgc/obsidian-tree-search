@@ -1,6 +1,7 @@
 use wasm_bindgen::prelude::*;
 
 mod frontmatter;
+mod inline_tokens;
 mod list_scanner;
 
 /// Initialize the panic hook so that Rust panics produce useful error
@@ -25,4 +26,10 @@ pub fn parse_frontmatter(content: &str) -> String {
 pub fn scan_markdown(content: &str, file_path: &str, frontmatter_body_start: usize, archive_tag: &str) -> String {
     let result = list_scanner::scan_markdown(content, file_path, frontmatter_body_start, archive_tag);
     serde_json::to_string(&result).unwrap_or_else(|_| r#"{"lists":[],"headers":[]}"#.to_string())
+}
+
+#[wasm_bindgen]
+pub fn parse_tokens(text: &str) -> String {
+    let result = inline_tokens::parse_tokens(text);
+    serde_json::to_string(&result).unwrap_or_else(|_| "[]".to_string())
 }
