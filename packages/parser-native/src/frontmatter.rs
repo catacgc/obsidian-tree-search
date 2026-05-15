@@ -72,7 +72,7 @@ fn find_closing_delimiter(text: &str) -> Option<(usize, usize)> {
     while i < len {
         if bytes[i] == b'\n' {
             // Check if followed by `---`
-            if i + 3 <= len && &bytes[i + 1..i + 4] == b"---" {
+            if i + 4 <= len && &bytes[i + 1..i + 4] == b"---" {
                 // Check that the `---` is at end of line or end of string
                 // Actually the TS regex just needs \n---  at this point,
                 // it doesn't care what follows. The match[0] ends at the closing `---`.
@@ -87,7 +87,7 @@ fn find_closing_delimiter(text: &str) -> Option<(usize, usize)> {
             }
         } else if bytes[i] == b'\r' && i + 1 < len && bytes[i + 1] == b'\n' {
             // \r\n case
-            if i + 4 <= len && &bytes[i + 2..i + 5] == b"---" {
+            if i + 5 <= len && &bytes[i + 2..i + 5] == b"---" {
                 let yaml_end = i; // the \r\n is the separator
                 let delimiter_end = i + 5; // after \r\n---
                 return Some((yaml_end, delimiter_end));
@@ -249,5 +249,59 @@ mod tests {
         assert_eq!(tags.len(), 2);
         assert_eq!(tags[0], "work");
         assert_eq!(tags[1], "personal");
+    }
+
+    #[test]
+    fn truncated_closing_delimiter_lf() {
+        // Triggers the boundary guard: "---\n" opening followed by "\n--" (incomplete close)
+        let input = "---\n\n--";
+        let result = parse_frontmatter(input);
+        // Should not panic; no valid closing delimiter found → returns empty
+        assert_eq!(result.frontmatter, serde_json::Value::Object(Map::new()));
+        assert_eq!(result.body_start, 0);
+    }
+
+    #[test]
+    fn truncated_closing_delimiter_crlf() {
+        // Triggers the CRLF boundary guard: "---\r\n" opening followed by "\r\n--"
+        let input = "---\r\n\r\n--";
+        let result = parse_frontmatter(input);
+        // Should not panic; no valid closing delimiter found → returns empty
+        assert_eq!(result.frontmatter, serde_json::Value::Object(Map::new()));
+        assert_eq!(result.body_start, 0);
+    }
+
+    #[test]
+    fn aliases_as_string() {
+        let input = "---\naliases: SingleAlias\n---\n";
+        let result = parse_frontmatter(input);
+        let fm = result.frontmatter.as_object().unwrap();
+        assert_eq!(fm.get("aliases").unwrap(), "SingleAlias");
+    }
+
+    #[test]
+    fn multiline_value_clip() {
+        // | (clip) — the final \n before --- is consumed by the delimiter detection,
+        // so serde_yaml sees content without a trailing newline. Both parsers
+        // (serde_yaml and js-yaml) produce "This is a\nmultiline value\n" because
+        // YAML clip mode always adds a final line break.
+        // However, when extracted from frontmatter, the trailing \n is part of the
+        // delimiter boundary. The actual observed output depends on the YAML parser.
+        let input = "---\ndescription: |\n  This is a\n  multiline value\n---\n";
+        let result = parse_frontmatter(input);
+        let fm = result.frontmatter.as_object().unwrap();
+        let desc = fm.get("description").unwrap().as_str().unwrap();
+        assert!(desc.contains("This is a"));
+        assert!(desc.contains("multiline value"));
+    }
+
+    #[test]
+    fn multiline_value_strip() {
+        // |- (strip) does NOT retain trailing newline — matches js-yaml behavior
+        let input = "---\ndescription: |-\n  This is a\n  multiline value\n---\n";
+        let result = parse_frontmatter(input);
+        let fm = result.frontmatter.as_object().unwrap();
+        let desc = fm.get("description").unwrap().as_str().unwrap();
+        assert_eq!(desc, "This is a\nmultiline value");
     }
 }

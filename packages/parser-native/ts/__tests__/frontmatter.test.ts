@@ -104,5 +104,25 @@ describe("Frontmatter Conformance: Rust vs TypeScript", () => {
       expect(rustResult.frontmatter).toEqual(tsResult.frontmatter)
       expect(rustResult.bodyStart).toBe(tsResult.bodyStart)
     })
+
+    it("aliases as string (scalar)", () => {
+      const content = "---\naliases: SingleAlias\n---\nbody"
+      const tsResult = parseFrontmatter(content)
+      const rustResult = parseWithRust(content)
+      expect(rustResult.frontmatter).toEqual(tsResult.frontmatter)
+      expect(rustResult.bodyStart).toBe(tsResult.bodyStart)
+    })
+
+    it("multiline values (strip block scalar)", () => {
+      // Use |- (strip chomping) which both serde_yaml and js-yaml handle identically.
+      // Note: the | (clip) variant produces a trailing newline divergence between
+      // serde_yaml and js-yaml when extracted from frontmatter delimiters — this is
+      // a documented known divergence (see design risk section).
+      const content = "---\ndescription: |-\n  This is a\n  multiline value\n---\nbody"
+      const tsResult = parseFrontmatter(content)
+      const rustResult = parseWithRust(content)
+      expect(rustResult.frontmatter).toEqual(tsResult.frontmatter)
+      expect(rustResult.bodyStart).toBe(tsResult.bodyStart)
+    })
   })
 })
