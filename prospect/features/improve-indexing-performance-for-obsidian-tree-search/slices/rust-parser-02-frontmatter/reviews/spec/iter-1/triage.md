@@ -1,0 +1,7 @@
+### Accepted
+- [ ] [Warning] **`shouldSkip` logic omits `!text.includes("- [")` check** — `packages/core/src/parser/list-scanner.ts:20` has a fifth condition `!text.includes("- [")` that is absent from proposal AC13, tasks.md Task 2 step 4, and spec.md Requirement 1. An item like `- see also - [x] finished` (text contains `- [` but no `[[`, `![[`, `#`, or `http`) would be incorrectly skipped by the Rust implementation, producing behavioral divergence that no existing fixture exercises.
+- [ ] [Suggestion] **Consider specifying `.trim()` behavior explicitly at all three points** — `list-scanner.ts:99` trims `listMatch[2]`, line 105 trims `taskMatch[2]`, and line 109 trims post-meta-strip. Task 2 only documents the third trim. Lines with trailing whitespace would produce different `text`/`rawText` values without all three trims, and no fixture exercises trailing whitespace to catch the divergence.
+- [ ] [Suggestion] **Consider specifying header text `.trim()` explicitly** — `list-scanner.ts:74` applies `.trim()` to `headerMatch[2]` before storing in `heading` and using for `section.subpath`. Task 2 step 3 omits this, meaning a header like `# Hello   ` would produce `subpath="#Hello   "` in Rust vs `subpath="#Hello"` in TS.
+
+### Dismissed
+(none)
