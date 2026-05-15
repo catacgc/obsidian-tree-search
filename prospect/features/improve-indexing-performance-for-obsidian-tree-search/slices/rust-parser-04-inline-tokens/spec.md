@@ -124,13 +124,14 @@ The Rust `parse_tokens` function SHALL correctly parse standard markdown links a
 
 The Rust `parse_tokens` function SHALL detect inline text decorations and produce tokens matching the exact TypeScript/markdown-it token structure. Bold, italic, and strikethrough MUST produce TWO tokens each (an empty-text opener token with the decoration name, followed by the content text with decoration "none"). Only inline code produces a SINGLE token with content.
 
-#### Scenario: Bold text produces two tokens
+#### Scenario: Bold text produces decoration opener and content tokens
 
 - **Given** the input string `"**bold content**"`
 - **When** `parse_tokens` is called
-- **Then** the output MUST contain exactly TWO tokens:
-  1. `{ tokenType: "text", text: "", decoration: "bold" }`
-  2. `{ tokenType: "text", text: "bold content", decoration: "none" }`
+- **Then** the output MUST include a bold decoration opener followed by the content:
+  - `{ tokenType: "text", text: "", decoration: "bold" }` — the decoration opener
+  - `{ tokenType: "text", text: "bold content", decoration: "none" }` — the content
+- **Note:** When bold appears at the start/end of the input, markdown-it additionally produces padding text tokens (empty text with decoration "none") before and after the bold pair. For standalone `"**bold**"` this results in FOUR tokens total: padding, bold opener, content, padding.
 
 #### Scenario: Italic text with asterisk produces two tokens
 

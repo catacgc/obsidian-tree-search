@@ -176,5 +176,43 @@ describe("Inline Tokens Conformance: Rust vs TypeScript", () => {
       const input = "Buy milk https://app.todoist.com/app/task/task1 (meta-action-name::Open Task)(meta-action-url::https://app.todoist.com/app/task/task1)(meta-action-icon::globe-01-16)"
       expect(parseWithRust(input)).toEqual(parseTokens(input))
     })
+
+    // ── Regression tests for code review findings ──────────────────────────
+
+    it("empty meta-action icon becomes absent (not empty string)", () => {
+      const input = "text (meta-action-name::X)(meta-action-url::Y)(meta-action-icon::)"
+      expect(parseWithRust(input)).toEqual(parseTokens(input))
+    })
+
+    it("double-backtick code span", () => {
+      const input = "``code content``"
+      expect(parseWithRust(input)).toEqual(parseTokens(input))
+    })
+
+    it("double-backtick with single backtick inside", () => {
+      const input = "``foo ` bar``"
+      expect(parseWithRust(input)).toEqual(parseTokens(input))
+    })
+
+    it("URL inside underscore emphasis not detected as link", () => {
+      const input = "_https://example.com_"
+      expect(parseWithRust(input)).toEqual(parseTokens(input))
+    })
+
+    it("URL inside emphasis with preceding space IS detected", () => {
+      // When URL has a space before it and does NOT consume the closing *, emphasis forms
+      const input = "*see https://example.com for info*"
+      expect(parseWithRust(input)).toEqual(parseTokens(input))
+    })
+
+    it("standalone bold (padding tokens)", () => {
+      const input = "**bold**"
+      expect(parseWithRust(input)).toEqual(parseTokens(input))
+    })
+
+    it("standalone italic", () => {
+      const input = "*italic*"
+      expect(parseWithRust(input)).toEqual(parseTokens(input))
+    })
   })
 })

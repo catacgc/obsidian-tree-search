@@ -127,9 +127,14 @@ fn try_parse_meta_action_triple(s: &str) -> Option<(usize, ParsedToken)> {
         if i >= len {
             return None;
         }
-        let icon_val = s[icon_start..i].to_string();
+        let icon_val = &s[icon_start..i];
         i += 1; // skip ')'
-        Some(icon_val)
+        // Match TS behavior: `icon || undefined` — empty string becomes None (absent)
+        if icon_val.is_empty() {
+            None
+        } else {
+            Some(icon_val.to_string())
+        }
     } else {
         None
     };
@@ -236,8 +241,8 @@ pub fn parse_tokens(input: &str) -> Vec<ParsedToken> {
         return result;
     }
 
-    // Step 4: Inline parsing state machine
-    let inline_tokens = parse_inline(cleaned);
+    // Step 4: Inline parsing state machine (top-level: position 0 is a word boundary for URLs)
+    let inline_tokens = parse_inline(cleaned, true);
 
     // Step 5: Combine: inline tokens first, then meta-actions, then meta-mdtree
     let mut result = inline_tokens;
@@ -248,7 +253,11 @@ pub fn parse_tokens(input: &str) -> Vec<ParsedToken> {
 
 /// Parse the inline content (after meta extraction and trim).
 /// Returns a list of inline tokens in document order.
-fn parse_inline(input: &str) -> Vec<ParsedToken> {
+/// `is_top_level` — if true, position 0 counts as a word boundary for URL detection.
+/// When false (recursive call from emphasis), position 0 does NOT count as a URL boundary.
+/// This matches TS/markdown-it behavior where `inlineHttpLinkPlugin` uses `(^|\s)` on the
+/// original source, not on emphasis inner content.
+fn parse_inline(input: &str, is_top_level: bool) -> Vec<ParsedToken> {
     let mut tokens = Vec::new();
     let mut text_buf = String::new();
     let bytes = input.as_bytes();
@@ -260,22 +269,26 @@ fn parse_inline(input: &str) -> Vec<ParsedToken> {
     while i < len {
         let b = bytes[i];
 
-        // 1. Inline code (highest priority)
+        // 1. Inline code (highest priority) — supports multi-backtick spans (`` ` ``, ``` `` ```, etc.)
         if b == b'`' {
-            // Find closing backtick
-            if let Some(end) = find_closing_backtick(bytes, i + 1) {
+            // Count opening backticks
+            let backtick_count = count_backticks(bytes, i);
+            // Find matching closing backtick sequence of the same count
+            if let Some(end) = find_closing_backticks(bytes, i + backtick_count, backtick_count) {
                 flush_text_buf_or_bold_trailing(&mut text_buf, &mut tokens, &mut needs_trailing_text_after_bold);
-                let code_content = &input[i + 1..end];
+                let code_content = &input[i + backtick_count..end];
                 tokens.push(ParsedToken::Text {
                     text: code_content.to_string(),
                     decoration: "code".to_string(),
                 });
-                i = end + 1;
+                i = end + backtick_count;
                 continue;
             }
-            // No closing backtick — treat as plain text
-            text_buf.push('`');
-            i += 1;
+            // No closing backtick sequence — treat as plain text
+            for _ in 0..backtick_count {
+                text_buf.push('`');
+            }
+            i += backtick_count;
             continue;
         }
 
@@ -332,8 +345,11 @@ fn parse_inline(input: &str) -> Vec<ParsedToken> {
 
         // 5. HTTP URLs
         if (b == b'h') && (input[i..].starts_with("http://") || input[i..].starts_with("https://")) {
-            // Check word boundary: preceded by start or whitespace
-            let at_boundary = i == 0 || bytes[i - 1] == b' ' || bytes[i - 1] == b'\t' || bytes[i - 1] == b'\n' || bytes[i - 1] == b'\r';
+            // Check word boundary: preceded by whitespace, OR at position 0 only if top-level.
+            // In recursive emphasis parsing, position 0 is NOT a URL boundary (matches TS
+            // where inlineHttpLinkPlugin regex `(^|\s)` operates on the original source,
+            // not on emphasis inner content).
+            let at_boundary = (i == 0 && is_top_level) || (i > 0 && (bytes[i - 1] == b' ' || bytes[i - 1] == b'\t' || bytes[i - 1] == b'\n' || bytes[i - 1] == b'\r'));
             if at_boundary {
                 if let Some((end, token)) = try_parse_bare_url(input, i) {
                     flush_text_buf_or_bold_trailing(&mut text_buf, &mut tokens, &mut needs_trailing_text_after_bold);
@@ -517,14 +533,32 @@ fn flush_text_buf_or_bold_trailing(
     }
 }
 
-/// Find a closing backtick for inline code. Returns the index of the closing backtick.
-fn find_closing_backtick(bytes: &[u8], start: usize) -> Option<usize> {
+/// Count consecutive backticks starting at position `start`.
+fn count_backticks(bytes: &[u8], start: usize) -> usize {
+    let mut count = 0;
+    let mut i = start;
+    while i < bytes.len() && bytes[i] == b'`' {
+        count += 1;
+        i += 1;
+    }
+    count
+}
+
+/// Find a closing backtick sequence of exactly `count` backticks.
+/// Returns the index of the FIRST backtick of the closing sequence.
+fn find_closing_backticks(bytes: &[u8], start: usize, count: usize) -> Option<usize> {
     let mut i = start;
     while i < bytes.len() {
         if bytes[i] == b'`' {
-            return Some(i);
+            let run = count_backticks(bytes, i);
+            if run == count {
+                return Some(i);
+            }
+            // Skip this run of backticks (wrong count)
+            i += run;
+        } else {
+            i += 1;
         }
-        i += 1;
     }
     None
 }
@@ -754,7 +788,7 @@ fn try_parse_underscore_emphasis(input: &str, start: usize) -> Option<(usize, Ve
                     return None;
                 }
 
-                let inner_tokens = parse_inline(inner);
+                let inner_tokens = parse_inline(inner, false);
                 return Some((i + 1, inner_tokens));
             }
         }
@@ -797,7 +831,7 @@ fn try_parse_double_underscore_emphasis(input: &str, start: usize) -> Option<(us
                     return None;
                 }
 
-                let inner_tokens = parse_inline(inner);
+                let inner_tokens = parse_inline(inner, false);
                 return Some((i + 2, inner_tokens));
             }
         }
@@ -845,7 +879,7 @@ fn try_parse_emphasis(input: &str, start: usize, marker: &str) -> Option<(usize,
             }
 
             // Parse inner content recursively
-            let inner_tokens = parse_inline(inner);
+            let inner_tokens = parse_inline(inner, false);
             return Some((i + marker_len, inner_tokens));
         }
         i += 1;
@@ -1596,5 +1630,135 @@ mod tests {
         assert!(matches!(last, ParsedToken::MetaMdtree { .. }));
         let second_last = &result[result.len() - 2];
         assert!(matches!(second_last, ParsedToken::MetaAction { .. }));
+    }
+
+    // ── Regression tests for accepted review findings ───────────────────────
+
+    #[test]
+    fn test_empty_meta_action_icon_becomes_absent() {
+        // TS behavior: `icon || undefined` — empty string becomes undefined (field absent)
+        let result = parse_tokens("text (meta-action-name::X)(meta-action-url::Y)(meta-action-icon::)");
+        assert_eq!(result.len(), 2);
+        assert_eq!(
+            result[1],
+            ParsedToken::MetaAction {
+                name: "X".to_string(),
+                url: "Y".to_string(),
+                icon: None, // NOT Some("") — matches TS behavior
+            }
+        );
+    }
+
+    #[test]
+    fn test_double_backtick_code_span() {
+        // `` `code content` `` with double backticks
+        let result = parse_tokens("``code content``");
+        assert_eq!(result.len(), 1);
+        assert_eq!(
+            result[0],
+            ParsedToken::Text {
+                text: "code content".to_string(),
+                decoration: "code".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn test_double_backtick_with_single_backtick_inside() {
+        // Double backticks allow single backtick inside: `` `foo` ``
+        let result = parse_tokens("``foo ` bar``");
+        assert_eq!(result.len(), 1);
+        assert_eq!(
+            result[0],
+            ParsedToken::Text {
+                text: "foo ` bar".to_string(),
+                decoration: "code".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn test_url_inside_underscore_emphasis_not_detected() {
+        // TS behavior: _https://example.com_ → italic("") + text("https://example.com")
+        // URL is NOT detected as a link because inlineHttpLinkPlugin requires (^|\s) before URL
+        // in the original source, and `_` is not whitespace.
+        let result = parse_tokens("_https://example.com_");
+        assert_eq!(result.len(), 2);
+        assert_eq!(
+            result[0],
+            ParsedToken::Text {
+                text: "".to_string(),
+                decoration: "italic".to_string(),
+            }
+        );
+        assert_eq!(
+            result[1],
+            ParsedToken::Text {
+                text: "https://example.com".to_string(),
+                decoration: "none".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn test_url_inside_star_emphasis_with_space_and_trailing_text() {
+        // *see https://example.com for info* — URL IS detected (preceded by whitespace within content)
+        // and emphasis still forms because the URL doesn't consume the closing *
+        let result = parse_tokens("*see https://example.com for info*");
+        // Should produce: italic(""), text("see "), Link(https://example.com), text(" for info")
+        assert_eq!(result.len(), 4);
+        assert_eq!(
+            result[0],
+            ParsedToken::Text {
+                text: "".to_string(),
+                decoration: "italic".to_string(),
+            }
+        );
+        assert_eq!(
+            result[1],
+            ParsedToken::Text {
+                text: "see ".to_string(),
+                decoration: "none".to_string(),
+            }
+        );
+        assert_eq!(
+            result[2],
+            ParsedToken::Link {
+                href: "https://example.com".to_string(),
+                content: Some("https://example.com".to_string()),
+            }
+        );
+        assert_eq!(
+            result[3],
+            ParsedToken::Text {
+                text: " for info".to_string(),
+                decoration: "none".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn test_triple_backtick_code_span() {
+        // Triple backticks for code: ```code here```
+        let result = parse_tokens("```code here```");
+        assert_eq!(result.len(), 1);
+        assert_eq!(
+            result[0],
+            ParsedToken::Text {
+                text: "code here".to_string(),
+                decoration: "code".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn test_standalone_bold() {
+        // "**bold**" alone — 4 tokens (padding pattern from markdown-it)
+        let result = parse_tokens("**bold**");
+        assert_eq!(result.len(), 4);
+        assert_eq!(result[0], ParsedToken::Text { text: "".to_string(), decoration: "none".to_string() });
+        assert_eq!(result[1], ParsedToken::Text { text: "".to_string(), decoration: "bold".to_string() });
+        assert_eq!(result[2], ParsedToken::Text { text: "bold".to_string(), decoration: "none".to_string() });
+        assert_eq!(result[3], ParsedToken::Text { text: "".to_string(), decoration: "none".to_string() });
     }
 }
