@@ -1,0 +1,4 @@
+## Next Slice
+- **Name**: `rust-parser-08-benchmarks`
+- **Description**: Create benchmark harness with synthetic vaults to measure parse-phase-only and full indexing performance (TS vs WASM), and confirm zero additional WASM boundary crossings per list item during batch flow.
+- **Rationale**: Slices 01–07 are all archived (scaffold, frontmatter, list-scanner, inline-tokens, batch-api, core-integration, plugin-bundle). The benchmark harness is the next sequential step — it validates the performance claims (3× parse-phase speedup, 2× incremental speedup) that motivate the entire feature, and measures WASM boundary crossing counts to confirm the batch pre-computation design works as intended. No dependency issues exist; all prerequisite code (Rust parser, batch API, core integration, and plugin bundle) is complete.
