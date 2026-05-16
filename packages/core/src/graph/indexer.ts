@@ -1,4 +1,4 @@
-import type { DvList, DvPage, HeaderNode, ParsedNode, TextNode } from "./types.ts"
+import type { DvList, DvPage, HeaderNode, ParsedNode, ParsedTextToken, TextNode } from "./types.ts"
 import type { NotesGraph } from "./graph.ts"
 import { getKey } from "./graph.ts"
 import { calculateBoost, getAgeDays } from "./boost.ts"
@@ -49,8 +49,9 @@ function createNodeFromText(
   graph: NotesGraph,
   page: DvPage,
   item: DvList,
+  parseTokensFn: (text: string) => ParsedTextToken[],
 ): ParsedNode {
-  const parsed = parseTokens(item.rawText)
+  const parsed = item.precomputedTokens ?? parseTokensFn(item.rawText)
   const location = {
     path: page.file.path,
     position: {
@@ -98,8 +99,9 @@ function createTreeFromTextLine(
   parentNode: ParsedNode,
   page: DvPage,
   item: DvList,
+  parseTokensFn: (text: string) => ParsedTextToken[],
 ): ParsedNode {
-  const createdNode = createNodeFromText(graph, page, item)
+  const createdNode = createNodeFromText(graph, page, item, parseTokensFn)
 
   const closestParentHeader = getClosestHeader(page.headers, item.position.start.line)
 
@@ -203,6 +205,7 @@ export function indexSinglePage(
   page: DvPage,
   graph: NotesGraph,
   settings: IndexSettings,
+  parseTokensFn: (text: string) => ParsedTextToken[] = parseTokens,
 ): ParsedNode | undefined {
   const isArchived = (page.file.frontmatter["tags"] as string[] | undefined ?? []).includes(
     settings.archiveTag,
@@ -235,7 +238,9 @@ export function indexSinglePage(
   let parents = page.file.frontmatter[settings.parentRelation] ?? []
   if (typeof parents === "string") parents = [parents]
   for (const parent of parents as string[]) {
-    const refs = graph.getObsidianLinkReferences(parseTokens(parent))
+    const refs = graph.getObsidianLinkReferences(
+      page.precomputedParentTokens?.get(parent) ?? parseTokensFn(parent)
+    )
     if (refs.length === 0) continue
     const refNode = graph.createVirtualPage(refs[0], pageNode.location, getAgeDays(page.file.mtime.ts))
     graph.addChild(refNode, pageNode, pageNode.location, page.file.mtime.ts)
@@ -251,7 +256,7 @@ export function indexSinglePage(
     for (const child of children) {
       child.text = child.text.trim()
       if (shouldSkip(child, lineArchiveTag)) continue
-      const created = createTreeFromTextLine(graph, parent, page, child)
+      const created = createTreeFromTextLine(graph, parent, page, child, parseTokensFn)
       createSubtree(created, child.children)
     }
   }

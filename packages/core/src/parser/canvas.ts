@@ -1,4 +1,4 @@
-import type { Location, PageNode } from "../graph/types.ts"
+import type { Location, PageNode, ParsedTextToken } from "../graph/types.ts"
 import type { NotesGraph } from "../graph/graph.ts"
 import { calculateBoost } from "../graph/boost.ts"
 import { buildNodesFromTextLines } from "./text-lines.ts"
@@ -201,6 +201,7 @@ export function parseCanvasData(
   basename: string,
   canvasData: CanvasData,
   graph: NotesGraph,
+  parseTokensFn?: (text: string) => ParsedTextToken[],
 ): NotesGraph {
   const pageNode = createCanvasPageNode(path, basename, graph)
 
@@ -219,7 +220,7 @@ export function parseCanvasData(
       if (canvasNodeId && !canvasRootMap.has(canvasNodeId)) {
         canvasRootMap.set(canvasNodeId, key)
       }
-    })
+    }, parseTokensFn)
     // fallback: if the canvas node produced no lines, its id still needs mapping
     if (node.block.id && !canvasRootMap.has(node.block.id)) {
       canvasRootMap.set(node.block.id, `[[${pageNode.page.toLowerCase()}]]`)

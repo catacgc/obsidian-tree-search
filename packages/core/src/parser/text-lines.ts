@@ -1,4 +1,4 @@
-import type { HeaderNode, Location, PageNode, ParsedNode, TextNode } from "../graph/types.ts"
+import type { HeaderNode, Location, PageNode, ParsedNode, ParsedTextToken, TextNode } from "../graph/types.ts"
 import type { NotesGraph } from "../graph/graph.ts"
 import { getKey } from "../graph/graph.ts"
 import { calculateBoost } from "../graph/boost.ts"
@@ -18,11 +18,12 @@ export function buildNodesFromTextLines(
   pageNode: PageNode,
   graph: NotesGraph,
   onFirstKey?: (key: string, canvasNodeId: string | undefined) => void,
+  parseTokensFn: (text: string) => ParsedTextToken[] = parseTokens,
 ): string | undefined {
   let firstKey: string | undefined
 
   for (const line of lines) {
-    const node = createNodeForLine(pageNode, line, graph)
+    const node = createNodeForLine(pageNode, line, graph, parseTokensFn)
     const key = getKey(node)
     graph.addOrUpdateNode(node)
 
@@ -32,7 +33,7 @@ export function buildNodesFromTextLines(
     }
 
     const parent = line.parent
-      ? createNodeForLine(pageNode, line.parent, graph)
+      ? createNodeForLine(pageNode, line.parent, graph, parseTokensFn)
       : pageNode
 
     graph.addChild(parent, node, node.location, 0)
@@ -45,11 +46,12 @@ function createNodeForLine(
   pageNode: PageNode,
   line: NodeTextLine,
   graph: NotesGraph,
+  parseTokensFn: (text: string) => ParsedTextToken[],
 ): ParsedNode {
   if (line.type === "header") {
     return createHeaderNode(pageNode.page, line.text, line.location, line.indent)
   }
-  return createTextNode(graph, line.text, line.location, line.task === "task" || line.task === "completed", line.task === "completed", pageNode.ageDays)
+  return createTextNode(graph, line.text, line.location, line.task === "task" || line.task === "completed", line.task === "completed", pageNode.ageDays, parseTokensFn)
 }
 
 function createHeaderNode(
@@ -78,8 +80,9 @@ function createTextNode(
   isTask: boolean,
   isCompleted: boolean,
   ageDays: number,
+  parseTokensFn: (text: string) => ParsedTextToken[],
 ): ParsedNode {
-  const parsed = parseTokens(text)
+  const parsed = parseTokensFn(text)
   const refs = graph.getObsidianLinkReferences(parsed)
 
   // Pure page reference: collapse to virtual page
