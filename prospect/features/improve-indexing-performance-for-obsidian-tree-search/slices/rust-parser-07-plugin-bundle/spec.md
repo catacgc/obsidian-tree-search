@@ -2,22 +2,52 @@
 
 ## ADDED Requirements
 
-### Requirement: The plugin bundle MUST embed the WASM binary inline as base64
+### Requirement: The plugin bundle MUST embed the WASM binary inline as base64 with no external WASM files
 
-The esbuild build pipeline SHALL produce a single `dist/main.js` file that contains the parser-native WASM binary encoded as a base64 string. No external `.wasm` files SHALL be required at runtime.
+The esbuild build pipeline SHALL produce a single `dist/main.js` file that contains the parser-native WASM binary encoded as a base64 string. No external `.wasm` files SHALL exist in the `dist/` directory. The esbuild configuration MUST suppress static asset emission triggered by the `new URL('parser_native_bg.wasm', import.meta.url)` pattern in the wasm-pack glue code.
 
-#### Scenario: Production build embeds WASM
+#### Scenario: Production build embeds WASM inline
 
-- **Given** the esbuild config contains a WASM inline plugin
+- **Given** the esbuild config contains a WASM inline plugin and `loader: { '.wasm': 'empty' }`
+- **And** `packages/parser-native/pkg/parser_native_bg.wasm` exists (produced by `wasm-pack build`)
 - **When** `node esbuild.config.mjs production` is executed
 - **Then** `dist/main.js` is produced containing a base64-encoded string representing the WASM binary
 - **And** no `.wasm` file exists in the `dist/` directory
+
+#### Scenario: Glue code's new URL pattern does not emit external assets
+
+- **Given** the bundled code includes `parser_native.js` which contains `new URL('parser_native_bg.wasm', import.meta.url)` at line 341
+- **And** `loader: { '.wasm': 'empty' }` is configured in esbuild options
+- **When** esbuild processes this file during bundling
+- **Then** esbuild does NOT copy `parser_native_bg.wasm` to the output directory as a file asset
+- **And** the unreachable code path is neutralized in the bundle output
 
 #### Scenario: Base64 decodes to valid WASM module
 
 - **Given** the base64 string embedded in the bundle
 - **When** the string is decoded to bytes and passed to `WebAssembly.instantiate`
 - **Then** a valid WASM instance is created with the expected exported functions (`ping`, `batch_parse_chunk`, `parse_single_file`, `parse_tokens`)
+
+---
+
+### Requirement: The build process MUST document and enforce WASM build prerequisites
+
+The plugin build SHALL NOT silently succeed with a missing WASM binary. A documented build ordering (via `prebuild:wasm` script or equivalent) MUST ensure `packages/parser-native/pkg/` exists before esbuild runs.
+
+#### Scenario: Fresh checkout build succeeds with documented steps
+
+- **Given** a fresh checkout where `packages/parser-native/pkg/` does not exist
+- **When** the developer runs the documented build command (e.g., `npm run build` which includes `prebuild:wasm`)
+- **Then** `wasm-pack build --target web --out-dir pkg` runs first in `packages/parser-native/`
+- **And** `pkg/parser_native_bg.wasm` and `pkg/parser_native.js` are generated
+- **And** the subsequent esbuild step succeeds
+
+#### Scenario: Esbuild fails clearly if WASM prerequisite is skipped
+
+- **Given** `packages/parser-native/pkg/parser_native_bg.wasm` does not exist
+- **When** `node esbuild.config.mjs production` is run directly (bypassing prebuild)
+- **Then** the build fails with a clear file-not-found error from the WASM inline plugin
+- **And** the error message indicates the missing WASM file path
 
 ---
 
@@ -30,7 +60,7 @@ The `TreeSearchPlugin.onload()` method SHALL call the native parser loader funct
 - **Given** the plugin is loaded in an environment that supports `WebAssembly`
 - **When** `onload()` is called
 - **Then** the WASM module is instantiated from the embedded bytes
-- **And** a `NativeParserProvider` is created and set on `IndexedTree`
+- **And** a `NativeParserProvider` is created and set on `IndexedTree` via `setParserProvider()`
 - **And** a debug message `"[mdtree] Native WASM parser loaded successfully"` is logged to console
 - **And** the subsequent `refresh()` call uses the native provider for batch parsing
 
@@ -67,9 +97,9 @@ If WASM instantiation fails for any reason (unsupported environment, corrupted b
 
 ---
 
-### Requirement: `IndexedTree` MUST thread the parser provider to core graph-building functions
+### Requirement: `IndexedTree` MUST accept a parser provider via setter and thread it to core functions
 
-When a `ParserProvider` is set on `IndexedTree`, it SHALL be passed to both `buildGraphFromScanner` (for full refreshes) and `reindexFileInGraph` (for single-file incremental updates).
+`IndexedTree` SHALL expose a `setParserProvider(provider: ParserProvider): void` method. When a provider is set, it SHALL be passed to both `buildGraphFromScanner` (for full refreshes) and `reindexFileInGraph` (for single-file incremental updates). The setter pattern is used because WASM loading is async and completes after `IndexedTree` construction.
 
 #### Scenario: Full refresh passes provider
 
