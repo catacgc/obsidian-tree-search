@@ -1,0 +1,4 @@
+## Next Slice
+- **Name**: `rust-parser-05-batch-api`
+- **Description**: Add chunked batch endpoint in Rust that processes multiple files in a single WASM call, pre-computing inline tokens for every list item and frontmatter parent string, with event-loop yielding between chunks on the TS side.
+- **Rationale**: Slices 01–04 (scaffold, frontmatter, list-scanner, inline-tokens) are all verified complete. The batch API is the next in the planned sequence and its prerequisites are met: all three Rust parsing modules (`frontmatter.rs`, `list_scanner.rs`, `inline_tokens.rs`) are implemented and exported via wasm-bindgen. This slice composes them into the primary performance optimization — a single WASM boundary crossing per chunk that returns `DvPage[]` with pre-computed tokens, eliminating ~43,000 individual WASM calls for a 2,000-note vault.
