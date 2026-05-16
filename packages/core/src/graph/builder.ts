@@ -126,13 +126,14 @@ export async function buildGraphFromScanner(
     }
 
     // Process other files (canvas, attachments) individually
+    const boundParseTokens = provider.parseTokens.bind(provider)
     for (let i = 0; i < otherFiles.length; i++) {
       if (i % BATCH_SIZE === 0) {
         await new Promise<void>(resolve => setTimeout(resolve, 0))
       }
       const file = otherFiles[i]
       const { content, mtime } = await scanner.readFile(file.path)
-      await indexScannedFile(file.path, content, mtime, graph, settings, provider.parseTokens.bind(provider))
+      await indexScannedFile(file.path, content, mtime, graph, settings, boundParseTokens)
     }
   } else {
     // FALLBACK PATH: unchanged file-by-file behavior
