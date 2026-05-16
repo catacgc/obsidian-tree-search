@@ -6,7 +6,7 @@ use crate::list_scanner::{HeadingCacheItem, LinkRef, ListPosition, Section};
 
 // ── Input type ──────────────────────────────────────────────────────────────
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct BatchFileInput {
     pub path: String,

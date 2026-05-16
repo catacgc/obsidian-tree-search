@@ -519,23 +519,31 @@ mod batch_tests {
         let mtime = 1700000000000.0;
         let archive_tag = "archive";
 
-        // Batch approach
-        let input_json = format!(
-            r#"[{{"path":"{}","content":"{}","mtime":{},"archiveTag":"{}"}}]"#,
-            path,
-            content.replace('\n', "\\n").replace('"', "\\\""),
+        // Call the actual batch_parse_chunk WASM entry point
+        let input_json = serde_json::to_string(&vec![BatchFileInput {
+            path: path.to_string(),
+            content: content.to_string(),
             mtime,
-            archive_tag,
-        );
-        // Use process_single_file directly for comparison
-        let single_input = make_input(path, content, mtime, archive_tag);
-        let single_result = process_single_file(&single_input);
-        let batch_result = process_single_file(&single_input);
+            archive_tag: archive_tag.to_string(),
+        }])
+        .unwrap();
+        let batch_output_json = batch_parse_chunk(&input_json);
 
-        // Results should be identical
-        let single_json = serde_json::to_string(&single_result).unwrap();
-        let batch_json = serde_json::to_string(&batch_result).unwrap();
-        assert_eq!(single_json, batch_json);
+        // Call the actual parse_single_file WASM entry point
+        let single_output_json = parse_single_file(content, path, mtime, archive_tag);
+
+        // Deserialize both outputs and compare
+        let batch_pages: Vec<serde_json::Value> =
+            serde_json::from_str(&batch_output_json).unwrap();
+        assert_eq!(batch_pages.len(), 1);
+        let batch_page = &batch_pages[0];
+
+        let single_page: serde_json::Value =
+            serde_json::from_str(&single_output_json).unwrap();
+
+        // The single-file output should be structurally identical to the
+        // first (and only) element of the batch output
+        assert_eq!(*batch_page, single_page);
     }
 
     #[test]
