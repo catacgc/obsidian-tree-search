@@ -2,7 +2,7 @@
 
 ## Problem & Outcome
 
-**Problem:** The entire Rust/WASM parser feature (slices 01–08) has been implemented and verified locally, but there is no CI workflow that validates the WASM build, runs Rust tests, or executes the TypeScript test suite with the native parser active. The only existing CI workflow (`.github/workflows/main.yml`) is a tag-triggered release workflow that builds and publishes the Obsidian plugin — it does not run tests and is only triggered on git tags, not on pushes or pull requests.
+**Problem:** The entire Rust/WASM parser feature (slices 01-08) has been implemented and verified locally, but there is no CI workflow that validates the WASM build, runs Rust tests, or executes the TypeScript test suite with the native parser active. The only existing CI workflow (`.github/workflows/main.yml`) is a tag-triggered release workflow that builds and publishes the Obsidian plugin — it does not run tests and is only triggered on git tags, not on pushes or pull requests.
 
 Without CI, regressions in Rust code, behavioral divergence between Rust and TS parsers, WASM build failures, and TypeScript test breakages go undetected until manual local runs.
 
@@ -41,6 +41,14 @@ Without CI, regressions in Rust code, behavioral divergence between Rust and TS 
 - Publishing WASM artifacts to npm or other registries
 - Mobile-specific testing (requires device/emulator infrastructure)
 - Bun dependency caching (Bun installs are already fast)
+
+## Known Issue: Release Workflow Breakage
+
+The existing release workflow at `.github/workflows/main.yml` triggers on tag pushes and runs `npm run build --if-present`. Since slice 07, the `build` script in `package.json` executes `npm run prebuild:wasm` which invokes `wasm-pack build`. The release workflow only installs Node.js (line 19-21) — it does NOT install the Rust toolchain or wasm-pack. Consequently, the next tag push will fail the release workflow.
+
+This slice does NOT fix `main.yml` (explicitly a non-goal to keep scope bounded). A recommended follow-up is to either:
+1. Add Rust/wasm-pack setup steps to the release workflow (similar to what this slice adds to `ci.yml`), or
+2. Refactor the release workflow to depend on a successful `ci.yml` run (reusable workflow or artifact passing).
 
 ## Acceptance Criteria
 
