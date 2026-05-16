@@ -7,7 +7,8 @@
   },
   "scripts": {
     "build:wasm": "wasm-pack build --target web --out-dir pkg",
-    "test": "bun test"
+    "test": "bun test",
+    "bench": "bun run bench/run.ts"
   },
   "dependencies": {
     "@mdtree/core": "workspace:*"

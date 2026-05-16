@@ -9,6 +9,7 @@
 		"prebuild:wasm": "cd packages/parser-native && wasm-pack build --target web --out-dir pkg",
 		"build": "npm run prebuild:wasm && tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"dev": "node esbuild.config.mjs",
+		"bench": "cd packages/parser-native && bun run bench/run.ts",
 		"mdtree:build": "bun build --compile --target=bun packages/cli/src/main.ts --outfile=dist/mdtree",
 		"mdtree:test": "bun test packages/core/src/__tests__",
 		"mdtree:dev": "bun run packages/cli/src/main.ts"
