@@ -1,0 +1,7 @@
+### Accepted
+- [ ] [Warning] **Parse-phase benchmark compares unequal workloads between providers** — `packages/core/src/parser/parser-provider.ts:29-31` vs `packages/parser-native/src/lib.rs:92-96`. Confirmed: `TsParserProvider.parseBatchChunk` only does frontmatter+scan (no inline tokens), while `NativeParserProvider.parseBatchChunk` also pre-computes `parse_tokens` for every list item (~20 per file). Comparing these as "parse-phase speedup" is misleading — the WASM call does ~20× more computational work per file. The benchmark should either include the TS-side `parseTokens` calls that occur during `indexSinglePage` in the TS timing, or clearly document the asymmetry and label the metric as "total parse work" rather than equivalent-operation speedup.
+- [ ] [Suggestion] **No warmup iteration before timing runs** — WASM modules undergo tiered JIT compilation on first invocation (especially V8's TurboFan), which can skew the first iteration. Adding one discarded warmup before the timed 3/10 iterations is standard benchmark practice and costs negligible additional time.
+- [ ] [Suggestion] **Graph equivalence check is node-count only; consider edge count** — `packages/core/src/graph/graph.ts:176-179` exposes a `size` getter (edge count) alongside `order` (node count at line 114-116). Two graphs could have identical node counts but different edge structures (e.g., a missed parent relation). Adding `graph.size` comparison is trivial and meaningfully strengthens the sanity check.
+
+### Dismissed
+(none)
