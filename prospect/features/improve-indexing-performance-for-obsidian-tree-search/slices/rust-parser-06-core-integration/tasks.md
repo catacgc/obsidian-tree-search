@@ -84,9 +84,9 @@ function createSubtree(parent: ParsedNode, children: DvList[]): void {
 }
 ```
 
-The existing `import { parseTokens } from "../parser/inline-tokens.ts"` stays — it is used as the default value for the parameter.
+The existing `import { parseTokens } from "../parser/inline-tokens.ts"` stays -- it is used as the default value for the parameter.
 
-**Verification:** `bun test packages/core` — all existing tests pass (they call `indexSinglePage(page, graph, settings)` without the fourth argument, so the default `parseTokens` is used).
+**Verification:** `bun test packages/core` -- all existing tests pass (they call `indexSinglePage(page, graph, settings)` without the fourth argument, so the default `parseTokens` is used).
 
 ---
 
@@ -168,11 +168,11 @@ buildNodesFromTextLines(node.lines, pageNode, graph, (key, canvasNodeId) => {
 
 Note: since `parseTokensFn` is the 5th parameter and `onFirstKey` is the 4th, when `parseTokensFn` is undefined (not passed), `buildNodesFromTextLines` will use its default (`parseTokens` import). This is the transparent fallback.
 
-**Verification:** `bun test packages/core` — all existing tests pass. Canvas tests in integration suite continue to work (no provider passed, defaults to TS `parseTokens`).
+**Verification:** `bun test packages/core` -- all existing tests pass. Canvas tests in integration suite continue to work (no provider passed, defaults to TS `parseTokens`).
 
 ---
 
-## Task 3 — Modify `buildGraphFromScanner` to accept `ParserProvider` and implement chunked batch flow
+## Task 3 — Modify `buildGraphFromScanner` to accept `ParserProvider` and implement chunked batch flow with error recovery
 
 **Modify `packages/core/src/graph/builder.ts`:**
 
@@ -222,7 +222,7 @@ export async function buildGraphFromScanner(
 ): Promise<NotesGraph>
 ```
 
-Implement the dual-path logic:
+Implement the dual-path logic with error recovery on `parseBatchChunk`:
 
 ```typescript
 export async function buildGraphFromScanner(
@@ -267,7 +267,23 @@ export async function buildGraphFromScanner(
         archiveTag: settings.archiveTag,
       }))
 
-      const pages = provider.parseBatchChunk(input)
+      let pages: ReturnType<ParserProvider["parseBatchChunk"]>
+      try {
+        pages = provider.parseBatchChunk(input)
+      } catch (batchErr) {
+        // Batch failed — retry each file individually for resilience
+        console.warn(`[mdtree] Batch parse failed for chunk starting at index ${i}, retrying individually:`, batchErr)
+        for (const file of chunk) {
+          try {
+            const page = provider.parseVaultFile(file.content, file.path, file.mtime, settings.archiveTag)
+            indexSinglePage(page, graph, settings)
+          } catch (fileErr) {
+            console.warn(`[mdtree] Error indexing ${file.path}:`, fileErr)
+          }
+        }
+        await new Promise<void>(resolve => setTimeout(resolve, 0))
+        continue
+      }
 
       for (const page of pages) {
         try {
@@ -307,11 +323,12 @@ export async function buildGraphFromScanner(
 ```
 
 **Key design details:**
-- When `provider` is given and batch produces `DvPage[]` with `precomputedTokens` populated, `indexSinglePage(page, graph, settings)` is called WITHOUT a `parseTokensFn` — it defaults to TS `parseTokens`, but the code at line 53 hits `item.precomputedTokens` first (it's defined), so the default is never actually called.
+- When `provider` is given and batch produces `DvPage[]` with `precomputedTokens` populated, `indexSinglePage(page, graph, settings)` is called WITHOUT a `parseTokensFn` -- it defaults to TS `parseTokens`, but the code at line 53 hits `item.precomputedTokens` first (it's defined), so the default is never actually called.
+- If `parseBatchChunk` throws (WASM panic, malformed content in any file in the chunk), the entire chunk is retried file-by-file using `provider.parseVaultFile` with individual try/catch per file. This preserves the per-file resilience of the existing `indexScannedFile` try/catch and avoids losing all 50 files in a chunk due to one bad file.
 - For canvas files in the provider path, `provider.parseTokens` is passed as `parseTokensFn` so those calls go through WASM.
 - The fallback path is literally the same code as today.
 
-**Verification:** `bun test packages/core` — the existing `builder.test.ts` calls `buildGraphFromScanner(scanner, settings)` without a provider, so it hits the fallback path unchanged.
+**Verification:** `bun test packages/core` -- the existing `builder.test.ts` calls `buildGraphFromScanner(scanner, settings)` without a provider, so it hits the fallback path unchanged.
 
 ---
 
@@ -347,7 +364,7 @@ export async function reindexFileInGraph(
 }
 ```
 
-**Verification:** `bun test packages/core` — existing tests don't pass a provider to `reindexFileInGraph`, so they hit the fallback path unchanged.
+**Verification:** `bun test packages/core` -- existing tests don't pass a provider to `reindexFileInGraph`, so they hit the fallback path unchanged.
 
 ---
 
@@ -357,17 +374,21 @@ export async function reindexFileInGraph(
 
 Tests to implement:
 
-1. **Batch path is used when provider is given:** Create a mock `ParserProvider` that wraps `TsParserProvider` but tracks calls to `parseBatchChunk`. Call `buildGraphFromScanner(scanner, settings, mockProvider)`. Assert `parseBatchChunk` was called (not zero times). Assert no individual `parseVaultFile` calls for `.md` files.
+1. **Batch path is used when provider is given:** Create a mock `ParserProvider` that wraps `TsParserProvider` but tracks calls to `parseBatchChunk`. Call `buildGraphFromScanner(scanner, settings, mockProvider)`. Assert `parseBatchChunk` was called (not zero times). Assert no individual `parseVaultFile` calls for `.md` files in the happy path.
 
-2. **Batch path produces same graph as fallback path:** Call `buildGraphFromScanner(scanner, settings)` and `buildGraphFromScanner(scanner, settings, new TsParserProvider())`. Compare graphs (same nodes, same edges). Note: `TsParserProvider` does NOT populate `precomputedTokens`, so both paths call `parseTokens` directly — the graph results should be identical.
+2. **Batch path produces same graph as fallback path:** Call `buildGraphFromScanner(scanner, settings)` and `buildGraphFromScanner(scanner, settings, new TsParserProvider())`. Compare graphs (same nodes, same edges). Note: `TsParserProvider` does NOT populate `precomputedTokens`, so both paths call `parseTokens` directly -- the graph results should be identical.
 
 3. **Chunked yielding occurs:** With 25 `.md` files and `chunkSize = 5`, verify that `parseBatchChunk` is called 5 times and that macrotasks fire between calls (similar pattern to existing `builder.test.ts`).
 
-4. **Canvas files use provider.parseTokens:** Create a scanner with one `.canvas` file containing a text node with `[[Link]]`. Create a mock provider that wraps `TsParserProvider` and tracks `parseTokens` calls. Call `buildGraphFromScanner` with the provider. Assert `provider.parseTokens` was called at least once with a string containing `[[Link]]`.
+4. **Canvas files use provider.parseTokens:** Create a scanner with one `.canvas` file containing a text node with `[[Link]]`. Create a mock provider that wraps `TsParserProvider` and tracks `parseTokens` calls. Call `buildGraphFromScanner` with the provider. Assert `provider.parseTokens` was called at least once with a string containing `Link`.
 
 5. **reindexFileInGraph with provider uses parseVaultFile:** Create a mock provider wrapping `TsParserProvider`, track `parseVaultFile` calls. Call `reindexFileInGraph(path, graph, scanner, settings, mockProvider)` for an `.md` file. Assert `parseVaultFile` was called once.
 
 6. **reindexFileInGraph without provider uses fallback:** Call `reindexFileInGraph(path, graph, scanner, settings)` (no provider). Assert it still works (graph updated correctly).
+
+7. **Batch chunk failure triggers per-file retry:** Create a mock provider where `parseBatchChunk` throws an error. Verify that `parseVaultFile` is called individually for each file in the failed chunk, and that files which succeed in the retry are indexed into the graph.
+
+8. **Partial batch failure: only some files fail in retry:** Create a mock provider where `parseBatchChunk` throws, and `parseVaultFile` throws for one specific file but succeeds for others. Verify that the successfully parsed files are still indexed and only the failing file is logged as a warning.
 
 **Verification:** `bun test packages/core/src/__tests__/builder-provider.test.ts` passes.
 
@@ -383,7 +404,7 @@ Tests to implement:
 
 2. **precomputedTokens undefined falls back to parseTokensFn:** Create a `DvPage` with `precomputedTokens` as `undefined`. Call `indexSinglePage(page, graph, settings)`. Assert the graph has nodes based on `rawText` content (normal behavior).
 
-3. **precomputedParentTokens is used when present:** Create a `DvPage` with frontmatter `parent: "[[Root]]"` and set `precomputedParentTokens` to `new Map([["[[Root]]", [{ tokenType: "obsidian_link", source: "[[Root]]", pageTarget: "CustomRoot" }]]])`. Call `indexSinglePage(page, graph, settings)`. Assert the graph has a node `"[[customroot]]"` (from precomputed tokens targeting "CustomRoot") and NOT `"[[root]]"` (which would come from TS parseTokens on `"[[Root]]"`).
+3. **precomputedParentTokens is used when present:** Create a `DvPage` with frontmatter `parent: "[[Root]]"` and set `precomputedParentTokens` to `new Map([["[[Root]]", [{ tokenType: "obsidian_link", source: "[[Root]]", pageTarget: "CustomRoot" }]]])`. Call `indexSinglePage(page, graph, settings)`. Assert the graph has a parent edge using "CustomRoot" (from precomputed tokens) rather than "Root" (which would come from TS parseTokens on `"[[Root]]"`).
 
 4. **precomputedParentTokens undefined falls back to parseTokensFn:** Create a `DvPage` with frontmatter `parent: "[[Root]]"` and `precomputedParentTokens` as `undefined`. Call `indexSinglePage(page, graph, settings)`. Assert the graph has edge from `"[[root]]"` to the page (normal behavior via TS parseTokens).
 

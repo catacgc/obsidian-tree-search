@@ -4,21 +4,21 @@
 
 ### Requirement: ParserProvider Integration in buildGraphFromScanner
 
-The `buildGraphFromScanner` function in `packages/core/src/graph/builder.ts` SHALL accept an optional `ParserProvider` parameter and, when provided, process markdown files via chunked batch parsing with event-loop yielding between chunks.
+The `buildGraphFromScanner` function in `packages/core/src/graph/builder.ts` SHALL accept an optional `ParserProvider` parameter and, when provided, process markdown files via chunked batch parsing with event-loop yielding between chunks and error recovery per chunk.
 
 #### Scenario: Batch parsing when provider is supplied
 
 - **Given** a `VaultScanner` with 120 `.md` files and a `ParserProvider` with `chunkSize = 50`
 - **When** `buildGraphFromScanner(scanner, settings, provider, 50)` is called
 - **Then** `provider.parseBatchChunk` MUST be invoked 3 times (with 50, 50, and 20 file inputs respectively)
-- **And** `provider.parseVaultFile` MUST NOT be called for `.md` files
+- **And** `provider.parseVaultFile` MUST NOT be called for `.md` files when `parseBatchChunk` succeeds
 - **And** the returned `NotesGraph` MUST contain the same nodes and edges as calling `buildGraphFromScanner(scanner, settings)` without a provider
 
 #### Scenario: Event-loop yielding between chunks
 
 - **Given** a `VaultScanner` with more than `chunkSize` `.md` files
 - **When** `buildGraphFromScanner(scanner, settings, provider, chunkSize)` is called
-- **Then** the function MUST yield the event loop (via `await setTimeout(0)` or equivalent) between each `parseBatchChunk` call
+- **Then** the function MUST yield the event loop (via `await setTimeout(0)` or equivalent) between each chunk's processing
 - **And** the function MUST return a `Promise<NotesGraph>`
 
 #### Scenario: Canvas files use provider.parseTokens
@@ -32,7 +32,7 @@ The `buildGraphFromScanner` function in `packages/core/src/graph/builder.ts` SHA
 
 - **Given** a `VaultScanner` with multiple files
 - **When** `buildGraphFromScanner(scanner, settings)` is called WITHOUT a provider parameter
-- **Then** the function MUST process files one-by-one using `parseVaultFile` (direct TS import) and `indexSinglePage` per file
+- **Then** the function MUST process files one-by-one using the existing `indexScannedFile` flow (which calls `parseVaultFile` and `indexSinglePage` per file)
 - **And** it MUST yield every 10 files (matching the existing `BATCH_SIZE = 10` behavior)
 - **And** all behavior MUST be identical to the implementation prior to this slice
 
@@ -41,6 +41,24 @@ The `buildGraphFromScanner` function in `packages/core/src/graph/builder.ts` SHA
 - **Given** a provider but no explicit `chunkSize` parameter
 - **When** `buildGraphFromScanner(scanner, settings, provider)` is called
 - **Then** the default chunk size MUST be 50
+
+#### Scenario: Batch chunk failure triggers per-file retry
+
+- **Given** a `ParserProvider` whose `parseBatchChunk` throws an error for a chunk of N files
+- **When** `buildGraphFromScanner` processes that chunk
+- **Then** the function MUST catch the error from `parseBatchChunk`
+- **And** it MUST retry each file in the failed chunk individually via `provider.parseVaultFile` with per-file try/catch
+- **And** files that succeed in the per-file retry MUST be indexed into the graph
+- **And** files that fail in the per-file retry MUST be logged with `console.warn` and skipped
+- **And** the function MUST NOT throw or abort the entire indexing run
+
+#### Scenario: Partial failure within a retried chunk
+
+- **Given** a chunk of 50 files where `parseBatchChunk` throws, and `parseVaultFile` succeeds for 49 files but throws for 1 file
+- **When** the per-file retry processes the chunk
+- **Then** the 49 successful files MUST be indexed into the graph
+- **And** the 1 failed file MUST be logged as a warning and skipped
+- **And** processing MUST continue to subsequent chunks
 
 ---
 
@@ -136,7 +154,7 @@ The `buildNodesFromTextLines` function and `parseCanvasData` function SHALL acce
 
 ### Requirement: Transparent Backward Compatibility
 
-All modifications to function signatures in this slice SHALL be backward-compatible — existing call sites that do not pass the new optional parameters MUST continue to work identically to before.
+All modifications to function signatures in this slice SHALL be backward-compatible -- existing call sites that do not pass the new optional parameters MUST continue to work identically to before.
 
 #### Scenario: All existing tests pass without modification
 
