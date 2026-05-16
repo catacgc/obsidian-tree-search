@@ -3,6 +3,8 @@ export type WasmExports = {
   parse_frontmatter: (content: string) => string
   scan_markdown: (content: string, file_path: string, frontmatter_body_start: number, archive_tag: string) => string
   parse_tokens: (text: string) => string
+  batch_parse_chunk: (json_input: string) => string
+  parse_single_file: (content: string, path: string, mtime: number, archive_tag: string) => string
 }
 
 /**
@@ -22,6 +24,8 @@ export async function loadWasm(wasmBytes: BufferSource): Promise<WasmExports> {
     parse_frontmatter: (content: string) => string
     scan_markdown: (content: string, file_path: string, frontmatter_body_start: number, archive_tag: string) => string
     parse_tokens: (text: string) => string
+    batch_parse_chunk: (json_input: string) => string
+    parse_single_file: (content: string, path: string, mtime: number, archive_tag: string) => string
   }
   await glue.default(wasmBytes)
   return {
@@ -29,5 +33,7 @@ export async function loadWasm(wasmBytes: BufferSource): Promise<WasmExports> {
     parse_frontmatter: glue.parse_frontmatter,
     scan_markdown: glue.scan_markdown,
     parse_tokens: glue.parse_tokens,
+    batch_parse_chunk: glue.batch_parse_chunk,
+    parse_single_file: glue.parse_single_file,
   }
 }

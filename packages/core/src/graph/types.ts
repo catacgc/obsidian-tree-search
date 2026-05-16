@@ -164,6 +164,8 @@ export type DvList = {
   section: { subpath: string }
   task: boolean
   completed: boolean
+  /** Pre-computed inline tokens for rawText. Populated by native parser only. */
+  precomputedTokens?: ParsedTextToken[]
 }
 
 export type DvPage = {
@@ -177,4 +179,6 @@ export type DvPage = {
     tags: string[]
   }
   headers: HeadingCache[]
+  /** Pre-computed tokens for frontmatter parent strings. Populated by native parser only. */
+  precomputedParentTokens?: Map<string, ParsedTextToken[]>
 }

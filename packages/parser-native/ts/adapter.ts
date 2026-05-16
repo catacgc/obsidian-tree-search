@@ -1,4 +1,4 @@
-import type { DvList, Frontmatter, HeadingCache, ParsedTextToken } from "@mdtree/core"
+import type { DvList, DvPage, Frontmatter, HeadingCache, ParsedTextToken } from "@mdtree/core"
 
 /**
  * Deserialize the JSON output from the WASM `parse_frontmatter` function
@@ -75,4 +75,85 @@ function adaptListItem(raw: RawDvListItem): DvList {
  */
 export function adaptParseTokens(json: string): ParsedTextToken[] {
   return JSON.parse(json) as ParsedTextToken[]
+}
+
+// ── Batch API adapter types ─────────────────────────────────────────────────
+
+type RawBatchDvListItem = RawDvListItem & {
+  precomputedTokens: ParsedTextToken[]
+}
+
+type RawBatchParsedPage = {
+  file: {
+    aliases: { values: string[] }
+    name: string
+    mtime: { ts: number }
+    path: string
+    frontmatter: Record<string, unknown>
+    lists: { values: RawBatchDvListItem[] }
+    tags: string[]
+  }
+  headers: HeadingCache[]
+  precomputedParentTokens: Record<string, ParsedTextToken[]>
+}
+
+// ── Batch API adapter functions ─────────────────────────────────────────────
+
+/**
+ * Deserialize the JSON output from the WASM `batch_parse_chunk` function
+ * into DvPage[] with precomputedTokens populated on every DvList item.
+ */
+export function adaptBatchResult(json: string): DvPage[] {
+  const parsed = JSON.parse(json) as RawBatchParsedPage[]
+  return parsed.map(adaptBatchPage)
+}
+
+/**
+ * Deserialize the JSON output from the WASM `parse_single_file` function
+ * into a single DvPage with precomputedTokens populated.
+ */
+export function adaptSingleResult(json: string): DvPage {
+  const parsed = JSON.parse(json) as RawBatchParsedPage
+  return adaptBatchPage(parsed)
+}
+
+function adaptBatchPage(raw: RawBatchParsedPage): DvPage {
+  // Convert precomputedParentTokens from Record to Map
+  const parentTokens = new Map<string, ParsedTextToken[]>()
+  if (raw.precomputedParentTokens) {
+    for (const [key, value] of Object.entries(raw.precomputedParentTokens)) {
+      parentTokens.set(key, value)
+    }
+  }
+
+  return {
+    file: {
+      aliases: raw.file.aliases,
+      name: raw.file.name,
+      mtime: raw.file.mtime,
+      path: raw.file.path,
+      frontmatter: raw.file.frontmatter,
+      lists: { values: raw.file.lists.values.map(adaptBatchListItem) },
+      tags: raw.file.tags,
+    },
+    headers: raw.headers ?? [],
+    precomputedParentTokens: parentTokens.size > 0 ? parentTokens : undefined,
+  }
+}
+
+function adaptBatchListItem(raw: RawBatchDvListItem): DvList {
+  return {
+    link: raw.link,
+    text: raw.text,
+    rawText: raw.rawText,
+    line: raw.line,
+    position: raw.position,
+    parent: raw.parent === null ? undefined : raw.parent,
+    children: (raw.children as RawBatchDvListItem[]).map(adaptBatchListItem),
+    tags: raw.tags,
+    section: raw.section,
+    task: raw.task,
+    completed: raw.completed,
+    precomputedTokens: raw.precomputedTokens,
+  }
 }
