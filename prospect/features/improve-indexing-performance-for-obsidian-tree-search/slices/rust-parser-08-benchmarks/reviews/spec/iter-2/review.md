@@ -1,0 +1,16 @@
+### Critical (must fix before implementation)
+(none)
+
+### Warnings (should address, discuss if not)
+(none)
+
+### Suggestions (think about these, optional)
+(none)
+
+### Confirmed Coverage
+- [x] **[Previously Warning] Parse-phase benchmark compares unequal workloads between providers** — fully resolved. The revised proposal.md (line 7) explicitly explains the asymmetry in the Problem & Outcome section. AC4 (line 58) requires the output to document the workload asymmetry. The spec (line 34-53) has a dedicated requirement titled "measure parse-phase-only performance...with documented workload asymmetry." Task 4 step 6 (lines 127-142) shows the output format with the `*` annotation on parse-phase rows and a prominent NOTE explaining that WASM parseBatchChunk does frontmatter+scan+inline-tokens while TS only does frontmatter+scan. The full-indexing metric is clearly labeled as the "apples-to-apples comparison."
+- [x] **[Previously Suggestion] No warmup iteration before timing runs** — fully resolved. AC12 (line 66) explicitly requires "One warmup iteration (discarded) runs before timed iterations to account for JIT compilation and WASM module warm-up." Task 4 steps 3d, 3e, and 4b (lines 107, 110, 115) all specify "1 warmup iteration for each provider (discarded)" before timed measurements. Spec scenarios (lines 42, 51, 64, 86) all include "one warmup iteration (discarded) is run" as a Given/When step.
+- [x] **[Previously Suggestion] Graph equivalence check is node-count only; consider edge count** — fully resolved. AC13 (line 67) explicitly requires checking "both `graph.order` (node count) AND `graph.size` (edge count)." Task 4 step 3e (line 112) says "compare `graph.order` AND `graph.size` between TS and WASM results." The spec scenario (lines 67-68) specifies "same node count (`graph.order`)" and "same edge count (`graph.size`)." The output table format (lines 145-148) includes separate columns for TS nodes, WASM nodes, TS edges, WASM edges. Confirmed `graph.size` getter exists at `packages/core/src/graph/graph.ts:176-179`.
+- [x] **VaultScanner interface correctly matched** — Task 2 (line 43) explicitly states "must match the `VaultScanner` interface at `packages/core/src/graph/scanner.ts` exactly: `walkVault() → Promise<WalkResult>` and `readFile(relPath) → Promise<{content: string; mtime: number}>`" — matches actual interface.
+- [x] **Provider API correctly used** — `NativeParserProvider` at `packages/parser-native/ts/index.ts:32-50` and `TsParserProvider` at `packages/core/src/parser/parser-provider.ts:28-40` are both exported and usable. `buildGraphFromScanner` signature at `builder.ts:56-61` accepts `(scanner, settings, provider?, chunkSize?)` — matching benchmark usage.
+- [x] **Zero-crossing assertion architecturally sound** — In the batch path (`builder.ts:116-118`), `indexSinglePage(page, graph, settings)` is called without `parseTokensFn`, so it defaults to the TS import. Since `precomputedTokens` is populated by the native provider, the fallback is never triggered. The provider's `parseTokens` is only used for canvas files (line 129), and the synthetic vault contains no canvas files, so `countingProvider.parseTokensCalls === 0` is correct.
