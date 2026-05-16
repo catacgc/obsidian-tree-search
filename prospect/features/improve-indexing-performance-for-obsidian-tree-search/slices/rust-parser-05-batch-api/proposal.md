@@ -8,7 +8,7 @@
 
 ## What Changes
 
-1. A new Rust `types.rs` module (or equivalent) with shared batch output types that mirror the `DvPage` JSON structure, extended with `precomputedTokens` per list item and `precomputedParentTokens` per page.
+1. A new Rust `types.rs` module with shared batch output types that mirror the `DvPage` JSON structure, extended with `precomputedTokens` per list item and `precomputedParentTokens` per page.
 
 2. A new `batch_parse_chunk` function in `lib.rs` exported via `#[wasm_bindgen]` — accepts a JSON array of `{path, content, mtime, archiveTag}` file descriptors. For each file: calls `parse_frontmatter`, `scan_markdown`, and `parse_tokens` on every list item's `rawText` and on relevant frontmatter values. Returns a JSON array of page structures with pre-computed tokens embedded.
 

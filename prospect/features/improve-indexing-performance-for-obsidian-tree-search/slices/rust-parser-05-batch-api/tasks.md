@@ -7,14 +7,14 @@
 Define serde-serializable output structures that mirror the `DvPage` JSON shape produced by `parseVaultFile` in TypeScript:
 
 - `BatchFileInput` (with `Deserialize`): `path: String`, `content: String`, `mtime: f64`, `archive_tag: String` (with `#[serde(rename = "archiveTag")]`).
-- `BatchParsedPage`: `file: BatchFileInfo`, `headers: Vec<HeadingCacheItem>`, `precomputed_parent_tokens: HashMap<String, Vec<ParsedToken>>` (serialized as `precomputedParentTokens`).
+- `BatchParsedPage`: `file: BatchFileInfo`, `headers: Vec<HeadingCacheItem>` (reuse from `list_scanner`), `precomputed_parent_tokens: HashMap<String, Vec<ParsedToken>>` (serialized as `precomputedParentTokens`).
 - `BatchFileInfo`: `aliases: AliasesWrapper`, `name: String`, `mtime: MtimeWrapper`, `path: String`, `frontmatter: serde_json::Value`, `lists: ListsWrapper`, `tags: Vec<String>`.
 - `AliasesWrapper`: `values: Vec<String>`.
 - `MtimeWrapper`: `ts: f64`.
 - `ListsWrapper`: `values: Vec<BatchDvListItem>`.
-- `BatchDvListItem`: Same fields as `DvListItem` from `list_scanner.rs` (link, text, raw_text, line, position, parent, children as `Vec<BatchDvListItem>`, tags, section, task, completed) PLUS `precomputed_tokens: Vec<ParsedToken>` (serialized as `precomputedTokens`). The `children` field is also `Vec<BatchDvListItem>` to carry nested tokens.
+- `BatchDvListItem`: Same fields as `DvListItem` from `list_scanner.rs` (link, text, raw_text, line, position, parent, children, tags, section, task, completed) PLUS `precomputed_tokens: Vec<ParsedToken>` (serialized as `precomputedTokens`). Reuse `LinkRef`, `ListPosition`, `ListPos`, `Section` from `list_scanner`. The `children` field is `Vec<BatchDvListItem>` to carry nested tokens.
 
-Use `#[serde(rename_all = "camelCase")]` on all structs. Import types from `crate::frontmatter`, `crate::list_scanner`, and `crate::inline_tokens` as needed.
+Use `#[serde(rename_all = "camelCase")]` on all structs. Import types from `crate::frontmatter`, `crate::list_scanner`, and `crate::inline_tokens` as needed. Mark `DvListItem` fields that need to be accessed cross-module as `pub`.
 
 **Modify `packages/parser-native/src/lib.rs`:**
 - Add `mod types;` declaration.
@@ -25,18 +25,18 @@ Use `#[serde(rename_all = "camelCase")]` on all structs. Import types from `crat
 
 ## Task 2 — Implement `batch_parse_chunk` and `parse_single_file` Rust functions
 
-**Add batch parsing logic (in `lib.rs` or a separate `batch.rs` module referenced from `lib.rs`):**
+**Add batch parsing logic (in `lib.rs` or a new `batch.rs` module referenced from `lib.rs`):**
 
 Implement a private `fn process_single_file(input: &BatchFileInput) -> BatchParsedPage` that:
 
-1. Calls `frontmatter::parse_frontmatter(&input.content)` → gets `frontmatter` (a `serde_json::Value`) and `body_start`.
+1. Calls `frontmatter::parse_frontmatter(&input.content)` → gets `FrontmatterResult { frontmatter, body_start }`.
 2. Extracts `name` from `input.path`: split on `'/'`, take last segment, strip `.md` suffix.
-3. Extracts `aliases` from frontmatter: if `frontmatter["aliases"]` is an array of strings → use them; if a single string → wrap in vec; otherwise → empty vec.
+3. Extracts `aliases` from frontmatter: if `frontmatter["aliases"]` is a JSON array of strings → collect them; if a single string → wrap in vec; otherwise → empty vec.
 4. Extracts `tags` from frontmatter: same logic as aliases but on `frontmatter["tags"]`.
 5. Calls `list_scanner::scan_markdown(&input.content, &input.path, body_start, &input.archive_tag)` → gets `ScanResult { lists, headers }`.
 6. Converts `Vec<DvListItem>` to `Vec<BatchDvListItem>` by calling `inline_tokens::parse_tokens(&item.raw_text)` for each item and attaching as `precomputed_tokens`. Recursively converts children too.
-7. Filters to root items only (`parent == None`) for `file.lists.values` — children are already nested.
-8. Computes `precomputed_parent_tokens: HashMap<String, Vec<ParsedToken>>` by scanning all frontmatter values: for any string value containing `"[["`, call `inline_tokens::parse_tokens(value)` and insert into the map. For array values, check each element string.
+7. Filters to root items only (`parent == None`) for `file.lists.values` — children are already nested in `children` field.
+8. Computes `precomputed_parent_tokens: HashMap<String, Vec<ParsedToken>>` by scanning all frontmatter values: for any string value containing `"[["`, call `inline_tokens::parse_tokens(value)` and insert into the map. For array values, check each string element. For nested objects, recurse into values.
 9. Assembles and returns `BatchParsedPage`.
 
 **Add `#[wasm_bindgen]` exports in `lib.rs`:**
@@ -44,9 +44,9 @@ Implement a private `fn process_single_file(input: &BatchFileInput) -> BatchPars
 ```rust
 #[wasm_bindgen]
 pub fn batch_parse_chunk(json_input: &str) -> String {
-    let inputs: Vec<BatchFileInput> = serde_json::from_str(json_input)
+    let inputs: Vec<types::BatchFileInput> = serde_json::from_str(json_input)
         .unwrap_or_default();
-    let results: Vec<BatchParsedPage> = inputs.iter()
+    let results: Vec<types::BatchParsedPage> = inputs.iter()
         .map(|input| process_single_file(input))
         .collect();
     serde_json::to_string(&results)
@@ -55,7 +55,7 @@ pub fn batch_parse_chunk(json_input: &str) -> String {
 
 #[wasm_bindgen]
 pub fn parse_single_file(content: &str, path: &str, mtime: f64, archive_tag: &str) -> String {
-    let input = BatchFileInput {
+    let input = types::BatchFileInput {
         path: path.to_string(),
         content: content.to_string(),
         mtime,
@@ -63,11 +63,14 @@ pub fn parse_single_file(content: &str, path: &str, mtime: f64, archive_tag: &st
     };
     let result = process_single_file(&input);
     serde_json::to_string(&result)
-        .unwrap_or_else(|_| r#"{"file":{"aliases":{"values":[]},"name":"","mtime":{"ts":0},"path":"","frontmatter":{},"lists":{"values":[]},"tags":[]},"headers":[],"precomputedParentTokens":{}}"#.to_string())
+        .unwrap_or_else(|_| "[]".to_string())
 }
 ```
 
-**Key detail:** The `ScanResult.lists` from `scan_markdown` already has children wired via the `wire_children` post-pass. However, `parseVaultFile` in TypeScript filters to `lists.filter(it => it.parent === undefined)` — so only root items go in the output. The `BatchDvListItem` must recursively carry `precomputedTokens` on children too, since `indexSinglePage` walks children recursively.
+**Key details:**
+- The `ScanResult.lists` from `scan_markdown` already has children wired via the `wire_children` post-pass and returns only root items (matching `lists.filter(it => it.parent === undefined)` in TS `parseVaultFile`).
+- Each `BatchDvListItem` must recursively carry `precomputedTokens` on children too, since `indexSinglePage` walks children recursively via `createSubtree`.
+- The `parent` field on root items in `file.lists.values` must be `None` (serializes as absent/null). Children in the nested `children` array retain their parent line reference.
 
 **Verification:** `cargo check` passes. `cargo test` existing tests still pass.
 
@@ -75,7 +78,7 @@ pub fn parse_single_file(content: &str, path: &str, mtime: f64, archive_tag: &st
 
 ## Task 3 — Write Rust unit tests for batch logic
 
-**Add tests in `packages/parser-native/src/` (either a `#[cfg(test)] mod tests` in the batch module or in `lib.rs`):**
+**Add tests in `packages/parser-native/src/` (either a `#[cfg(test)] mod tests` in the batch/types module or a dedicated test block in `lib.rs`):**
 
 Write ≥15 tests covering:
 
@@ -95,7 +98,7 @@ Write ≥15 tests covering:
 14. File with only frontmatter, no body → empty lists
 15. Archive tag filtering: items with archive tag are excluded from list output
 16. `parse_single_file` output matches single-element batch output
-17. File with list items but no links/tags still produces correct `precomputed_tokens` (empty or text-only tokens)
+17. File with list items but no links/tags still produces correct `precomputed_tokens` (text-only tokens)
 
 **Verification:** `cargo test` passes all new tests (target ≥15, expect ~17).
 
@@ -147,7 +150,7 @@ export type DvPage = {
 }
 ```
 
-**Verification:** `bun test packages/core` passes all existing tests unchanged.
+**Verification:** `bun test packages/core` passes all existing tests unchanged (the additions are optional fields — no existing code sets or reads them).
 
 ---
 
@@ -193,11 +196,13 @@ export function adaptSingleResult(json: string): DvPage {
 
 Where `adaptBatchPage` converts:
 - Raw batch list items → `DvList` with `precomputedTokens` set and `parent: null` → `parent: undefined`
-- Children recursively adapted (they also have `precomputedTokens`)
-- `precomputedParentTokens` from a JSON object → `Map<string, ParsedTextToken[]>`
-- All other fields passed through directly
+- Children recursively adapted via `adaptBatchListItem` (they also have `precomputedTokens`)
+- `precomputedParentTokens` from a plain JSON object `Record<string, ParsedTextToken[]>` → `Map<string, ParsedTextToken[]>`
+- All other fields (aliases, name, mtime, path, frontmatter, tags, headers) passed through directly
 
-Create a helper `adaptBatchListItem(raw: RawBatchDvListItem): DvList` similar to the existing `adaptListItem` but preserving the `precomputedTokens` field.
+Create a helper `adaptBatchListItem(raw: RawBatchDvListItem): DvList` similar to the existing `adaptListItem` but preserving the `precomputedTokens` field on the output.
+
+Update the `import` statement to include `DvPage` (needed by the new functions).
 
 **Verification:** `bunx tsc --noEmit` in `packages/parser-native/` passes.
 
@@ -207,7 +212,7 @@ Create a helper `adaptBatchListItem(raw: RawBatchDvListItem): DvList` similar to
 
 **Modify `packages/parser-native/ts/loader.ts`:**
 
-Extend `WasmExports` type:
+Extend `WasmExports` type to include the two new functions:
 
 ```typescript
 export type WasmExports = {
@@ -220,11 +225,11 @@ export type WasmExports = {
 }
 ```
 
-Update `loadWasm` to extract and return the two new functions from the glue module.
+Update the `loadWasm` function body to extract and return `glue.batch_parse_chunk` and `glue.parse_single_file` from the wasm-pack glue module.
 
 **Modify `packages/parser-native/ts/index.ts`:**
 
-Update `NativeParserHandle` type to include new functions. Add and export:
+Update `NativeParserHandle` type to include the two new function signatures. Add and export `NativeParserProvider`, `createNativeParserProvider`, and `chunkedBatch`:
 
 ```typescript
 import type { ParserProvider, FileInput } from "@mdtree/core"
@@ -272,7 +277,7 @@ export async function chunkedBatch(
 }
 ```
 
-Export all new symbols (`NativeParserProvider`, `createNativeParserProvider`, `chunkedBatch`).
+Re-export all new symbols from the package's public API.
 
 **Verification:** `bunx tsc --noEmit` in `packages/parser-native/` passes.
 
@@ -290,16 +295,16 @@ Tests to implement:
 
 2. **Pre-computed tokens match parseTokens:** For each `DvList` item in the native batch output, assert `item.precomputedTokens` deeply equals `TsParserProvider.parseTokens(item.rawText)`. Check recursively through `children`.
 
-3. **Pre-computed parent tokens match:** For fixture `multi-page/index.md` (has `parent: "[[Root]]"`), assert `page.precomputedParentTokens.get("[[Root]]")` deeply equals `TsParserProvider.parseTokens("[[Root]]")`.
+3. **Pre-computed parent tokens match:** For fixture `multi-page/index.md` (which has `parent: "[[Root]]"` or similar link-containing frontmatter), assert `page.precomputedParentTokens.get("[[Root]]")` deeply equals `TsParserProvider.parseTokens("[[Root]]")`.
 
 4. **Single file matches batch:** Call `NativeParserProvider.parseVaultFile(content, path, mtime, archiveTag)` for one fixture file. Call `NativeParserProvider.parseBatchChunk([sameFileAsInput])`. Assert the two results are deeply equal.
 
-5. **Standalone parseTokens conformance:** Call `NativeParserProvider.parseTokens("[[Link]]")` and assert it equals `TsParserProvider.parseTokens("[[Link]]")`. Also test with a more complex string: `"text [[Page#Header|Alias]] more http://example.com"`.
+5. **Standalone parseTokens conformance:** Call `NativeParserProvider.parseTokens("[[Link]]")` and assert it equals `TsParserProvider.parseTokens("[[Link]]")`. Also test with a complex string: `"text [[Page#Header|Alias]] more http://example.com"`.
 
 6. **Empty batch:** Assert `NativeParserProvider.parseBatchChunk([])` returns `[]`.
 
 7. **All DvList items have precomputedTokens defined:** For all native batch output, assert no `DvList` item (including nested children) has `precomputedTokens` as `undefined`.
 
-8. **chunkedBatch utility:** Create a mock provider (or use `TsParserProvider`), call `chunkedBatch(provider, files, 2)` with 5 files, assert 5 results returned.
+8. **chunkedBatch utility:** Use `TsParserProvider`, call `chunkedBatch(provider, files, 2)` with 5 files, assert 5 results returned and results match individual calls.
 
 **Verification:** `bun test packages/parser-native/ts/__tests__/batch-api.test.ts` passes.

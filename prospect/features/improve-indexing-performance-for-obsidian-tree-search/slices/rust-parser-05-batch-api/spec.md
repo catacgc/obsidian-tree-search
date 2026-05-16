@@ -82,7 +82,7 @@ The `DvList` type in `@mdtree/core` SHALL include an optional `precomputedTokens
 #### Scenario: DvList from native parser has precomputedTokens
 
 - **Given** a `DvPage` produced by the `NativeParserProvider` batch or single-file API
-- **When** any `DvList` item is accessed
+- **When** any `DvList` item is accessed (including nested children)
 - **Then** `item.precomputedTokens` MUST be a `ParsedTextToken[]` array (not undefined)
 
 #### Scenario: DvList from TS parser has no precomputedTokens
