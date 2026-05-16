@@ -1,0 +1,4 @@
+## Next Slice
+- **Name**: `rust-parser-06-core-integration`
+- **Description**: Wire `@mdtree/core` to accept externally-injected `ParserProvider`; modify `indexSinglePage` to use pre-computed tokens, thread standalone `parseTokensFn` into canvas/text-lines path, and add chunked batch flow to `buildGraphFromScanner` with transparent TS fallback.
+- **Rationale**: Slices 01–05 (scaffold, frontmatter, list-scanner, inline-tokens, batch-api) are all verified complete — the Rust WASM parser, TypeScript adapters, `NativeParserProvider`, and `ParserProvider` interface all exist. The next step in the planned sequence is to integrate these into the core graph-building pipeline (`builder.ts`, `indexer.ts`, `text-lines.ts`, canvas) so the native parser is actually used during indexing. All prerequisites (working WASM exports, adapter functions, provider interface) are in place.
