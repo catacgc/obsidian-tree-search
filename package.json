@@ -6,7 +6,8 @@
 	"main": "main.js",
 	"scripts": {
 		"test": "bun test",
-		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"prebuild:wasm": "cd packages/parser-native && wasm-pack build --target web --out-dir pkg",
+		"build": "npm run prebuild:wasm && tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"dev": "node esbuild.config.mjs",
 		"mdtree:build": "bun build --compile --target=bun packages/cli/src/main.ts --outfile=dist/mdtree",
 		"mdtree:test": "bun test packages/core/src/__tests__",
@@ -39,6 +40,7 @@
 	},
 	"dependencies": {
 		"@mdtree/core": "workspace:*",
+		"@mdtree/parser-native": "workspace:*",
 		"jotai": "^2.16.0",
 		"jotai-effect": "^2.0.4",
 		"js-yaml": "^4.1.0",

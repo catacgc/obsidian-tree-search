@@ -1,4 +1,4 @@
-import { NotesGraph, buildGraphFromScanner, reindexFileInGraph } from "@mdtree/core"
+import { NotesGraph, buildGraphFromScanner, reindexFileInGraph, type ParserProvider } from "@mdtree/core"
 import { TFile } from "obsidian"
 import { getSettings } from "../view/react-context/settings"
 import { GlobalAtoms, GlobalStore } from "../view/react-context/global"
@@ -8,9 +8,14 @@ export class IndexedTree {
     private graph: NotesGraph
     private isLoading = false
     private version = 0
+    private provider: ParserProvider | undefined
 
     constructor(private store: GlobalStore) {
         this.graph = new NotesGraph()
+    }
+
+    setParserProvider(provider: ParserProvider): void {
+        this.provider = provider
     }
 
     private get vault() {
@@ -26,11 +31,15 @@ export class IndexedTree {
         this.isLoading = true
         try {
             const settings = getSettings(this.store)
-            const graph = await buildGraphFromScanner(new ObsidianVaultScanner(this.vault, this.metadataCache), {
-                parentRelation: settings.parentRelation,
-                archiveTag: settings.archiveTag,
-                searchSeparator: settings.searchSeparator,
-            })
+            const graph = await buildGraphFromScanner(
+                new ObsidianVaultScanner(this.vault, this.metadataCache),
+                {
+                    parentRelation: settings.parentRelation,
+                    archiveTag: settings.archiveTag,
+                    searchSeparator: settings.searchSeparator,
+                },
+                this.provider,
+            )
             this.setState(graph)
         } finally {
             this.isLoading = false
@@ -48,7 +57,8 @@ export class IndexedTree {
                     parentRelation: settings.parentRelation,
                     archiveTag: settings.archiveTag,
                     searchSeparator: settings.searchSeparator,
-                }
+                },
+                this.provider,
             )
             this.setState(this.graph)
         } catch (err) {

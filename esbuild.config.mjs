@@ -6,6 +6,27 @@ import nested from "postcss-nested";
 import fs from "fs";
 import path from "path";
 
+// Plugin to inline .wasm files as base64 strings.
+// Intercepts explicit `.wasm` imports and replaces them with a module
+// exporting the binary content as a base64 string.
+const wasmInlinePlugin = {
+	name: 'wasm-inline',
+	setup(build) {
+		build.onResolve({ filter: /\.wasm$/ }, (args) => {
+			const resolved = path.resolve(args.resolveDir, args.path);
+			return { path: resolved, namespace: 'wasm-inline' };
+		});
+		build.onLoad({ filter: /.*/, namespace: 'wasm-inline' }, (args) => {
+			const bytes = fs.readFileSync(args.path);
+			const base64 = Buffer.from(bytes).toString('base64');
+			return {
+				contents: `export default "${base64}"`,
+				loader: 'js',
+			};
+		});
+	},
+};
+
 // Plugin to copy files to dist
 const copyFilesPlugin = {
 	name: 'copy-files',
@@ -58,7 +79,14 @@ const esbuildOptions = {
 	treeShaking: true,
 	outdir: "dist",
 	entryNames: "[name]",
+	// Suppress esbuild's default file-loader for .wasm references (e.g., the
+	// `new URL('...wasm', import.meta.url)` pattern in wasm-pack glue code).
+	// The wasmInlinePlugin onResolve/onLoad hooks take priority for explicit
+	// .wasm imports; this loader config prevents asset emission for other
+	// static references esbuild encounters during bundling.
+	loader: { '.wasm': 'empty' },
 	plugins: [
+		wasmInlinePlugin,
 		tailwindPlugin({ 
 			output: "dist/styles.css",
 			postcssPlugins: {

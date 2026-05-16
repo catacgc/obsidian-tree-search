@@ -6,6 +6,7 @@
       "name": "obsidian-tree-search",
       "dependencies": {
         "@mdtree/core": "workspace:*",
+        "@mdtree/parser-native": "workspace:*",
         "jotai": "^2.16.0",
         "jotai-effect": "^2.0.4",
         "js-yaml": "^4.1.0",
