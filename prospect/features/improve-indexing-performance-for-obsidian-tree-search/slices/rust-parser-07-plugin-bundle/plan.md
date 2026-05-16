@@ -1,0 +1,4 @@
+## Next Slice
+- **Name**: `rust-parser-07-plugin-bundle`
+- **Description**: Configure esbuild with inline WASM loader (base64 for mobile, CJS-compatible), add WASM loading + `ParserProvider` instantiation in plugin `onload`, verify mobile compatibility
+- **Rationale**: Slices 01–06 are verified complete (scaffold, frontmatter, list-scanner, inline-tokens, batch-api, core-integration all archived). Slice 07 is the next in sequence — it bridges the built WASM artifact and the core integration into the actual Obsidian plugin runtime, which is required before benchmarks (slice 08) or CI (slice 09) can be meaningful.
