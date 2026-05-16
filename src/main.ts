@@ -43,6 +43,14 @@ export default class TreeSearchPlugin extends Plugin {
 
         this.index = new IndexedTree(this.globalStore);
 
+        // Load WASM parser BEFORE any interval/subscription that may trigger refresh(),
+        // to ensure the first graph refresh always uses the native parser if available.
+        const nativeProvider = await loadNativeParserProvider()
+        if (nativeProvider) {
+            this.index.setParserProvider(nativeProvider)
+            console.debug("[mdtree] Native WASM parser loaded successfully")
+        }
+
         this.registerView(
             SEARCH_VIEW,
             (leaf) => new SearchViewPanel(leaf, this.globalStore)
@@ -156,12 +164,6 @@ export default class TreeSearchPlugin extends Plugin {
                 await highlightLine(this.app, location)
             }
         })
-
-        const nativeProvider = await loadNativeParserProvider()
-        if (nativeProvider) {
-            this.index.setParserProvider(nativeProvider)
-            console.debug("[mdtree] Native WASM parser loaded successfully")
-        }
 
         await this.index.refresh()
 
