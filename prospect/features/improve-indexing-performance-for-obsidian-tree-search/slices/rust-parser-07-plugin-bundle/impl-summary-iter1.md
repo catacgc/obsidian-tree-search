@@ -1,13 +1,8 @@
 ## Summary
 
 - Tasks completed:
-  1. Added `@mdtree/parser-native` to root `package.json` dependencies + `prebuild:wasm` script
-  2. Created esbuild WASM inline plugin (`wasmInlinePlugin`) in `esbuild.config.mjs` with `loader: { '.wasm': 'empty' }` suppression
-  3. Created WASM bytes module (`src/wasm/parser-native-wasm.ts`)
-  4. Created native parser loader (`src/indexing/load-native-parser.ts`) with try/catch fallback
-  5. Modified `IndexedTree` with `setParserProvider()` setter, threading to `buildGraphFromScanner` and `reindexFileInGraph`
-  6. Modified `TreeSearchPlugin.onload()` to load WASM and inject provider before first refresh
-  7. Verified build produces valid output (no external .wasm, base64 embedded, styles/manifest intact)
+  1. **Fixed wasm-pack glue deprecation warning** — Changed `loader.ts:30` from `await glue.default(wasmBytes)` to `await glue.default({ module_or_path: wasmBytes })`, which passes the WASM bytes using the non-deprecated object API (matching the `Object.getPrototypeOf` check at line 333 of the glue code).
+  2. **Fixed startup race condition** — Moved the WASM loading block (`loadNativeParserProvider()` + `setParserProvider()`) from after the interval/subscription setup to immediately after `IndexedTree` construction, ensuring the native parser is always set before any interval-triggered refresh can fire.
 
-- Tests: PASS (252 tests, 0 failures)
-- Commits: `feat: bundle WASM parser into Obsidian plugin with inline base64 loading`
+- Tests: PASS — 252 TypeScript tests, 85 parser-native TS tests, 137 Rust tests, TypeScript type-check clean, production build succeeds with no external `.wasm` in dist
+- Commits: `fix: resolve WASM loader deprecation warning and startup race condition`
