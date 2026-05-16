@@ -4,7 +4,7 @@
 
 **Problem:** Slices 01–04 established individual Rust parsers (`parse_frontmatter`, `scan_markdown`, `parse_tokens`) each requiring a separate WASM boundary crossing. To parse a single file through the full pipeline (frontmatter + list scan + inline tokens for every list item + inline tokens for every frontmatter parent string), the TypeScript layer must currently make 2 + M individual WASM calls (where M is the number of list items). For a 2,000-note vault with ~20 items/note, this means ~40,000+ boundary crossings, negating the batch optimization. Additionally, no `NativeParserProvider` implementation exists — the `ParserProvider` interface in core has only a `TsParserProvider`.
 
-**Outcome:** After this slice, a single `batch_parse_chunk` WASM function processes multiple files end-to-end in one call (frontmatter → list scan → inline tokens for all `rawText` + frontmatter parents), returning `DvPage[]` with pre-computed `ParsedTextToken[]` attached to every list item and parent string. A `NativeParserProvider` implementation in `@mdtree/parser-native` uses this function and satisfies the `ParserProvider` interface. A TypeScript-side `chunkedBatch` utility splits large file sets into configurable chunks with `await setTimeout(0)` yielding between them, preserving mobile UI responsiveness.
+**Outcome:** After this slice, a single `batch_parse_chunk` WASM function processes multiple files end-to-end in one call (frontmatter -> list scan -> inline tokens for all `rawText` + frontmatter parents), returning `DvPage[]` with pre-computed `ParsedTextToken[]` attached to every list item and parent string. A `NativeParserProvider` implementation in `@mdtree/parser-native` uses this function and satisfies the `ParserProvider` interface. A TypeScript-side `chunkedBatch` utility splits large file sets into configurable chunks with `await setTimeout(0)` yielding between them, preserving mobile UI responsiveness.
 
 ## What Changes
 
@@ -66,7 +66,7 @@
 10. `NativeParserProvider.parseVaultFile(content, path, mtime, archiveTag)` returns a `DvPage` with `precomputedTokens` populated on all list items.
 11. For all existing integration test fixture `.md` files, native batch output (with `precomputedTokens` and `precomputedParentTokens` stripped) is structurally identical (deep equal) to `TsParserProvider` output.
 12. For all fixture files, `precomputedTokens` on each `DvList` item matches `TsParserProvider.parseTokens(item.rawText)`.
-13. `cargo test` passes with ≥15 new Rust tests covering batch-specific logic.
+13. `cargo test` passes with >=15 new Rust tests covering batch-specific logic.
 14. All existing TypeScript tests continue to pass (no regressions from the optional type additions).
 15. `WasmExports` and `NativeParserHandle` types include `batch_parse_chunk` and `parse_single_file`.
 16. A `chunkedBatch` async utility is exported that splits files into configurable-size chunks, calls `parseBatchChunk` per chunk, yields between chunks, and returns concatenated `DvPage[]`.

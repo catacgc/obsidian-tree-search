@@ -29,15 +29,16 @@ Use `#[serde(rename_all = "camelCase")]` on all structs. Import types from `crat
 
 Implement a private `fn process_single_file(input: &BatchFileInput) -> BatchParsedPage` that:
 
-1. Calls `frontmatter::parse_frontmatter(&input.content)` → gets `FrontmatterResult { frontmatter, body_start }`.
+1. Calls `frontmatter::parse_frontmatter(&input.content)` -> gets `FrontmatterResult { frontmatter, body_start }`.
 2. Extracts `name` from `input.path`: split on `'/'`, take last segment, strip `.md` suffix.
-3. Extracts `aliases` from frontmatter: if `frontmatter["aliases"]` is a JSON array of strings → collect them; if a single string → wrap in vec; otherwise → empty vec.
+3. Extracts `aliases` from frontmatter: if `frontmatter["aliases"]` is a JSON array of strings -> collect them; if a single string -> wrap in vec; otherwise -> empty vec.
 4. Extracts `tags` from frontmatter: same logic as aliases but on `frontmatter["tags"]`.
-5. Calls `list_scanner::scan_markdown(&input.content, &input.path, body_start, &input.archive_tag)` → gets `ScanResult { lists, headers }`.
-6. Converts `Vec<DvListItem>` to `Vec<BatchDvListItem>` by calling `inline_tokens::parse_tokens(&item.raw_text)` for each item and attaching as `precomputed_tokens`. Recursively converts children too.
-7. Filters to root items only (`parent == None`) for `file.lists.values` — children are already nested in `children` field.
-8. Computes `precomputed_parent_tokens: HashMap<String, Vec<ParsedToken>>` by scanning all frontmatter values: for any string value containing `"[["`, call `inline_tokens::parse_tokens(value)` and insert into the map. For array values, check each string element. For nested objects, recurse into values.
-9. Assembles and returns `BatchParsedPage`.
+5. Calls `list_scanner::scan_markdown(&input.content, &input.path, body_start, &input.archive_tag)` -> gets `ScanResult { lists, headers }`.
+6. Computes `precomputedTokens` for each item: Iterates the flat `lists` vec and calls `inline_tokens::parse_tokens(&item.raw_text)` for each item, storing the result in a `HashMap<usize, Vec<ParsedToken>>` keyed by item index. (All items get tokens computed, including non-root ones, since children are cloned into parents by `wire_children` and the nested children need tokens too.)
+7. Filters the flat list to root items only (`item.parent == None`) — this replicates the TS `lists.filter(it => it.parent === undefined)` in `vault-file.ts:40`. **Important:** `scan_markdown` returns ALL items in a flat vec (root and non-root alike); the `wire_children` post-pass populates each parent's `children` array by cloning child items into it, but does NOT remove non-root items from the flat list. This root-filtering step is therefore essential.
+8. Converts the filtered root `DvListItem` values into `BatchDvListItem` values recursively: for each item and each child (already nested via `wire_children`), attach the pre-computed tokens from the map built in step 6.
+9. Computes `precomputed_parent_tokens: HashMap<String, Vec<ParsedToken>>` by scanning all frontmatter values: for any string value containing `"[["`, call `inline_tokens::parse_tokens(value)` and insert into the map. For array values, check each string element. For nested objects, recurse into values.
+10. Assembles and returns `BatchParsedPage`.
 
 **Add `#[wasm_bindgen]` exports in `lib.rs`:**
 
@@ -63,12 +64,12 @@ pub fn parse_single_file(content: &str, path: &str, mtime: f64, archive_tag: &st
     };
     let result = process_single_file(&input);
     serde_json::to_string(&result)
-        .unwrap_or_else(|_| "[]".to_string())
+        .unwrap_or_else(|_| "{}".to_string())
 }
 ```
 
 **Key details:**
-- The `ScanResult.lists` from `scan_markdown` already has children wired via the `wire_children` post-pass and returns only root items (matching `lists.filter(it => it.parent === undefined)` in TS `parseVaultFile`).
+- `scan_markdown` returns ALL items in a flat `Vec<DvListItem>`. The `wire_children` post-pass clones child items into their parent's `children` array but does NOT remove non-root items from the flat list. The implementer MUST filter to `parent == None` (step 7) before assembling `file.lists.values` — this matches `vault-file.ts:40`.
 - Each `BatchDvListItem` must recursively carry `precomputedTokens` on children too, since `indexSinglePage` walks children recursively via `createSubtree`.
 - The `parent` field on root items in `file.lists.values` must be `None` (serializes as absent/null). Children in the nested `children` array retain their parent line reference.
 
@@ -80,27 +81,27 @@ pub fn parse_single_file(content: &str, path: &str, mtime: f64, archive_tag: &st
 
 **Add tests in `packages/parser-native/src/` (either a `#[cfg(test)] mod tests` in the batch/types module or a dedicated test block in `lib.rs`):**
 
-Write ≥15 tests covering:
+Write >=15 tests covering:
 
-1. Batch with single simple file (frontmatter + one list item) → correct structure
-2. Batch with multiple files → correct count, independent parsing
+1. Batch with single simple file (frontmatter + one list item) -> correct structure
+2. Batch with multiple files -> correct count, independent parsing
 3. List items have `precomputed_tokens` populated matching `parse_tokens(raw_text)`
 4. Root-only filtering: nested items appear in children, not at top-level `file.lists.values`
 5. Children also have `precomputed_tokens` populated
-6. `precomputed_parent_tokens` populated for frontmatter `parent: "[[Root]]"` → key `"[[Root]]"`, value matches `parse_tokens("[[Root]]")`
-7. `precomputed_parent_tokens` populated for array parent `parent: ["[[A]]", "[[B]]"]` → two entries
+6. `precomputed_parent_tokens` populated for frontmatter `parent: "[[Root]]"` -> key `"[[Root]]"`, value matches `parse_tokens("[[Root]]")`
+7. `precomputed_parent_tokens` populated for array parent `parent: ["[[A]]", "[[B]]"]` -> two entries
 8. `precomputed_parent_tokens` empty when no frontmatter values contain `[[`
-9. Name extraction: `"folder/sub/my-note.md"` → `"my-note"`
-10. Name extraction: `"simple.md"` → `"simple"`
-11. Aliases extraction: array → correct vec; string → single-element vec; absent → empty
-12. Tags extraction: array → correct vec; string → single-element vec; absent → empty
-13. Empty file (no frontmatter, no list items) → valid empty structure with empty lists/headers
-14. File with only frontmatter, no body → empty lists
+9. Name extraction: `"folder/sub/my-note.md"` -> `"my-note"`
+10. Name extraction: `"simple.md"` -> `"simple"`
+11. Aliases extraction: array -> correct vec; string -> single-element vec; absent -> empty
+12. Tags extraction: array -> correct vec; string -> single-element vec; absent -> empty
+13. Empty file (no frontmatter, no list items) -> valid empty structure with empty lists/headers
+14. File with only frontmatter, no body -> empty lists
 15. Archive tag filtering: items with archive tag are excluded from list output
 16. `parse_single_file` output matches single-element batch output
 17. File with list items but no links/tags still produces correct `precomputed_tokens` (text-only tokens)
 
-**Verification:** `cargo test` passes all new tests (target ≥15, expect ~17).
+**Verification:** `cargo test` passes all new tests (target >=15, expect ~17).
 
 ---
 
@@ -195,9 +196,9 @@ export function adaptSingleResult(json: string): DvPage {
 ```
 
 Where `adaptBatchPage` converts:
-- Raw batch list items → `DvList` with `precomputedTokens` set and `parent: null` → `parent: undefined`
+- Raw batch list items -> `DvList` with `precomputedTokens` set and `parent: null` -> `parent: undefined`
 - Children recursively adapted via `adaptBatchListItem` (they also have `precomputedTokens`)
-- `precomputedParentTokens` from a plain JSON object `Record<string, ParsedTextToken[]>` → `Map<string, ParsedTextToken[]>`
+- `precomputedParentTokens` from a plain JSON object `Record<string, ParsedTextToken[]>` -> `Map<string, ParsedTextToken[]>`
 - All other fields (aliases, name, mtime, path, frontmatter, tags, headers) passed through directly
 
 Create a helper `adaptBatchListItem(raw: RawBatchDvListItem): DvList` similar to the existing `adaptListItem` but preserving the `precomputedTokens` field on the output.
@@ -295,7 +296,7 @@ Tests to implement:
 
 2. **Pre-computed tokens match parseTokens:** For each `DvList` item in the native batch output, assert `item.precomputedTokens` deeply equals `TsParserProvider.parseTokens(item.rawText)`. Check recursively through `children`.
 
-3. **Pre-computed parent tokens match:** For fixture `multi-page/index.md` (which has `parent: "[[Root]]"` or similar link-containing frontmatter), assert `page.precomputedParentTokens.get("[[Root]]")` deeply equals `TsParserProvider.parseTokens("[[Root]]")`.
+3. **Pre-computed parent tokens match:** For fixture `multi-page/index.md` (which has `parent: "[[Root]]"`), assert `page.precomputedParentTokens.get("[[Root]]")` deeply equals `TsParserProvider.parseTokens("[[Root]]")`.
 
 4. **Single file matches batch:** Call `NativeParserProvider.parseVaultFile(content, path, mtime, archiveTag)` for one fixture file. Call `NativeParserProvider.parseBatchChunk([sameFileAsInput])`. Assert the two results are deeply equal.
 
