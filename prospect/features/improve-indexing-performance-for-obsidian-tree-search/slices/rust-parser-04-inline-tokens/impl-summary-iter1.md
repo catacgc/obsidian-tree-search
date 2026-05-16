@@ -1,0 +1,11 @@
+## Summary
+- Tasks completed: All 7 tasks from `rust-parser-05-batch-api` are already implemented and committed
+  - Task 1: Rust output types in `types.rs` ✓
+  - Task 2: `batch_parse_chunk` and `parse_single_file` Rust functions ✓
+  - Task 3: 25 Rust unit tests ✓
+  - Task 4: `DvList.precomputedTokens?` and `DvPage.precomputedParentTokens?` type extensions ✓
+  - Task 5: `adaptBatchResult` and `adaptSingleResult` TS adapters ✓
+  - Task 6: `NativeParserProvider` class and `chunkedBatch` utility ✓
+  - Task 7: 10 TypeScript conformance tests ✓
+- Tests: PASS — 137 Rust tests + 241 TypeScript tests, 0 failures
+- Commits: `43e5a14 feat(parser-native): add batch API with pre-computed inline tokens`, `8e97d62 fix(parser-native): make parse_single_file_matches_batch test non-trivial`
