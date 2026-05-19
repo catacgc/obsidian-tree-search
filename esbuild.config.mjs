@@ -85,6 +85,7 @@ const esbuildOptions = {
 	// .wasm imports; this loader config prevents asset emission for other
 	// static references esbuild encounters during bundling.
 	loader: { '.wasm': 'empty' },
+	logOverride: { 'empty-import-meta': 'silent' },
 	plugins: [
 		wasmInlinePlugin,
 		tailwindPlugin({ 

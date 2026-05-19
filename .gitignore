@@ -29,3 +29,5 @@ data.json
 
 # git worktrees
 .worktrees/
+
+.manny-worktrees/
