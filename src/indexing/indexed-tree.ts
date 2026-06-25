@@ -1,4 +1,4 @@
-import { NotesGraph, buildGraphFromScanner, reindexFileInGraph, type ParserProvider, type ParseCacheEntry } from "@mdtree/core"
+import { NotesGraph, buildGraphFromScanner, reindexFileInGraph, type ParseCacheEntry, serializeCache, deserializeCache } from "@mdtree/core"
 import { TFile } from "obsidian"
 import { getSettings } from "../view/react-context/settings"
 import { GlobalAtoms, GlobalStore } from "../view/react-context/global"
@@ -8,15 +8,10 @@ export class IndexedTree {
     private graph: NotesGraph
     private isLoading = false
     private version = 0
-    private provider: ParserProvider | undefined
     private parseCache = new Map<string, ParseCacheEntry>()
 
-    constructor(private store: GlobalStore) {
+    constructor(private store: GlobalStore, private cacheDir: string) {
         this.graph = new NotesGraph()
-    }
-
-    setParserProvider(provider: ParserProvider): void {
-        this.provider = provider
     }
 
     private get vault() {
@@ -27,10 +22,32 @@ export class IndexedTree {
         return this.store.get(GlobalAtoms.appAtom).metadataCache
     }
 
+    private get cachePath(): string {
+        return `${this.cacheDir}/parse-cache.json`
+    }
+
+    private async loadCache(): Promise<void> {
+        try {
+            const json = await this.vault.adapter.read(this.cachePath)
+            this.parseCache = deserializeCache(json)
+        } catch {
+            this.parseCache = new Map()
+        }
+    }
+
+    private async saveCache(): Promise<void> {
+        try {
+            await this.vault.adapter.write(this.cachePath, serializeCache(this.parseCache))
+        } catch (err) {
+            console.warn("[mdtree] Failed to save parse cache:", err)
+        }
+    }
+
     async refresh(): Promise<void> {
         if (this.isLoading) return
         this.isLoading = true
         try {
+            await this.loadCache()
             const settings = getSettings(this.store)
             const graph = await buildGraphFromScanner(
                 new ObsidianVaultScanner(this.vault, this.metadataCache),
@@ -39,10 +56,9 @@ export class IndexedTree {
                     archiveTag: settings.archiveTag,
                     searchSeparator: settings.searchSeparator,
                 },
-                this.provider,
-                50, // chunkSize
                 this.parseCache,
             )
+            await this.saveCache()
             this.setState(graph)
         } finally {
             this.isLoading = false
@@ -61,7 +77,6 @@ export class IndexedTree {
                     archiveTag: settings.archiveTag,
                     searchSeparator: settings.searchSeparator,
                 },
-                this.provider,
                 this.parseCache,
             )
             this.setState(this.graph)
@@ -77,7 +92,6 @@ export class IndexedTree {
         this.store.set(GlobalAtoms.isGraphLoadingAtom, false)
     }
 
-    // Cache management methods for debugging/monitoring
     getCacheStats(): { size: number; entries: string[] } {
         const entries = Array.from(this.parseCache.keys())
         return { size: entries.length, entries }

@@ -31,3 +31,6 @@ data.json
 .worktrees/
 
 .manny-worktrees/
+
+# mdtree CLI parse cache
+.mdtree/

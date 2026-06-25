@@ -4,7 +4,6 @@ import {SEARCH_VIEW, SearchViewPanel} from './view/search/SearchViewPanel';
 import {QuickLinkModal} from './view/search-modal/link-selector/QuickLinkModal';
 
 import {IndexedTree} from "./indexing/indexed-tree";
-import {loadNativeParserProvider} from "./indexing/load-native-parser";
 import {FILE_CONTEXT, FileContextView} from "./view/file-context/file-context";
 import {ContextCodeBlock} from "./view/markdown-code-block/ContextCodeBlock";
 import {SearchModal} from "./view/search-modal/SearchModal";
@@ -41,16 +40,7 @@ export default class TreeSearchPlugin extends Plugin {
         this.globalStore = createStore()
         this.globalStore.set(GlobalAtoms.appAtom, this.app)
 
-        this.index = new IndexedTree(this.globalStore);
-
-        // Load WASM parser BEFORE any interval/subscription that may trigger refresh(),
-        // to ensure the first graph refresh always uses the native parser if available.
-        const nativeProvider = await loadNativeParserProvider()
-        if (nativeProvider) {
-            this.index.setParserProvider(nativeProvider)
-            this.globalStore.set(GlobalAtoms.parserTypeAtom, "native-wasm")
-            console.debug("[mdtree] Native WASM parser loaded successfully")
-        }
+        this.index = new IndexedTree(this.globalStore, this.manifest.dir);
 
         this.registerView(
             SEARCH_VIEW,
