@@ -22,7 +22,7 @@ export async function runIndex(opts: IndexOptions): Promise<void> {
     console.log(`[mdtree] Indexing vault: ${vaultRoot}`)
     const start = Date.now()
 
-    const graph = await buildGraph(vaultRoot, DEFAULT_SETTINGS)
+    const { graph } = await buildGraph(vaultRoot, DEFAULT_SETTINGS)
     const nodeCount = graph.order
     const edgeCount = graph.size
     console.log(`[mdtree] Built graph: ${nodeCount} nodes, ${edgeCount} edges (${Date.now() - start}ms)`)

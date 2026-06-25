@@ -15,7 +15,7 @@ beforeAll(async () => {
 
   dbPath = join(tmpdir(), `mdtree-query-test-${Date.now()}.db`)
 
-  const graph = await buildGraph(vaultDir)
+  const { graph } = await buildGraph(vaultDir)
   const store = new VaultStore(dbPath)
   store.saveGraph(basename(vaultDir), graph)
   store.close()

@@ -1,38 +1,64 @@
-import { relative } from "node:path"
+import { relative, join, dirname } from "node:path"
+import { readFile, writeFile, mkdir } from "node:fs/promises"
 import {
   NotesGraph,
   buildGraphFromScanner,
   reindexFileInGraph,
   type IndexSettings,
   DEFAULT_SETTINGS,
+  type ParseCacheEntry,
+  serializeCache,
+  deserializeCache,
 } from "@mdtree/core"
 import { NodeVaultScanner } from "./node-scanner.ts"
 import type { VaultStore } from "../store/sqlite.ts"
 
-// ── Build full graph from vault ───────────────────────────────────────────────
+function cacheFilePath(vaultRoot: string): string {
+  return join(vaultRoot, ".mdtree", "cache.json")
+}
+
+async function loadCacheFromFile(cacheFile: string): Promise<Map<string, ParseCacheEntry>> {
+  try {
+    const json = await readFile(cacheFile, "utf-8")
+    return deserializeCache(json)
+  } catch {
+    return new Map()
+  }
+}
+
+async function saveCacheToFile(cacheFile: string, cache: Map<string, ParseCacheEntry>): Promise<void> {
+  try {
+    await mkdir(dirname(cacheFile), { recursive: true })
+    await writeFile(cacheFile, serializeCache(cache), "utf-8")
+  } catch (err) {
+    console.warn("[mdtree] Failed to save parse cache:", err)
+  }
+}
 
 export async function buildGraph(
   vaultRoot: string,
   settings: IndexSettings = DEFAULT_SETTINGS,
-): Promise<NotesGraph> {
-  return buildGraphFromScanner(new NodeVaultScanner(vaultRoot), settings)
+): Promise<{ graph: NotesGraph; cache: Map<string, ParseCacheEntry> }> {
+  const cacheFile = cacheFilePath(vaultRoot)
+  const cache = await loadCacheFromFile(cacheFile)
+  const graph = await buildGraphFromScanner(new NodeVaultScanner(vaultRoot), settings, cache)
+  await saveCacheToFile(cacheFile, cache)
+  return { graph, cache }
 }
-
-// ── Incremental re-index of a single changed file ────────────────────────────
 
 export async function reindexFile(
   absPath: string,
   vaultRoot: string,
   graph: NotesGraph,
   settings: IndexSettings,
+  parseCache?: Map<string, ParseCacheEntry>,
   store?: VaultStore,
   vault?: string,
 ): Promise<void> {
   const relPath = relative(vaultRoot, absPath)
 
-  await reindexFileInGraph(relPath, graph, new NodeVaultScanner(vaultRoot), settings)
+  await reindexFileInGraph(relPath, graph, new NodeVaultScanner(vaultRoot), settings, parseCache)
 
-  // Persist new nodes/edges to SQLite
   if (store && vault) {
     store.deleteByPath(vault, relPath)
 

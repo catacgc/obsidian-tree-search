@@ -1,5 +1,5 @@
 import { resolve, basename } from "node:path"
-import { DEFAULT_SETTINGS, NotesGraph } from "@mdtree/core"
+import { DEFAULT_SETTINGS, NotesGraph, type ParseCacheEntry } from "@mdtree/core"
 import { buildGraph, reindexFile } from "../vault/indexer.ts"
 import { watchVault } from "../vault/watcher.ts"
 import { VaultStore, defaultDbPath } from "../store/sqlite.ts"
@@ -25,12 +25,12 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
     const vaultName = basename(vaultRoot)
     const dbPath = opts.out ?? defaultDbPath(vaultName)
 
-    const { graph, store } = await loadOrBuild(vaultRoot, vaultName, dbPath, opts.fresh)
+    const { graph, store, cache } = await loadOrBuild(vaultRoot, vaultName, dbPath, opts.fresh)
 
     console.log(`[mdtree] Watching ${vaultRoot} ...`)
 
     const queue = new AsyncQueue()
-    enqueuePluginRuns(vaultRoot, vaultName, graph, DEFAULT_SETTINGS, store, queue)
+    enqueuePluginRuns(vaultRoot, vaultName, graph, DEFAULT_SETTINGS, store, queue, cache)
     const stop = watchVault(vaultRoot, event => {
       queue.enqueue(async () => {
         if (event.type === "unlink") {
@@ -40,7 +40,7 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
           console.log(`[${vaultName}] Removed: ${relPath}`)
         } else {
           console.log(`[${vaultName}] Re-indexing: ${event.path.slice(vaultRoot.length + 1)}`)
-          await reindexFile(event.path, vaultRoot, graph, DEFAULT_SETTINGS, store, vaultName)
+          await reindexFile(event.path, vaultRoot, graph, DEFAULT_SETTINGS, cache, store, vaultName)
         }
       })
     })
@@ -55,7 +55,6 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
   for (const stop of stoppers) stop()
 }
 
-// Stale threshold: warn (but still use cache) if older than 24 h
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000
 
 export async function loadOrBuild(
@@ -63,7 +62,7 @@ export async function loadOrBuild(
   vaultName: string,
   dbPath: string,
   fresh = false,
-): Promise<{ graph: NotesGraph; store: VaultStore }> {
+): Promise<{ graph: NotesGraph; store: VaultStore; cache: Map<string, ParseCacheEntry> }> {
   const store = new VaultStore(dbPath)
 
   if (!fresh && store.hasData(vaultName)) {
@@ -80,15 +79,15 @@ export async function loadOrBuild(
     const graph = new NotesGraph()
     store.loadIntoGraph(vaultName, graph)
     console.log(`[mdtree] Loaded ${graph.order} nodes in ${Date.now() - start}ms`)
-    return { graph, store }
+    return { graph, store, cache: new Map() }
   }
 
   console.log(`[mdtree] Building graph for: ${vaultRoot}`)
   const start = Date.now()
-  const graph = await buildGraph(vaultRoot, DEFAULT_SETTINGS)
+  const { graph, cache } = await buildGraph(vaultRoot, DEFAULT_SETTINGS)
   console.log(`[mdtree] Built ${graph.order} nodes in ${Date.now() - start}ms`)
   store.saveGraph(vaultName, graph)
-  return { graph, store }
+  return { graph, store, cache }
 }
 
 function waitForSignal(): Promise<void> {

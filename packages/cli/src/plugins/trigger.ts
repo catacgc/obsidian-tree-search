@@ -1,15 +1,10 @@
-import type { NotesGraph, IndexSettings } from "@mdtree/core"
+import type { NotesGraph, IndexSettings, ParseCacheEntry } from "@mdtree/core"
 import type { VaultStore } from "../store/sqlite.ts"
 import type { AsyncQueue } from "../util/async-queue.ts"
 import { listInstalledPlugins } from "./registry.ts"
 import { runPlugin } from "./runner.ts"
 import { reindexFile } from "../vault/indexer.ts"
 
-/**
- * Enqueue a run for every installed+enabled plugin into the vault's AsyncQueue.
- * Plugins share the same queue as file-watcher events, so they never run in
- * parallel with a vault reindex or with each other.
- */
 export function enqueuePluginRuns(
   vaultRoot: string,
   vaultName: string,
@@ -17,6 +12,7 @@ export function enqueuePluginRuns(
   settings: IndexSettings,
   store: VaultStore,
   queue: AsyncQueue,
+  cache?: Map<string, ParseCacheEntry>,
 ): void {
   const installed = listInstalledPlugins()
   if (installed.length === 0) return
@@ -31,7 +27,7 @@ export function enqueuePluginRuns(
 
       if (outputPath) {
         store.setPluginOutputPath(vaultName, plugin.namespace, outputPath)
-        await reindexFile(outputPath, vaultRoot, graph, settings, store, vaultName)
+        await reindexFile(outputPath, vaultRoot, graph, settings, cache, store, vaultName)
         console.log(`[${vaultName}] Plugin ${plugin.namespace} indexed`)
       }
     })
