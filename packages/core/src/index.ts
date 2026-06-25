@@ -29,6 +29,7 @@ export { NotesGraph, getKey } from "./graph/graph.ts"
 export { calculateBoost, getAgeDays, containsEmoji } from "./graph/boost.ts"
 export { indexSinglePage, DEFAULT_SETTINGS, type IndexSettings } from "./graph/indexer.ts"
 export { buildGraphFromScanner, reindexFileInGraph, type ParseCacheEntry } from "./graph/builder.ts"
+export { serializeCache, deserializeCache } from "./graph/cache.ts"
 export type { VaultScanner, VaultFile, VaultFolder, WalkResult } from "./graph/scanner.ts"
 
 // Parser
