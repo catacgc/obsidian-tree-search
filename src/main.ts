@@ -48,6 +48,7 @@ export default class TreeSearchPlugin extends Plugin {
         const nativeProvider = await loadNativeParserProvider()
         if (nativeProvider) {
             this.index.setParserProvider(nativeProvider)
+            this.globalStore.set(GlobalAtoms.parserTypeAtom, "native-wasm")
             console.debug("[mdtree] Native WASM parser loaded successfully")
         }
 

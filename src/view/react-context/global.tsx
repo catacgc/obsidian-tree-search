@@ -8,6 +8,7 @@ const graphVersionAtom = atom(0)
 const isGraphLoadingAtom = atom(false)
 const currentModalAtom = atom<Modal | null>(null)
 const pinAtom = atom<boolean>(false)
+const parserTypeAtom = atom<"native-wasm" | "typescript">("typescript")
 
 export type GlobalStore = ReturnType<typeof getDefaultStore>
 
@@ -18,5 +19,6 @@ export const GlobalAtoms = {
     isGraphLoadingAtom,
     currentModalAtom,
     pinAtom,
+    parserTypeAtom,
     activeFileAtom: atom<TFile | undefined>(undefined)
 }

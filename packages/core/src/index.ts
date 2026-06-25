@@ -28,12 +28,10 @@ export type {
 export { NotesGraph, getKey } from "./graph/graph.ts"
 export { calculateBoost, getAgeDays, containsEmoji } from "./graph/boost.ts"
 export { indexSinglePage, DEFAULT_SETTINGS, type IndexSettings } from "./graph/indexer.ts"
-export { buildGraphFromScanner, reindexFileInGraph } from "./graph/builder.ts"
+export { buildGraphFromScanner, reindexFileInGraph, type ParseCacheEntry } from "./graph/builder.ts"
 export type { VaultScanner, VaultFile, VaultFolder, WalkResult } from "./graph/scanner.ts"
 
 // Parser
-export type { ParserProvider, FileInput } from "./parser/parser-provider.ts"
-export { TsParserProvider, createTsParserProvider } from "./parser/parser-provider.ts"
 export { parseVaultFile } from "./parser/vault-file.ts"
 export { parseFrontmatter, extractAliases, extractTags, extractParents, type Frontmatter } from "./parser/frontmatter.ts"
 export { scanMarkdown } from "./parser/list-scanner.ts"

@@ -3,8 +3,12 @@ import { indexSinglePage, DEFAULT_SETTINGS, type IndexSettings } from "./indexer
 import { parseVaultFile } from "../parser/vault-file.ts"
 import { parseCanvasData, type CanvasData } from "../parser/canvas.ts"
 import type { VaultScanner } from "./scanner.ts"
-import type { ParserProvider } from "../parser/parser-provider.ts"
-import type { ParsedTextToken } from "./types.ts"
+import type { DvPage } from "./types.ts"
+
+export type ParseCacheEntry = {
+  page: DvPage
+  mtime: number
+}
 
 function extname(path: string): string {
   const dot = path.lastIndexOf(".")
@@ -24,13 +28,12 @@ async function indexScannedFile(
   mtime: number,
   graph: NotesGraph,
   settings: IndexSettings,
-  parseTokensFn?: (text: string) => ParsedTextToken[],
 ): Promise<void> {
   const ext = extname(relPath)
   try {
     if (ext === ".md") {
       const dvPage = parseVaultFile(content, relPath, mtime, settings.archiveTag)
-      indexSinglePage(dvPage, graph, settings, parseTokensFn)
+      indexSinglePage(dvPage, graph, settings)
     } else if (ext === ".canvas") {
       let canvasData: CanvasData
       try {
@@ -40,7 +43,7 @@ async function indexScannedFile(
         return
       }
       const name = basename(relPath, ".canvas")
-      parseCanvasData(relPath, name, canvasData, graph, parseTokensFn)
+      parseCanvasData(relPath, name, canvasData, graph)
     } else {
       const name = basename(relPath)
       const extension = ext.slice(1)
@@ -51,13 +54,12 @@ async function indexScannedFile(
   }
 }
 
-const BATCH_SIZE = 10
+const READ_BATCH = 64
 
 export async function buildGraphFromScanner(
   scanner: VaultScanner,
   settings: IndexSettings = DEFAULT_SETTINGS,
-  provider?: ParserProvider,
-  chunkSize = 50,
+  parseCache?: Map<string, ParseCacheEntry>,
 ): Promise<NotesGraph> {
   const graph = new NotesGraph()
   const { files, folders } = await scanner.walkVault()
@@ -70,81 +72,78 @@ export async function buildGraphFromScanner(
     graph.createFolderNode(folder.path, folder.name, location)
   }
 
-  if (provider) {
-    // BATCH PATH: separate .md files from others
-    const mdFiles: { path: string; content: string; mtime: number }[] = []
-    const otherFiles: typeof files[number][] = []
+  const mdNeedRead: typeof files[number][] = []
+  const canvasFiles: typeof files[number][] = []
 
-    for (const file of files) {
-      const ext = extname(file.path)
-      if (ext === ".md") {
-        const { content, mtime } = await scanner.readFile(file.path)
-        mdFiles.push({ path: file.path, content, mtime })
-      } else {
-        otherFiles.push(file)
-      }
-    }
-
-    // Process .md files in chunks via provider.parseBatchChunk
-    for (let i = 0; i < mdFiles.length; i += chunkSize) {
-      const chunk = mdFiles.slice(i, i + chunkSize)
-      const input = chunk.map(f => ({
-        path: f.path,
-        content: f.content,
-        mtime: f.mtime,
-        archiveTag: settings.archiveTag,
-      }))
-
-      let pages: ReturnType<ParserProvider["parseBatchChunk"]>
-      try {
-        pages = provider.parseBatchChunk(input)
-      } catch (batchErr) {
-        // Batch failed — retry each file individually for resilience
-        console.warn(`[mdtree] Batch parse failed for chunk starting at index ${i}, retrying individually:`, batchErr)
-        for (const file of chunk) {
+  for (const file of files) {
+    const ext = extname(file.path)
+    if (ext === ".md") {
+      if (parseCache) {
+        const cached = parseCache.get(file.path)
+        if (cached && cached.mtime === file.mtime) {
           try {
-            const page = provider.parseVaultFile(file.content, file.path, file.mtime, settings.archiveTag)
-            indexSinglePage(page, graph, settings)
-          } catch (fileErr) {
-            console.warn(`[mdtree] Error indexing ${file.path}:`, fileErr)
+            indexSinglePage(cached.page, graph, settings)
+            continue
+          } catch (err) {
+            console.warn(`[mdtree] Error indexing cached ${file.path}:`, err)
           }
         }
-        await new Promise<void>(resolve => setTimeout(resolve, 0))
-        continue
       }
-
-      for (const page of pages) {
-        try {
-          indexSinglePage(page, graph, settings)
-          // No parseTokensFn needed: precomputedTokens is populated on each DvList
-        } catch (err) {
-          console.warn(`[mdtree] Error indexing ${page.file.path}:`, err)
-        }
-      }
-
-      await new Promise<void>(resolve => setTimeout(resolve, 0))
+      mdNeedRead.push(file)
+    } else if (ext === ".canvas") {
+      canvasFiles.push(file)
+    } else {
+      const name = basename(file.path)
+      const extension = ext.slice(1)
+      graph.addAttachmentNode(name, extension, file.path, file.mtime)
     }
+  }
 
-    // Process other files (canvas, attachments) individually
-    const boundParseTokens = provider.parseTokens.bind(provider)
-    for (let i = 0; i < otherFiles.length; i++) {
-      if (i % BATCH_SIZE === 0) {
-        await new Promise<void>(resolve => setTimeout(resolve, 0))
+  for (let i = 0; i < mdNeedRead.length; i += READ_BATCH) {
+    const batch = mdNeedRead.slice(i, i + READ_BATCH)
+    const results = await Promise.all(
+      batch.map(f => scanner.readFile(f.path).catch(() => null))
+    )
+    for (let j = 0; j < batch.length; j++) {
+      const result = results[j]
+      if (!result) continue
+      const file = batch[j]
+      const { content, mtime } = result
+      try {
+        const dvPage = parseVaultFile(content, file.path, mtime, settings.archiveTag)
+        if (parseCache) parseCache.set(file.path, { page: dvPage, mtime })
+        indexSinglePage(dvPage, graph, settings)
+      } catch (err) {
+        console.warn(`[mdtree] Error indexing ${file.path}:`, err)
       }
-      const file = otherFiles[i]
-      const { content, mtime } = await scanner.readFile(file.path)
-      await indexScannedFile(file.path, content, mtime, graph, settings, boundParseTokens)
     }
-  } else {
-    // FALLBACK PATH: unchanged file-by-file behavior
-    for (let i = 0; i < files.length; i++) {
-      if (i % BATCH_SIZE === 0) {
-        await new Promise<void>(resolve => setTimeout(resolve, 0))
+    await new Promise<void>(resolve => setTimeout(resolve, 0))
+  }
+
+  if (canvasFiles.length > 0) {
+    const canvasResults = await Promise.all(
+      canvasFiles.map(f => scanner.readFile(f.path).catch(() => null))
+    )
+    for (let i = 0; i < canvasFiles.length; i++) {
+      const result = canvasResults[i]
+      if (!result) continue
+      await indexScannedFile(canvasFiles[i].path, result.content, result.mtime, graph, settings)
+    }
+  }
+
+  if (parseCache) {
+    const currentPaths = new Set(files.map(f => f.path))
+    let deletedCount = 0
+    for (const cachedPath of Array.from(parseCache.keys())) {
+      if (!currentPaths.has(cachedPath)) {
+        parseCache.delete(cachedPath)
+        deletedCount++
       }
-      const file = files[i]
-      const { content, mtime } = await scanner.readFile(file.path)
-      await indexScannedFile(file.path, content, mtime, graph, settings)
     }
+    if (deletedCount > 0) {
+      console.debug(`[mdtree] Cache cleanup: removed ${deletedCount} stale entries`)
+    }
+    console.debug(`[mdtree] Cache size: ${parseCache.size} entries`)
   }
 
   return graph
@@ -155,20 +154,15 @@ export async function reindexFileInGraph(
   graph: NotesGraph,
   scanner: VaultScanner,
   settings: IndexSettings,
-  provider?: ParserProvider,
+  parseCache?: Map<string, ParseCacheEntry>,
 ): Promise<void> {
   graph.removeByPath(relPath)
   const { content, mtime } = await scanner.readFile(relPath)
 
-  if (provider) {
-    const ext = extname(relPath)
-    if (ext === ".md") {
-      const page = provider.parseVaultFile(content, relPath, mtime, settings.archiveTag)
-      indexSinglePage(page, graph, settings)
-      // precomputedTokens is populated, so no extra WASM calls
-    } else {
-      await indexScannedFile(relPath, content, mtime, graph, settings, provider.parseTokens.bind(provider))
-    }
+  if (extname(relPath) === ".md") {
+    const dvPage = parseVaultFile(content, relPath, mtime, settings.archiveTag)
+    if (parseCache) parseCache.set(relPath, { page: dvPage, mtime })
+    indexSinglePage(dvPage, graph, settings)
   } else {
     await indexScannedFile(relPath, content, mtime, graph, settings)
   }

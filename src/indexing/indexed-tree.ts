@@ -1,4 +1,4 @@
-import { NotesGraph, buildGraphFromScanner, reindexFileInGraph, type ParserProvider } from "@mdtree/core"
+import { NotesGraph, buildGraphFromScanner, reindexFileInGraph, type ParserProvider, type ParseCacheEntry } from "@mdtree/core"
 import { TFile } from "obsidian"
 import { getSettings } from "../view/react-context/settings"
 import { GlobalAtoms, GlobalStore } from "../view/react-context/global"
@@ -9,6 +9,7 @@ export class IndexedTree {
     private isLoading = false
     private version = 0
     private provider: ParserProvider | undefined
+    private parseCache = new Map<string, ParseCacheEntry>()
 
     constructor(private store: GlobalStore) {
         this.graph = new NotesGraph()
@@ -39,6 +40,8 @@ export class IndexedTree {
                     searchSeparator: settings.searchSeparator,
                 },
                 this.provider,
+                50, // chunkSize
+                this.parseCache,
             )
             this.setState(graph)
         } finally {
@@ -59,6 +62,7 @@ export class IndexedTree {
                     searchSeparator: settings.searchSeparator,
                 },
                 this.provider,
+                this.parseCache,
             )
             this.setState(this.graph)
         } catch (err) {
@@ -71,5 +75,15 @@ export class IndexedTree {
         this.store.set(GlobalAtoms.graphAtom, graph)
         this.store.set(GlobalAtoms.graphVersionAtom, ++this.version)
         this.store.set(GlobalAtoms.isGraphLoadingAtom, false)
+    }
+
+    // Cache management methods for debugging/monitoring
+    getCacheStats(): { size: number; entries: string[] } {
+        const entries = Array.from(this.parseCache.keys())
+        return { size: entries.length, entries }
+    }
+
+    clearCache(): void {
+        this.parseCache.clear()
     }
 }

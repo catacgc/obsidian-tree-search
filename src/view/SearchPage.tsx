@@ -45,12 +45,16 @@ const _SearchPage = (props: SearchPageProps) => {
         }
     }, [version, activeFile, actualQuery, scopeName.instance])
 
+    const parserType = useAtomValue(GlobalAtoms.parserTypeAtom)
+    const graphOrder = useAtomValue(GlobalAtoms.graphAtom).order
+
     return <>
         <KeyComboWrapper>
             <div className="flex items-center justify-between hover:text-obs-accent" onClick={() => setShowSearch(!showSearch)}>
                 <div>
                     {props.children}
                     {props.sectionName && <h5>{props.sectionName}</h5>}
+                    <span className="text-[10px] text-obs-base-40">parser: {parserType} • {graphOrder} nodes</span>
                 </div>
                 <button
                     className="bg-transparent border-none p-1 text-obs-base-40 hover:text-obs-accent focus:outline-none clickable-icon"
