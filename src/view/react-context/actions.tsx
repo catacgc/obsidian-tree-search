@@ -1,6 +1,6 @@
 import {atom, useAtomValue} from "jotai";
 import {Notice} from "obsidian";
-import {highlightLine} from "../../obsidian-utils";
+import {highlightLine, archiveLine, unarchiveLine} from "../../obsidian-utils";
 import {getTreeNodeActions, RaycastAction} from "../node-actions";
 import {molecule} from "bunshi";
 import {GlobalAppMolecule, SearchViewMolecule, SearchViewScope} from "./state";
@@ -87,6 +87,15 @@ export const ActionsMolecule = molecule((mol, scope) => {
     })
 
     const executeActionAtom = atom(null, async (get, set, action: RaycastAction) => {
+        if (action.type === "browse" && action.keepOpen && action.location) {
+            const app = get(appAtom)
+            if (action.url.includes("raycastaction=archive")) {
+                await archiveLine(app, action.location)
+            } else {
+                await unarchiveLine(app, action.location)
+            }
+            return  // modal stays open
+        }
         await executeAction(action)
         set(closeModalAtom)
     })
