@@ -1,6 +1,6 @@
 import { reverseMarkdownParsing } from "./copy";
 import { TreeNode } from "./search/SearchViewFlatten";
-import { ObsidianLinkToken, ParsedTextToken, isArchived } from "@mdtree/core";
+import { ObsidianLinkToken, ParsedTextToken, isArchived, Location } from "@mdtree/core";
 import {App} from "obsidian";
 
 export interface VaultResults {
@@ -33,6 +33,8 @@ export interface Copy extends BaseAction {
 export interface Browse extends BaseAction {
     type: "browse"
     url: string
+    keepOpen?: boolean
+    location?: Location
 }
 
 /** Icon.* values in the Raycast API */
@@ -130,12 +132,16 @@ function getDefaultActions(result: TreeNode, vault: string): RaycastAction[] {
             type: "browse",
             url: unarchiveUrl(result.node.location, vault),
             title: `Unarchive`,
-            icon: Icons.bookmark
+            icon: Icons.bookmark,
+            keepOpen: true,
+            location: result.node.location
         } : {
             type: "browse",
             url: archiveUrl(result.node.location, vault),
             title: `Archive`,
-            icon: Icons.bookmark
+            icon: Icons.bookmark,
+            keepOpen: true,
+            location: result.node.location
         }
     ] : []
 
