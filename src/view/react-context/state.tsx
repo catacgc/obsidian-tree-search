@@ -128,6 +128,7 @@ export const SearchModalMolecule = molecule((mol, scope) => {
     const searchResultsAtom = atom<ResultNode[]>([])
 
     const searchResultsComputeAtom = withAtomEffect(searchResultsAtom, (get, set) => {
+        get(GlobalAtoms.graphVersionAtom)  // re-run on mutable graph updates from refreshPage
         const searchQuery = get(searchMol.actualQueryAtom)
         const isQuickLink = scp.isQuickLink
         const graph = get(GlobalAtoms.graphAtom)
