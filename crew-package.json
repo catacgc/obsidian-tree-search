@@ -1,6 +1,9 @@
 {
+  "version": 1,
+  "name": "obsidian-tree-search",
   "plugins": {
     "superpowers": "github:obra/superpowers",
-    "commit-commands": "github:anthropics/claude-plugins-official/plugins/commit-commands"
+    "commit-commands": "github:anthropics/claude-plugins-official/plugins/commit-commands",
+    "aep-devops": "github:Adobe-Experience-Platform/aep-devops-agent/plugin"
   }
 }

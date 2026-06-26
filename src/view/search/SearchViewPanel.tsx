@@ -1,7 +1,6 @@
 import {ItemView, WorkspaceLeaf} from "obsidian";
 import {createRoot, Root} from "react-dom/client";
 import {GraphContextProvider} from "../react-context/GraphContextProvider";
-import {createStore} from "jotai";
 import {GlobalStore} from "../react-context/global";
 import SearchPage from "../SearchPage";
 import {ResultNode} from "@mdtree/core";
@@ -13,7 +12,6 @@ export class SearchViewPanel extends ItemView {
 
     constructor(leaf: WorkspaceLeaf, private store: GlobalStore) {
         super(leaf);
-        this.store = createStore()
     }
 
     getViewType() {

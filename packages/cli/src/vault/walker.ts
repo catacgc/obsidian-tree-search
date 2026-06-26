@@ -1,5 +1,6 @@
 import { readdir, stat } from "node:fs/promises"
 import { join, extname } from "node:path"
+import type { Dirent } from "node:fs"
 import { loadObsidianIgnore, isIgnoredByObsidian } from "./obsidianignore.ts"
 
 export type VaultFile = {
@@ -34,56 +35,61 @@ function fileType(ext: string): VaultFile["type"] {
   return "attachment"
 }
 
-/**
- * Recursively walk a vault directory.
- * Returns all files (with metadata) and all folders.
- * Respects `.obsidianignore` if present.
- */
+const STAT_BATCH = 64
+
 export async function walkVault(vaultRoot: string): Promise<WalkResult> {
   const files: VaultFile[] = []
   const folders: VaultFolder[] = []
   const ig = loadObsidianIgnore(vaultRoot)
 
   async function walk(dir: string, relDir: string): Promise<void> {
-    let entries: string[]
+    let entries: Dirent[]
     try {
-      entries = await readdir(dir)
+      entries = await readdir(dir, { withFileTypes: true })
     } catch {
       return
     }
 
-    for (const entry of entries) {
-      if (isIgnored(entry)) continue
+    const subdirs: { absPath: string; relPath: string }[] = []
+    const pendingFiles: { absPath: string; relPath: string; ext: string }[] = []
 
-      const absPath = join(dir, entry)
-      const relPath = relDir ? `${relDir}/${entry}` : entry
+    for (const entry of entries) {
+      const name = entry.name
+      if (isIgnored(name)) continue
+
+      const absPath = join(dir, name)
+      const relPath = relDir ? `${relDir}/${name}` : name
 
       if (isIgnoredByObsidian(ig, vaultRoot, absPath)) continue
 
-      let s
-      try {
-        s = await stat(absPath)
-      } catch {
-        continue
+      if (entry.isDirectory()) {
+        folders.push({ path: absPath, relativePath: relPath, name })
+        subdirs.push({ absPath, relPath })
+      } else if (entry.isFile()) {
+        const ext = extname(name).toLowerCase()
+        pendingFiles.push({ absPath, relPath, ext })
       }
+    }
 
-      if (s.isDirectory()) {
-        folders.push({
-          path: absPath,
-          relativePath: relPath,
-          name: entry,
-        })
-        await walk(absPath, relPath)
-      } else if (s.isFile()) {
-        const ext = extname(entry).toLowerCase()
+    // Batch stat for mtime in parallel
+    for (let i = 0; i < pendingFiles.length; i += STAT_BATCH) {
+      const batch = pendingFiles.slice(i, i + STAT_BATCH)
+      const stats = await Promise.all(batch.map(f => stat(f.absPath).catch(() => null)))
+      for (let j = 0; j < batch.length; j++) {
+        const s = stats[j]
+        if (!s) continue
+        const f = batch[j]
         files.push({
-          path: absPath,
-          relativePath: relPath,
+          path: f.absPath,
+          relativePath: f.relPath,
           mtime: s.mtimeMs,
-          type: fileType(ext),
+          type: fileType(f.ext),
         })
       }
     }
+
+    // Recurse into subdirectories in parallel
+    await Promise.all(subdirs.map(d => walk(d.absPath, d.relPath)))
   }
 
   await walk(vaultRoot, "")
