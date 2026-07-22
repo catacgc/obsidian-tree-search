@@ -10,7 +10,7 @@ top-level OR groups, `-word` negates a single contains-check, `"word"` is an
 exact match (and, oddly, an *unclosed* leading quote means startsWith), and
 single-letter modifiers (`:page`, `:task`, `:header`, `:folder`,
 `:attachment`, `:emoji`) filter by node type or attribute. A separate
-character (default `/`, configurable) splits the whole query string into
+character (default `.`, configurable via the `searchSeparator` setting) splits the whole query string into
 sequential stages that are applied one after another down the result tree.
 
 This works for simple queries but breaks down for compound intent. In
@@ -32,7 +32,7 @@ type/attribute filters, while keeping the tree-search engine in
 - Node-type and attribute filters move from single-letter modifiers
   (`:page`) to a `field:value` syntax (`is:page`), with two field names:
   `is:` for the node's own kind/state, `has:` for content the node contains.
-- The hierarchical stage separator (today `/`, becoming default `.`) is
+- The hierarchical stage separator (already default `.`, configurable) is
   preserved as a distinct concept — see "Why `.` stays a separate operator"
   below — but is parsed by the same tokenizer/parser instead of a naive
   `string.split()`, fixing quoting edge cases (a literal separator character
@@ -130,7 +130,7 @@ either, and adding them is low-risk future work if a need arises.
 | `"word"` exact match | unchanged — exact literal phrase |
 | `"word` (unclosed quote) = startsWith | removed (see Non-goals) |
 | `a \| b` | unchanged |
-| `parent / child` (configurable separator, default `/`) | `parent . child` (configurable separator, **default now `.`**) |
+| `parent . child` (stage separator, configurable, default `.`) | unchanged — stage splitting now happens inside the parser instead of a pre-split, fixing quoting edge cases |
 | no grouping | `(a \| b) -is:text` now legal |
 | no negation on modifiers | `-is:text`, `-has:emoji`, `-(a \| b)` now legal |
 
@@ -171,12 +171,12 @@ Replace the current `tokenize` / `parseOrGroups` / `parseAndGroup` /
 
 ### UI / docs
 
-- `SearchHelp` (or equivalent help text) needs rewriting for the new syntax,
-  including an explicit example of the `is:page . -is:text` two-stage
-  pattern since it's the one non-obvious part of the language.
-- The `searchSeparator` setting's default value changes from `/` to `.`;
-  existing user configs that already customized this setting are
-  unaffected (still read from settings).
+- No in-app search help component exists yet (an earlier design proposed one
+  but it was never built), so there's no existing help text to migrate.
+  Out of scope for this change; a future help component should document the
+  new syntax when it's built.
+- No change to the `searchSeparator` setting or its default (`.`) — only its
+  parsing moves from a pre-split into the unified parser.
 
 ## Examples
 
@@ -211,18 +211,14 @@ Replace the current `tokenize` / `parseOrGroups` / `parseAndGroup` /
 
 Yes, intentionally (see Goals). Anyone with saved/remembered queries using
 `:page`, `:task`, etc., or the unclosed-quote startsWith trick, will need to
-switch to the new syntax. The default hierarchy separator also changes from
-`/` to `.` for new installs; existing users who haven't customized
-`searchSeparator` will see this change silently since the setting default
-moves — call this out in release notes.
+switch to the new syntax. The hierarchy separator itself (`.` by default) is
+unaffected.
 
 ### Rollout Plan
 
 1. Implement parser + engine changes, update all existing tests.
-2. Update `SearchHelp` / in-app documentation to the new syntax, with the
-   two-stage pruning example called out explicitly.
-3. Release notes documenting the breaking syntax change and the separator
-   default change.
+2. Release notes documenting the breaking syntax change (`:mod` → `is:`/`has:`,
+   startsWith removed).
 
 ## Future Enhancements
 
