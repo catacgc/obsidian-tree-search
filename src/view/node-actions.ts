@@ -17,7 +17,7 @@ export interface IndividualListItemModel {
     actions: RaycastAction[]
 }
 
-export type RaycastAction = Copy | Browse
+export type RaycastAction = Copy | Browse | InsertLink
 
 export type BaseAction = {
     icon: string
@@ -37,6 +37,11 @@ export interface Browse extends BaseAction {
     location?: Location
 }
 
+export interface InsertLink extends BaseAction {
+    type: "insertLink"
+    text: string
+}
+
 /** Icon.* values in the Raycast API */
 const Icons = {
     pencil: "pencil-16",
@@ -54,7 +59,7 @@ function truncateActionTitle(title: string): string {
     return title.substring(0, 57) + "...";
 }
 
-export function getTreeNodeActions(app: App, treeNode: TreeNode): RaycastAction[] {
+export function getTreeNodeActions(app: App, treeNode: TreeNode, isQuickLink = false): RaycastAction[] {
     const vault = app.vault.getName()
     const actions: RaycastAction[] = []
     const title = renderTitle(treeNode, actions, app)
@@ -63,7 +68,24 @@ export function getTreeNodeActions(app: App, treeNode: TreeNode): RaycastAction[
     const reordered = prioritizeWebLinks(actions)
 
     const defaults = getDefaultActions(treeNode, vault)
-    const allActions = [...reordered, ...defaults]
+    let allActions = [...reordered, ...defaults]
+
+    if (isQuickLink) {
+        const wikilink = reverseMarkdownParsing(treeNode.node)
+        const insertLink: RaycastAction = {
+            type: "insertLink",
+            text: wikilink,
+            title: `Insert ${wikilink}`,
+            icon: Icons.pencil,
+            shortcut: { modifiers: [], key: "enter" },
+        }
+        // Insert-at-cursor is the sole default (plain Enter) action; demote any other.
+        allActions = [insertLink, ...allActions.map(a =>
+            a.shortcut?.key === "enter" && a.shortcut.modifiers.length === 0
+                ? { ...a, shortcut: undefined }
+                : a)]
+    }
+
     return allActions.map(action => ({
         ...action,
         title: truncateActionTitle(action.title)

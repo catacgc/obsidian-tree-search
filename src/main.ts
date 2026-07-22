@@ -40,7 +40,7 @@ export default class TreeSearchPlugin extends Plugin {
         this.globalStore = createStore()
         this.globalStore.set(GlobalAtoms.appAtom, this.app)
 
-        this.index = new IndexedTree(this.globalStore, this.manifest.dir);
+        this.index = new IndexedTree(this.globalStore, this.manifest.dir ?? "");
 
         this.registerView(
             SEARCH_VIEW,

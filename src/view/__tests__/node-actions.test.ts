@@ -166,3 +166,60 @@ describe("archive/unarchive actions", () => {
         }
     })
 })
+
+describe("insert-link (quick-link) actions", () => {
+    const mockApp = { vault: { getName: () => "TestVault", getFileByPath: () => null } } as any
+
+    const location = {
+        path: "test.md",
+        position: { start: { line: 1, ch: 0 }, end: { line: 1, ch: 10 } }
+    }
+
+    function createPageNode(): any {
+        return {
+            node: {
+                nodeType: "page", page: "Page Name", isReference: false,
+                aliases: [], tags: [], searchKey: "page name|", location, boost: 0, ageDays: 1
+            },
+            indent: 0, hasChildren: false, visible: true, selected: false, index: 0
+        }
+    }
+
+    function createHeaderNode(): any {
+        return {
+            node: {
+                nodeType: "header", page: "Page Name", header: "Header", indent: 2,
+                searchKey: "page name#header", location, boost: 0, ageDays: 1
+            },
+            indent: 0, hasChildren: false, visible: true, selected: false, index: 0
+        }
+    }
+
+    it("makes insert-link the first, default (plain Enter) action for a page", () => {
+        const actions = getTreeNodeActions(mockApp, createPageNode(), true)
+        const first = actions[0]
+        expect(first.type).toBe("insertLink")
+        if (first.type === "insertLink") expect(first.text).toBe("[[Page Name]]")
+        expect(first.shortcut).toEqual({ modifiers: [], key: "enter" })
+    })
+
+    it("builds [[Page#Header]] for a header node", () => {
+        const actions = getTreeNodeActions(mockApp, createHeaderNode(), true)
+        const insert = actions.find(a => a.type === "insertLink")
+        expect(insert?.type).toBe("insertLink")
+        if (insert?.type === "insertLink") expect(insert.text).toBe("[[Page Name#Header]]")
+    })
+
+    it("leaves exactly one plain-Enter action but keeps Shift+Enter", () => {
+        const actions = getTreeNodeActions(mockApp, createPageNode(), true)
+        const plainEnter = actions.filter(a => a.shortcut?.key === "enter" && a.shortcut.modifiers.length === 0)
+        expect(plainEnter.length).toBe(1)
+        expect(plainEnter[0].type).toBe("insertLink")
+        expect(actions.some(a => a.shortcut?.key === "enter" && a.shortcut.modifiers.includes("shift"))).toBe(true)
+    })
+
+    it("does not add an insert-link action outside quick-link mode", () => {
+        const actions = getTreeNodeActions(mockApp, createPageNode())
+        expect(actions.some(a => a.type === "insertLink")).toBe(false)
+    })
+})

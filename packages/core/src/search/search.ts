@@ -68,6 +68,22 @@ function filterTreeByWord(
   return { ...node, children: matchingChildren }
 }
 
+export function pruneResultTree(
+  nodes: ResultNode[],
+  keep: (node: ParsedNode) => boolean,
+): ResultNode[] {
+  const result: ResultNode[] = []
+  for (const node of nodes) {
+    const children = pruneResultTree(node.children, keep)
+    if (keep(node.node)) {
+      result.push({ ...node, children })
+    } else {
+      result.push(...children) // drop node, promote kept descendants
+    }
+  }
+  return result
+}
+
 function isNegation(expr: QueryExpr): boolean {
   return (
     expr.type === "not" ||

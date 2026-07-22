@@ -1,6 +1,6 @@
 import {atom, useAtomValue} from "jotai";
 import {Notice} from "obsidian";
-import {highlightLine, archiveLine, unarchiveLine} from "../../obsidian-utils";
+import {highlightLine, archiveLine, unarchiveLine, insertHere} from "../../obsidian-utils";
 import {getTreeNodeActions, RaycastAction} from "../node-actions";
 import {molecule} from "bunshi";
 import {GlobalAppMolecule, SearchViewMolecule, SearchViewScope} from "./state";
@@ -8,6 +8,7 @@ import {GlobalAtoms} from "./global";
 
 
 export const ActionsMolecule = molecule((mol, scope) => {
+    const scp = scope(SearchViewScope)
     const {selectedNodeAtom, hoveredLineAtom, selectedLineAtom} = mol(SearchViewMolecule)
     const { appAtom } = mol(GlobalAppMolecule)
 
@@ -83,7 +84,7 @@ export const ActionsMolecule = molecule((mol, scope) => {
 
         if (!node || !app) return []
 
-        return getTreeNodeActions(app, node)
+        return getTreeNodeActions(app, node, scp.isQuickLink)
     })
 
     const executeActionAtom = atom(null, async (get, set, action: RaycastAction) => {
@@ -95,6 +96,11 @@ export const ActionsMolecule = molecule((mol, scope) => {
                 await unarchiveLine(app, action.location)
             }
             return  // modal stays open
+        }
+        if (action.type === "insertLink") {
+            await insertHere(get(appAtom), action.text)
+            set(closeModalAtom)
+            return
         }
         await executeAction(action)
         set(closeModalAtom)

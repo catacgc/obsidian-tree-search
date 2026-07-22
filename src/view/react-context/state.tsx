@@ -1,5 +1,5 @@
 import {TreeNode} from '../search/SearchViewFlatten'
-import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, type QueryExpr, partitionArchived} from '@mdtree/core'
+import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, matchQuery, pruneResultTree, type QueryExpr, partitionArchived} from '@mdtree/core'
 import {atom, useAtomValue} from 'jotai'
 import {ParsedNode, ParsedTextToken, TextNode, Location} from '@mdtree/core'
 
@@ -134,10 +134,19 @@ export const SearchModalMolecule = molecule((mol, scope) => {
         const graph = get(GlobalAtoms.graphAtom)
         const separator = get(separatorAtom)
 
-        const search = (isQuickLink && searchQuery.length > 0) ? `${searchQuery} . :page | :header` : searchQuery
+        const searchResults = searchIndex(graph, searchQuery, separator)
 
-        const searchResults = searchIndex(graph, search, separator)
-        const { visible, archivedCount } = partitionArchived(searchResults)
+        // In insert (quick-link) mode, restrict the tree to notes and headers whose own
+        // name/alias/heading matches the query, so only link targets are offered.
+        const scoped = isQuickLink
+            ? pruneResultTree(searchResults, (() => {
+                // normalize separator to whitespace so multi-level queries match a node's own key
+                const expr = parseQuery(searchQuery.split(separator).join(" "))
+                return (n) => (n.nodeType === "page" || n.nodeType === "header") && matchQuery(n, expr)
+            })())
+            : searchResults
+
+        const { visible, archivedCount } = partitionArchived(scoped)
         set(searchMol.updateSearchResultsAtom, visible, archivedCount)
     })
 

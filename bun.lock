@@ -6,7 +6,6 @@
       "name": "obsidian-tree-search",
       "dependencies": {
         "@mdtree/core": "workspace:*",
-        "@mdtree/parser-native": "workspace:*",
         "jotai": "^2.16.0",
         "jotai-effect": "^2.0.4",
         "js-yaml": "^4.1.0",
@@ -66,16 +65,6 @@
       "devDependencies": {
         "@types/js-yaml": "^4.0.9",
         "@types/markdown-it": "^14.1.2",
-        "typescript": "^5.8.3",
-      },
-    },
-    "packages/parser-native": {
-      "name": "@mdtree/parser-native",
-      "version": "0.1.0",
-      "dependencies": {
-        "@mdtree/core": "workspace:*",
-      },
-      "devDependencies": {
         "typescript": "^5.8.3",
       },
     },
@@ -198,8 +187,6 @@
     "@mdtree/cli": ["@mdtree/cli@workspace:packages/cli"],
 
     "@mdtree/core": ["@mdtree/core@workspace:packages/core"],
-
-    "@mdtree/parser-native": ["@mdtree/parser-native@workspace:packages/parser-native"],
 
     "@nodelib/fs.scandir": ["@nodelib/fs.scandir@2.1.5", "", { "dependencies": { "@nodelib/fs.stat": "2.0.5", "run-parallel": "^1.1.9" } }, "sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g=="],
 

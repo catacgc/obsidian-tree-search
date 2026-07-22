@@ -41,7 +41,7 @@ export { parseCanvasData, type CanvasData, type NodeTextLine } from "./parser/ca
 export { buildNodesFromTextLines } from "./parser/text-lines.ts"
 
 // Search
-export { searchIndex, advancedSearch, searchParents, flattenTasks, type ResultNode } from "./search/search.ts"
+export { searchIndex, advancedSearch, searchParents, flattenTasks, pruneResultTree, type ResultNode } from "./search/search.ts"
 export { parseQuery, matchQuery, firstPassInclude, containsEmoji as queryContainsEmoji, type QueryExpr, type QueryModifier } from "./search/query.ts"
 export { flattenIndex, type TreeNode } from "./search/flatten.ts"
 export { reverseMarkdownParsing } from "./search/copy.ts"

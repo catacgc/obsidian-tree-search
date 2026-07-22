@@ -1,7 +1,9 @@
 import { describe, it, expect } from "bun:test"
 import { loadFixture, search, searchKeys } from "./helpers.ts"
 import { partitionArchived } from "../../search/archive.ts"
-import type { ResultNode } from "../../search/search.ts"
+import { pruneResultTree, type ResultNode } from "../../search/search.ts"
+import { matchQuery, parseQuery } from "../../search/query.ts"
+import type { ParsedNode } from "../../graph/types.ts"
 
 function collectKeysFromResults(nodes: ResultNode[]): string[] {
   const keys: string[] = []
@@ -207,5 +209,48 @@ describe("archive", () => {
     // Alpha and Gamma should still be visible
     expect(visibleKeys.some(k => k.includes("alpha"))).toBe(true)
     expect(visibleKeys.some(k => k.includes("gamma"))).toBe(true)
+  })
+})
+
+// ── insert mode (quick-link filtering) ──────────────────────────────────────────
+
+describe("insert-mode", () => {
+  const g = loadFixture("insert-mode")
+
+  // Mirrors the filter used by the Insert Link modal (searchResultsComputeAtom).
+  function insertResults(query: string): ResultNode[] {
+    const expr = parseQuery(query)
+    const keep = (n: ParsedNode) =>
+      (n.nodeType === "page" || n.nodeType === "header") && matchQuery(n, expr)
+    return pruneResultTree(search(g, query), keep)
+  }
+
+  function collectNodes(nodes: ResultNode[]): ParsedNode[] {
+    const out: ParsedNode[] = []
+    function walk(ns: ResultNode[]): void {
+      for (const n of ns) { out.push(n.node); walk(n.children) }
+    }
+    walk(nodes)
+    return out
+  }
+
+  it("shows only page and header nodes (no text/list-item lines)", () => {
+    const nodes = collectNodes(insertResults("meeting"))
+    expect(nodes.length).toBeGreaterThan(0)
+    expect(nodes.every(n => n.nodeType === "page" || n.nodeType === "header")).toBe(true)
+  })
+
+  it("keeps the matching note's headers nested under it", () => {
+    const keys = collectKeysFromResults(insertResults("meeting"))
+    expect(keys).toContain("meeting notes|")
+    expect(keys.some(k => k.includes("meeting notes#agenda"))).toBe(true)
+    expect(keys.some(k => k.includes("meeting notes#action items"))).toBe(true)
+  })
+
+  it("excludes a note matched only by an inner content line", () => {
+    // "standup" contains a line "[[roadmap]] meeting prep notes" but its own
+    // name/headings do not contain "meeting", so it must not appear.
+    const keys = collectKeysFromResults(insertResults("meeting"))
+    expect(keys.some(k => k.includes("standup"))).toBe(false)
   })
 })
