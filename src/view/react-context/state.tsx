@@ -140,9 +140,10 @@ export const SearchModalMolecule = molecule((mol, scope) => {
         // name/alias/heading matches the query, so only link targets are offered.
         const scoped = isQuickLink
             ? pruneResultTree(searchResults, (() => {
-                // normalize separator to whitespace so multi-level queries match a node's own key
-                const expr = parseQuery(searchQuery.split(separator).join(" "))
-                return (n) => (n.nodeType === "page" || n.nodeType === "header") && matchQuery(n, expr)
+                // AND all stages together so a node's own key must match every term
+                // across the whole query, regardless of hierarchy stage boundaries.
+                const expr: QueryExpr = { type: "and", exprs: parseQuery(searchQuery, separator) }
+                return (n: ParsedNode) => (n.nodeType === "page" || n.nodeType === "header") && matchQuery(n, expr)
             })())
             : searchResults
 
@@ -393,7 +394,8 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     const matchTermsAtom = atom<string[]>((get) => {
         const query = get(actualQueryAtom)
         if (!query) return []
-        return extractTerms(parseQuery(query))
+        const separator = get(separatorAtom)
+        return parseQuery(query, separator).flatMap(extractTerms)
     })
 
     return {
@@ -426,7 +428,6 @@ export const SearchViewMolecule = molecule((mol, scope) => {
 function extractTerms(expr: QueryExpr): string[] {
     switch (expr.type) {
         case "contains":   return [expr.value]
-        case "startsWith": return [expr.value]
         case "equals":     return [expr.value]
         case "and":        return expr.exprs.flatMap(extractTerms)
         case "or":         return expr.exprs.flatMap(extractTerms)
