@@ -26,15 +26,23 @@ function tokenize(input: string, separator: string): Token[] {
   const tokens: Token[] = []
   const isDelimiter = (c: string) => c === "(" || c === ")" || c === "|" || c === separator || c === '"'
   let i = 0
+  let depth = 0
 
   while (i < input.length) {
     const c = input[i]
 
     if (/\s/.test(c)) { i++; continue }
-    if (c === "(") { tokens.push({ kind: "lparen" }); i++; continue }
-    if (c === ")") { tokens.push({ kind: "rparen" }); i++; continue }
+    if (c === "(") { tokens.push({ kind: "lparen" }); depth++; i++; continue }
+    if (c === ")") { tokens.push({ kind: "rparen" }); depth = Math.max(0, depth - 1); i++; continue }
     if (c === "|") { tokens.push({ kind: "pipe" }); i++; continue }
-    if (c === separator) { tokens.push({ kind: "stage" }); i++; continue }
+    if (c === separator) {
+      // Inside parentheses the stage separator isn't meaningful (design doc:
+      // "`.` cannot appear inside parentheses") — treat it as a plain word
+      // boundary instead of splitting into a new stage.
+      if (depth === 0) tokens.push({ kind: "stage" })
+      i++
+      continue
+    }
     if (c === "-") { tokens.push({ kind: "minus" }); i++; continue }
 
     if (c === '"') {
@@ -103,7 +111,10 @@ function parseTokens(tokens: Token[]): QueryExpr[] {
       advance()
       exprs.push(parseAnd())
     }
-    return { type: "or", exprs }
+    const meaningful = exprs.filter(e => e.type !== "empty")
+    if (meaningful.length === 0) return { type: "empty" }
+    if (meaningful.length === 1) return meaningful[0]
+    return { type: "or", exprs: meaningful }
   }
 
   function parseAnd(): QueryExpr {

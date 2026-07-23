@@ -98,6 +98,31 @@ describe("parseQuery / tokenizer", () => {
   it("does not throw on an unclosed parenthesis", () => {
     expect(() => parseQuery("(a", ".")).not.toThrow()
   })
+
+  it("does not split into stages inside parentheses", () => {
+    expect(parseQuery("(a.b)", ".")).toHaveLength(1)
+    expect(parseQuery("(a.b)", ".")[0]).toEqual({
+      type: "and",
+      exprs: [{ type: "contains", value: "a" }, { type: "contains", value: "b" }],
+    })
+  })
+
+  it("negates a whole parenthesized group even when it contains a separator char", () => {
+    const stages = parseQuery("-(a.b)", ".")
+    expect(stages).toHaveLength(1)
+    expect(stages[0]).toEqual({
+      type: "not",
+      expr: { type: "and", exprs: [{ type: "contains", value: "a" }, { type: "contains", value: "b" }] },
+    })
+  })
+
+  it("ignores empty branches from a doubled or trailing pipe instead of matching everything", () => {
+    expect(parseQuery("a || b", ".")[0]).toEqual({
+      type: "or",
+      exprs: [{ type: "contains", value: "a" }, { type: "contains", value: "b" }],
+    })
+    expect(parseQuery("a |", ".")[0]).toEqual({ type: "contains", value: "a" })
+  })
 })
 
 describe("matchQuery", () => {
