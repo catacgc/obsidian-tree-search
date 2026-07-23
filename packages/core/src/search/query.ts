@@ -1,90 +1,192 @@
 import type { ParsedNode } from "../graph/types.ts"
 
-export type QueryModifier =
-  | ":task"
-  | ":emoji"
-  | ":page"
-  | ":header"
-  | ":folder"
-  | ":attachment"
-
-const QUERY_MODIFIERS: QueryModifier[] = [
-  ":task",
-  ":emoji",
-  ":page",
-  ":header",
-  ":folder",
-  ":attachment",
-]
+export type QueryModifierField = "is" | "has"
 
 export type QueryExpr =
   | { type: "contains"; value: string }
   | { type: "empty" }
   | { type: "equals"; value: string }
-  | { type: "startsWith"; value: string }
   | { type: "not"; expr: QueryExpr }
   | { type: "and"; exprs: QueryExpr[] }
   | { type: "or"; exprs: QueryExpr[] }
-  | { type: "modifier"; value: QueryModifier }
+  | { type: "modifier"; field: QueryModifierField; value: string }
 
-function tokenize(query: string): string[] {
-  return query
-    .trim()
-    .split(/\s+/)
-    .filter(t => t.length > 0)
-}
+// ── Tokenizer ─────────────────────────────────────────────────────────────────
 
-export function parseQuery(query: string): QueryExpr {
-  if (!query.trim()) return { type: "empty" }
-  return parseOrGroups(tokenize(query))
-}
+type Token =
+  | { kind: "lparen" }
+  | { kind: "rparen" }
+  | { kind: "pipe" }
+  | { kind: "minus" }
+  | { kind: "stage" }
+  | { kind: "word"; value: string }
+  | { kind: "quoted"; value: string }
 
-function parseOrGroups(tokens: string[]): QueryExpr {
-  const groups = splitByOr(tokens)
-  if (groups.length === 1) return parseAndGroup(groups[0])
-  return { type: "or", exprs: groups.map(parseAndGroup) }
-}
+function tokenize(input: string, separator: string): Token[] {
+  const tokens: Token[] = []
+  const isDelimiter = (c: string) => c === "(" || c === ")" || c === "|" || c === separator || c === '"'
+  let i = 0
 
-function parseAndGroup(tokens: string[]): QueryExpr {
-  if (tokens.length === 1) return parseToken(tokens[0])
-  return { type: "and", exprs: tokens.map(parseToken) }
-}
+  while (i < input.length) {
+    const c = input[i]
 
-function splitByOr(tokens: string[]): string[][] {
-  const groups: string[][] = []
-  let current: string[] = []
-  for (const t of tokens) {
-    if (t === "|") {
-      if (current.length > 0) { groups.push(current); current = [] }
-    } else {
-      current.push(t)
+    if (/\s/.test(c)) { i++; continue }
+    if (c === "(") { tokens.push({ kind: "lparen" }); i++; continue }
+    if (c === ")") { tokens.push({ kind: "rparen" }); i++; continue }
+    if (c === "|") { tokens.push({ kind: "pipe" }); i++; continue }
+    if (c === separator) { tokens.push({ kind: "stage" }); i++; continue }
+    if (c === "-") { tokens.push({ kind: "minus" }); i++; continue }
+
+    if (c === '"') {
+      let j = i + 1
+      let value = ""
+      while (j < input.length && input[j] !== '"') { value += input[j]; j++ }
+      tokens.push({ kind: "quoted", value })
+      i = j + 1
+      continue
     }
+
+    // Bareword: read until whitespace or a delimiter. A '-' does not stop
+    // this scan once started, so "well-known" stays one word — only a
+    // fresh '-' at a token boundary (handled above) is ever an operator.
+    let j = i
+    let value = ""
+    while (j < input.length && !/\s/.test(input[j]) && !isDelimiter(input[j])) {
+      value += input[j]
+      j++
+    }
+    tokens.push({ kind: "word", value })
+    i = j
   }
-  if (current.length > 0) groups.push(current)
-  return groups
+
+  return tokens
 }
 
-function parseToken(token: string): QueryExpr {
-  if (token.startsWith(":")) {
-    const mod = QUERY_MODIFIERS.find(m => m.startsWith(token))
-    if (mod) return { type: "modifier", value: mod }
-  }
-  if (token.startsWith('"') && token.endsWith('"')) {
-    return { type: "equals", value: token.slice(1, -1) }
-  }
-  if (token.startsWith('"')) {
-    return { type: "startsWith", value: token.slice(1) }
-  }
-  if (token.startsWith("-")) {
-    return { type: "not", expr: { type: "contains", value: token.slice(1) } }
-  }
-  return { type: "contains", value: token }
+// ── Parser (recursive descent) ───────────────────────────────────────────────
+//
+// Precedence, tightest to loosest: NOT > AND (juxtaposition) > OR (|) > stage.
+// query := stage ( SEP stage )*
+// stage := orExpr
+// orExpr := andExpr ( "|" andExpr )*
+// andExpr := notExpr*
+// notExpr := "-" atom | atom
+// atom := "(" orExpr ")" | field | word | quoted
+//
+// The parser never throws: unmatched parens or stray operators are absorbed
+// so a partially-typed query never crashes live search.
+
+function matchField(word: string): { field: QueryModifierField; value: string } | null {
+  const m = /^(is|has):(.+)$/.exec(word)
+  if (!m) return null
+  return { field: m[1] as QueryModifierField, value: m[2] }
 }
+
+function parseTokens(tokens: Token[]): QueryExpr[] {
+  let pos = 0
+  const peek = (): Token | undefined => tokens[pos]
+  const advance = (): Token | undefined => tokens[pos++]
+
+  function parseStages(): QueryExpr[] {
+    const stages = [parseOr()]
+    while (peek()?.kind === "stage") {
+      advance()
+      stages.push(parseOr())
+    }
+    return stages
+  }
+
+  function parseOr(): QueryExpr {
+    const first = parseAnd()
+    if (peek()?.kind !== "pipe") return first
+    const exprs = [first]
+    while (peek()?.kind === "pipe") {
+      advance()
+      exprs.push(parseAnd())
+    }
+    return { type: "or", exprs }
+  }
+
+  function parseAnd(): QueryExpr {
+    const exprs: QueryExpr[] = []
+    while (true) {
+      const t = peek()
+      if (!t || t.kind === "pipe" || t.kind === "stage" || t.kind === "rparen") break
+      exprs.push(parseNot())
+    }
+    if (exprs.length === 0) return { type: "empty" }
+    if (exprs.length === 1) return exprs[0]
+    return { type: "and", exprs }
+  }
+
+  function parseNot(): QueryExpr {
+    if (peek()?.kind === "minus") {
+      advance()
+      return { type: "not", expr: parseAtom() }
+    }
+    return parseAtom()
+  }
+
+  function parseAtom(): QueryExpr {
+    const tok = advance()
+    if (!tok) return { type: "empty" }
+
+    if (tok.kind === "lparen") {
+      const inner = parseOr()
+      if (peek()?.kind === "rparen") advance()
+      return inner
+    }
+    if (tok.kind === "quoted") {
+      return { type: "equals", value: tok.value }
+    }
+    if (tok.kind === "word") {
+      const field = matchField(tok.value)
+      if (field) return { type: "modifier", field: field.field, value: field.value }
+      return { type: "contains", value: tok.value }
+    }
+    // A stray operator token in atom position (e.g. dangling "|" or ")")
+    // — swallow it rather than crashing.
+    return { type: "empty" }
+  }
+
+  return parseStages()
+}
+
+export function parseQuery(query: string, separator = "."): QueryExpr[] {
+  const tokens = tokenize(query.toLowerCase().trim(), separator)
+  return parseTokens(tokens)
+}
+
+// ── Matching ──────────────────────────────────────────────────────────────────
 
 const emojiRegex = /[\p{Emoji_Presentation}\p{Extended_Pictographic}]/u
 
 export function containsEmoji(text: string): boolean {
   return emojiRegex.test(text)
+}
+
+function matchModifier(attrs: ParsedNode, field: QueryModifierField, value: string): boolean {
+  if (field === "is") {
+    switch (value) {
+      case "page": return attrs.nodeType === "page"
+      case "header": return attrs.nodeType === "header"
+      case "text": return attrs.nodeType === "text"
+      case "folder": return attrs.nodeType === "folder"
+      case "attachment": return attrs.nodeType === "attachment"
+      case "task": return attrs.nodeType === "text" && attrs.isTask === true
+      default: return false
+    }
+  }
+  // field === "has"
+  switch (value) {
+    case "emoji": return containsEmoji(attrs.searchKey)
+    case "link":
+      return attrs.nodeType === "text" &&
+        attrs.parsedTokens.some(t => t.tokenType === "obsidian_link" || t.tokenType === "link")
+    case "page":
+      return attrs.nodeType === "text" &&
+        attrs.parsedTokens.some(t => t.tokenType === "obsidian_link")
+    default: return false
+  }
 }
 
 export function matchQuery(attrs: ParsedNode, expr: QueryExpr): boolean {
@@ -95,8 +197,6 @@ export function matchQuery(attrs: ParsedNode, expr: QueryExpr): boolean {
       return attrs.searchKey.toLowerCase().includes(expr.value.toLowerCase())
     case "equals":
       return attrs.searchKey.toLowerCase() === expr.value.toLowerCase()
-    case "startsWith":
-      return attrs.searchKey.toLowerCase().startsWith(expr.value.toLowerCase())
     case "not":
       return !matchQuery(attrs, expr.expr)
     case "and":
@@ -104,14 +204,7 @@ export function matchQuery(attrs: ParsedNode, expr: QueryExpr): boolean {
     case "or":
       return expr.exprs.some(e => matchQuery(attrs, e))
     case "modifier":
-      if (expr.value.startsWith(":t"))
-        return attrs.nodeType === "text" && (attrs as { isTask?: boolean }).isTask === true
-      if (expr.value.startsWith(":e")) return containsEmoji(attrs.searchKey)
-      if (expr.value.startsWith(":p")) return attrs.nodeType === "page"
-      if (expr.value.startsWith(":h")) return attrs.nodeType === "header"
-      if (expr.value.startsWith(":f")) return attrs.nodeType === "folder"
-      if (expr.value.startsWith(":a")) return attrs.nodeType === "attachment"
-      return false
+      return matchModifier(attrs, expr.field, expr.value)
   }
 }
 
