@@ -2,7 +2,8 @@ import { describe, it, expect } from "bun:test"
 import { loadFixture, search, searchKeys } from "./helpers.ts"
 import { partitionArchived } from "../../search/archive.ts"
 import { pruneResultTree, type ResultNode } from "../../search/search.ts"
-import { matchQuery, parseQuery } from "../../search/query.ts"
+import { matchQuery, parseQuery, type QueryExpr } from "../../search/query.ts"
+import { DEFAULT_SETTINGS } from "../../graph/indexer.ts"
 import type { ParsedNode } from "../../graph/types.ts"
 
 function collectKeysFromResults(nodes: ResultNode[]): string[] {
@@ -219,7 +220,7 @@ describe("insert-mode", () => {
 
   // Mirrors the filter used by the Insert Link modal (searchResultsComputeAtom).
   function insertResults(query: string): ResultNode[] {
-    const expr = parseQuery(query)
+    const expr: QueryExpr = { type: "and", exprs: parseQuery(query, DEFAULT_SETTINGS.searchSeparator) }
     const keep = (n: ParsedNode) =>
       (n.nodeType === "page" || n.nodeType === "header") && matchQuery(n, expr)
     return pruneResultTree(search(g, query), keep)
@@ -252,5 +253,35 @@ describe("insert-mode", () => {
     // name/headings do not contain "meeting", so it must not appear.
     const keys = collectKeysFromResults(insertResults("meeting"))
     expect(keys.some(k => k.includes("standup"))).toBe(false)
+  })
+})
+
+// ── type-filters (is:/has: field syntax) ─────────────────────────────────────
+
+describe("type-filters", () => {
+  const g = loadFixture("type-filters")
+
+  it("is:page finds the page root with its whole subtree, text lines included", () => {
+    const keys = searchKeys(g, "is:page")
+    expect(keys.some(k => k.includes("notes home"))).toBe(true)
+    expect(keys.some(k => k.includes("groceries"))).toBe(true)
+  })
+
+  it("is:page -is:text (single stage) still keeps text lines: matching a node keeps its whole subtree", () => {
+    const keys = searchKeys(g, "is:page -is:text")
+    expect(keys.some(k => k.includes("notes home"))).toBe(true)
+    expect(keys.some(k => k.includes("groceries"))).toBe(true)
+  })
+
+  it("is:page.-is:text (two stages) prunes text lines from within the matched page", () => {
+    const keys = searchKeys(g, "is:page.-is:text")
+    expect(keys.some(k => k.includes("notes home"))).toBe(true)
+    expect(keys.some(k => k.includes("overview"))).toBe(true)
+    expect(keys.some(k => k.includes("groceries"))).toBe(false)
+  })
+
+  it("has:emoji matches only nodes with an emoji in their search key", () => {
+    const keys = searchKeys(g, "has:emoji")
+    expect(keys).toHaveLength(0) // fixture has no emoji content
   })
 })
