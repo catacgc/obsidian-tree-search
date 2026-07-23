@@ -112,10 +112,7 @@ export function searchIndex(
 ): ResultNode[] {
   if (qs.length < 3) return []
 
-  const expressions = qs
-    .split(separator)
-    .map(w => w.toLowerCase().trim())
-    .map(parseQuery)
+  const expressions = parseQuery(qs, separator)
 
   const roots = new Map<string, ResultNode>()
   const firstPass = expressions[0]
@@ -150,10 +147,7 @@ export function advancedSearch(
 
   if (!query) return tree.children
 
-  const expressions = query
-    .split(separator)
-    .map(w => w.toLowerCase().trim())
-    .map(parseQuery)
+  const expressions = parseQuery(query, separator)
 
   return filterDown(tree.children, expressions)
 }
