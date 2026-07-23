@@ -132,7 +132,9 @@ function parseTokens(tokens: Token[]): QueryExpr[] {
   function parseNot(): QueryExpr {
     if (peek()?.kind === "minus") {
       advance()
-      return { type: "not", expr: parseAtom() }
+      const inner = parseAtom()
+      if (inner.type === "empty") return { type: "empty" }
+      return { type: "not", expr: inner }
     }
     return parseAtom()
   }
@@ -195,7 +197,7 @@ function matchModifier(attrs: ParsedNode, field: QueryModifierField, value: stri
         attrs.parsedTokens.some(t => t.tokenType === "obsidian_link" || t.tokenType === "link")
     case "page":
       return attrs.nodeType === "text" &&
-        attrs.parsedTokens.some(t => t.tokenType === "obsidian_link")
+        attrs.parsedTokens.some(t => t.tokenType === "obsidian_link" && !t.headerName)
     default: return false
   }
 }

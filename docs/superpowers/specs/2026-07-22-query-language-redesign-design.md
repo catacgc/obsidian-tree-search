@@ -110,7 +110,7 @@ expressiveness of the new grammar (negation, grouping, fields).
 | Field | Values | Meaning |
 |---|---|---|
 | `is:` | `page`, `header`, `text`, `folder`, `attachment`, `task` | The node's own kind (node type), or `task` for a text node that is a checkbox item |
-| `has:` | `emoji`, `link`, `page` | The node's content contains this — `has:emoji` (emoji in the search key), `has:link` (any wikilink), `has:page` (a wikilink that resolves to a page-typed node) |
+| `has:` | `emoji`, `link`, `page` | The node's content contains this — `has:emoji` (emoji in the search key), `has:link` (any wikilink), `has:page` (a wikilink to a page itself, as opposed to a link into a header fragment within one (`[[Note]]` vs `[[Note#Header]]`)) |
 
 `is:page` and `has:page` are deliberately distinct: the former is the node's
 own type, the latter is about what the node references.

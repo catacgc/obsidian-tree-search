@@ -18,10 +18,12 @@ function header(searchKey: string): ParsedNode {
   }
 }
 
-function text(searchKey: string, opts: { isTask?: boolean; isCompleted?: boolean; hasLink?: boolean } = {}): ParsedNode {
+function text(searchKey: string, opts: { isTask?: boolean; isCompleted?: boolean; hasLink?: boolean; hasHeaderLink?: boolean } = {}): ParsedNode {
   return {
     nodeType: "text", searchKey, location: baseLocation, boost: 0, ageDays: 0,
-    parsedTokens: opts.hasLink
+    parsedTokens: opts.hasHeaderLink
+      ? [{ tokenType: "obsidian_link", source: searchKey, pageTarget: searchKey, headerName: "section" }]
+      : opts.hasLink
       ? [{ tokenType: "obsidian_link", source: searchKey, pageTarget: searchKey }]
       : [{ tokenType: "text", text: searchKey, decoration: "none" }],
     tags: [], isTask: opts.isTask ?? false, isCompleted: opts.isCompleted ?? false,
@@ -123,6 +125,17 @@ describe("parseQuery / tokenizer", () => {
     })
     expect(parseQuery("a |", ".")[0]).toEqual({ type: "contains", value: "a" })
   })
+
+  it("treats a dangling negation as a no-op instead of poisoning the query to always-false", () => {
+    expect(parseQuery("foo -", ".")[0]).toEqual({
+      type: "and",
+      exprs: [{ type: "contains", value: "foo" }, { type: "empty" }],
+    })
+    expect(parseQuery("--foo", ".")[0]).toEqual({
+      type: "and",
+      exprs: [{ type: "empty" }, { type: "contains", value: "foo" }],
+    })
+  })
 })
 
 describe("matchQuery", () => {
@@ -155,6 +168,12 @@ describe("matchQuery", () => {
     const expr: QueryExpr = { type: "modifier", field: "has", value: "link" }
     expect(matchQuery(text("see [[foo]]", { hasLink: true }), expr)).toBe(true)
     expect(matchQuery(text("plain text"), expr)).toBe(false)
+  })
+
+  it("has:page matches a page-level wikilink but not a header-targeted one", () => {
+    const expr: QueryExpr = { type: "modifier", field: "has", value: "page" }
+    expect(matchQuery(text("see [[foo]]", { hasLink: true }), expr)).toBe(true)
+    expect(matchQuery(text("see [[foo#bar]]", { hasHeaderLink: true }), expr)).toBe(false)
   })
 
   it("an unknown field value never matches", () => {
