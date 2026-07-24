@@ -17,7 +17,7 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
     const {
         decExpandAtom, incExpandAtom, resetCollapseAtom, searchQueryAtom, selectedNodeAtom, getExpandLevel,
         searchPlaceholderAtom, suggestionsAtom, suggestionIndexAtom, cursorPosAtom, dismissSuggestionsAtom,
-        resetSuggestionsAtom,
+        resetSuggestionsAtom, repositionSuggestionsAtom,
     } = useMolecule(SearchViewMolecule)
 
     const decExpand = useSetAtom(decExpandAtom)
@@ -39,6 +39,7 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
     const [cursorPos, setCursorPos] = useAtom(cursorPosAtom)
     const dismissSuggestions = useSetAtom(dismissSuggestionsAtom)
     const resetSuggestions = useSetAtom(resetSuggestionsAtom)
+    const repositionSuggestions = useSetAtom(repositionSuggestionsAtom)
 
     const setSearch = (search: string) => {
         setSearchQuery({ query: search })
@@ -89,7 +90,7 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
                         spellCheck="false"
                         onChange={ev => { setSearch(ev.target.value); resetSuggestions(); updateCursor(ev) }}
                         onKeyDown={handleKeyDown}
-                        onSelect={ev => { updateCursor(ev); resetSuggestions() }}
+                        onSelect={ev => { updateCursor(ev); repositionSuggestions() }}
                         value={searchQuery.query}
                         placeholder={searchPlaceholder}
                         className="w-full pl-5 ml-1 mb-2 mt-2 pr-16 py-3

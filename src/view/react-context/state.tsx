@@ -426,6 +426,8 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         set(rawSuggestionIndexAtom, 0)
     })
 
+    const repositionSuggestionsAtom = atom(null, (_get, set) => set(rawSuggestionIndexAtom, 0))
+
     return {
             scopeName: {name: scp.name, instance: instance},
             actualQueryAtom,
@@ -448,7 +450,8 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             setDefaultExpandLevelAtom,
             expandNodeAtom, selectedLineAtom, updateHoveredLineAtom, hoveredLineAtom,
             matchTermsAtom,
-            cursorPosAtom, suggestionsAtom, suggestionIndexAtom, dismissSuggestionsAtom, resetSuggestionsAtom
+            cursorPosAtom, suggestionsAtom, suggestionIndexAtom, dismissSuggestionsAtom, resetSuggestionsAtom,
+            repositionSuggestionsAtom
     }
 })
 
