@@ -43,6 +43,7 @@ export { buildNodesFromTextLines } from "./parser/text-lines.ts"
 // Search
 export { searchIndex, advancedSearch, searchParents, flattenTasks, pruneResultTree, type ResultNode } from "./search/search.ts"
 export { parseQuery, matchQuery, firstPassInclude, containsEmoji as queryContainsEmoji, type QueryExpr, type QueryModifierField } from "./search/query.ts"
+export { suggestAt, spliceSuggestion, type Suggestion } from "./search/suggest.ts"
 export { flattenIndex, type TreeNode } from "./search/flatten.ts"
 export { reverseMarkdownParsing } from "./search/copy.ts"
 export { isArchived, partitionArchived } from "./search/archive.ts"
