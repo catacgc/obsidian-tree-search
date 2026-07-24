@@ -201,3 +201,54 @@ describe("firstPassInclude", () => {
     expect(firstPassInclude(text("hello"), expr)).toBe(false)
   })
 })
+
+describe("prefix matching for is:/has: values", () => {
+  it("resolves has:e to has:emoji (unique prefix)", () => {
+    expect(parseQuery("has:e", ".")[0]).toEqual({ type: "modifier", field: "has", value: "emoji" })
+  })
+
+  it("resolves is:p to is:page (unique prefix)", () => {
+    expect(parseQuery("is:p", ".")[0]).toEqual({ type: "modifier", field: "is", value: "page" })
+  })
+
+  it("leaves is:t unresolved (ambiguous between task and text) so it matches nothing", () => {
+    const expr = parseQuery("is:t", ".")[0]
+    expect(expr).toEqual({ type: "modifier", field: "is", value: "t" })
+    expect(matchQuery(page("home"), expr)).toBe(false)
+    expect(matchQuery(text("hello"), expr)).toBe(false)
+  })
+
+  it("an exact full value still resolves even though prefix-matching alone would find it too", () => {
+    expect(parseQuery("is:page", ".")[0]).toEqual({ type: "modifier", field: "is", value: "page" })
+  })
+})
+
+describe("legacy bare shortcuts", () => {
+  it("resolves :p to is:page", () => {
+    expect(parseQuery(":p", ".")[0]).toEqual({ type: "modifier", field: "is", value: "page" })
+  })
+
+  it("resolves :e to has:emoji", () => {
+    expect(parseQuery(":e", ".")[0]).toEqual({ type: "modifier", field: "has", value: "emoji" })
+  })
+
+  it("resolves :t to is:task, unambiguous even though is:text now exists", () => {
+    expect(parseQuery(":t", ".")[0]).toEqual({ type: "modifier", field: "is", value: "task" })
+  })
+
+  it("resolves full legacy names too, e.g. :page and :header", () => {
+    expect(parseQuery(":page", ".")[0]).toEqual({ type: "modifier", field: "is", value: "page" })
+    expect(parseQuery(":header", ".")[0]).toEqual({ type: "modifier", field: "is", value: "header" })
+  })
+
+  it("falls back to a literal search for an unrecognized bare shortcut", () => {
+    expect(parseQuery(":xyz", ".")[0]).toEqual({ type: "contains", value: ":xyz" })
+  })
+
+  it("negates a legacy shortcut like the new syntax", () => {
+    expect(parseQuery("-:p", ".")[0]).toEqual({
+      type: "not",
+      expr: { type: "modifier", field: "is", value: "page" },
+    })
+  })
+})

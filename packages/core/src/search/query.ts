@@ -11,6 +11,24 @@ export type QueryExpr =
   | { type: "or"; exprs: QueryExpr[] }
   | { type: "modifier"; field: QueryModifierField; value: string }
 
+export const IS_VALUES = ["page", "header", "text", "folder", "attachment", "task"]
+export const HAS_VALUES = ["emoji", "link", "page"]
+
+const LEGACY_MODIFIERS: Record<string, { field: QueryModifierField; value: string }> = {
+  page: { field: "is", value: "page" },
+  header: { field: "is", value: "header" },
+  folder: { field: "is", value: "folder" },
+  attachment: { field: "is", value: "attachment" },
+  task: { field: "is", value: "task" },
+  emoji: { field: "has", value: "emoji" },
+}
+
+function resolveUniquePrefix(candidates: string[], typed: string): string | null {
+  if (candidates.includes(typed)) return typed
+  const matches = candidates.filter(c => c.startsWith(typed))
+  return matches.length === 1 ? matches[0] : null
+}
+
 // ── Tokenizer ─────────────────────────────────────────────────────────────────
 
 type Token =
@@ -86,7 +104,18 @@ function tokenize(input: string, separator: string): Token[] {
 function matchField(word: string): { field: QueryModifierField; value: string } | null {
   const m = /^(is|has):(.+)$/.exec(word)
   if (!m) return null
-  return { field: m[1] as QueryModifierField, value: m[2] }
+  const field = m[1] as QueryModifierField
+  const typedValue = m[2]
+  const values = field === "is" ? IS_VALUES : HAS_VALUES
+  const resolved = resolveUniquePrefix(values, typedValue)
+  return { field, value: resolved ?? typedValue }
+}
+
+function matchLegacyModifier(word: string): { field: QueryModifierField; value: string } | null {
+  const m = /^:([a-z]+)$/.exec(word)
+  if (!m) return null
+  const resolved = resolveUniquePrefix(Object.keys(LEGACY_MODIFIERS), m[1])
+  return resolved ? LEGACY_MODIFIERS[resolved] : null
 }
 
 function parseTokens(tokens: Token[]): QueryExpr[] {
@@ -154,6 +183,8 @@ function parseTokens(tokens: Token[]): QueryExpr[] {
     if (tok.kind === "word") {
       const field = matchField(tok.value)
       if (field) return { type: "modifier", field: field.field, value: field.value }
+      const legacy = matchLegacyModifier(tok.value)
+      if (legacy) return { type: "modifier", field: legacy.field, value: legacy.value }
       return { type: "contains", value: tok.value }
     }
     // A stray operator token in atom position (e.g. dangling "|" or ")")
