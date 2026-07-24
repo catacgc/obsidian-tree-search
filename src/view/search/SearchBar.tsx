@@ -89,8 +89,7 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
                         spellCheck="false"
                         onChange={ev => { setSearch(ev.target.value); resetSuggestions(); updateCursor(ev) }}
                         onKeyDown={handleKeyDown}
-                        onClick={updateCursor}
-                        onKeyUp={updateCursor}
+                        onSelect={ev => { updateCursor(ev); resetSuggestions() }}
                         value={searchQuery.query}
                         placeholder={searchPlaceholder}
                         className="w-full pl-5 ml-1 mb-2 mt-2 pr-16 py-3
