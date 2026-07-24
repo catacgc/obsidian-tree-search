@@ -1,5 +1,5 @@
 import {TreeNode} from '../search/SearchViewFlatten'
-import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, matchQuery, pruneResultTree, type QueryExpr, partitionArchived} from '@mdtree/core'
+import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, matchQuery, pruneResultTree, type QueryExpr, partitionArchived, suggestAt, type Suggestion} from '@mdtree/core'
 import {atom, useAtomValue} from 'jotai'
 import {ParsedNode, ParsedTextToken, TextNode, Location} from '@mdtree/core'
 
@@ -398,6 +398,34 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         return parseQuery(query, separator).flatMap(extractTerms)
     })
 
+    const cursorPosAtom = atom(0)
+
+    const rawSuggestionsAtom = atom<Suggestion[]>((get) => {
+        const query = get(actualQueryAtom)
+        const cursorPos = get(cursorPosAtom)
+        return suggestAt(query, cursorPos)
+    })
+
+    const suggestionsDismissedAtom = atom(false)
+
+    const suggestionsAtom = atom<Suggestion[]>((get) =>
+        get(suggestionsDismissedAtom) ? [] : get(rawSuggestionsAtom)
+    )
+
+    const rawSuggestionIndexAtom = atom(0)
+
+    const suggestionIndexAtom = atom(
+        (get) => Math.min(get(rawSuggestionIndexAtom), Math.max(0, get(suggestionsAtom).length - 1)),
+        (_get, set, index: number) => set(rawSuggestionIndexAtom, index)
+    )
+
+    const dismissSuggestionsAtom = atom(null, (_get, set) => set(suggestionsDismissedAtom, true))
+
+    const resetSuggestionsAtom = atom(null, (_get, set) => {
+        set(suggestionsDismissedAtom, false)
+        set(rawSuggestionIndexAtom, 0)
+    })
+
     return {
             scopeName: {name: scp.name, instance: instance},
             actualQueryAtom,
@@ -419,7 +447,8 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             searchPlaceholderAtom,
             setDefaultExpandLevelAtom,
             expandNodeAtom, selectedLineAtom, updateHoveredLineAtom, hoveredLineAtom,
-            matchTermsAtom
+            matchTermsAtom,
+            cursorPosAtom, suggestionsAtom, suggestionIndexAtom, dismissSuggestionsAtom, resetSuggestionsAtom
     }
 })
 

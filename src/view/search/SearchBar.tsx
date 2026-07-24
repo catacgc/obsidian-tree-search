@@ -4,6 +4,8 @@ import {useUrlOpener} from "./useUrlOpener";
 import {useAtom, useAtomValue, useSetAtom} from "jotai";
 import {useMolecule} from "bunshi/react";
 import {GlobalAppMolecule, SearchViewMolecule} from "../react-context/state";
+import {spliceSuggestion, type Suggestion} from "@mdtree/core";
+import {SearchAutocomplete} from "./SearchAutocomplete";
 
 export type SearchBarProps = {
     isQuickLink: boolean
@@ -12,8 +14,11 @@ export type SearchBarProps = {
 export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
 
     const { isGraphLoadingAtom, lastSearchAtom } = useMolecule(GlobalAppMolecule)
-    const { decExpandAtom, incExpandAtom, resetCollapseAtom, searchQueryAtom, selectedNodeAtom, getExpandLevel, searchPlaceholderAtom }
-     = useMolecule(SearchViewMolecule)
+    const {
+        decExpandAtom, incExpandAtom, resetCollapseAtom, searchQueryAtom, selectedNodeAtom, getExpandLevel,
+        searchPlaceholderAtom, suggestionsAtom, suggestionIndexAtom, cursorPosAtom, dismissSuggestionsAtom,
+        resetSuggestionsAtom,
+    } = useMolecule(SearchViewMolecule)
 
     const decExpand = useSetAtom(decExpandAtom)
     const incExpand = useSetAtom(incExpandAtom)
@@ -29,9 +34,44 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
     const [searchQuery, setSearchQuery] = useAtom(searchQueryAtom)
     const saveLastSearch = useSetAtom(lastSearchAtom)
 
+    const suggestions = useAtomValue(suggestionsAtom)
+    const [suggestionIndex, setSuggestionIndex] = useAtom(suggestionIndexAtom)
+    const [cursorPos, setCursorPos] = useAtom(cursorPosAtom)
+    const dismissSuggestions = useSetAtom(dismissSuggestionsAtom)
+    const resetSuggestions = useSetAtom(resetSuggestionsAtom)
+
     const setSearch = (search: string) => {
         setSearchQuery({ query: search })
         saveLastSearch({ query: search })
+    }
+
+    const updateCursor = (ev: React.SyntheticEvent<HTMLInputElement>) => {
+        setCursorPos(ev.currentTarget.selectionStart ?? ev.currentTarget.value.length)
+    }
+
+    const acceptSuggestion = (suggestion: Suggestion) => {
+        const spliced = spliceSuggestion(searchQuery.query, cursorPos, suggestion.insertText)
+        setSearch(spliced.query)
+        setCursorPos(spliced.cursorPos)
+        resetSuggestions()
+    }
+
+    const handleKeyDown = (ev: React.KeyboardEvent<HTMLInputElement>) => {
+        if (suggestions.length === 0) return
+
+        if (ev.key === "ArrowDown") {
+            ev.preventDefault(); ev.stopPropagation()
+            setSuggestionIndex((suggestionIndex + 1) % suggestions.length)
+        } else if (ev.key === "ArrowUp") {
+            ev.preventDefault(); ev.stopPropagation()
+            setSuggestionIndex((suggestionIndex - 1 + suggestions.length) % suggestions.length)
+        } else if (ev.key === "Tab") {
+            ev.preventDefault(); ev.stopPropagation()
+            acceptSuggestion(suggestions[suggestionIndex])
+        } else if (ev.key === "Escape") {
+            ev.preventDefault(); ev.stopPropagation()
+            dismissSuggestions()
+        }
     }
 
     const { linkRef, tryOpenUrl } = useUrlOpener()
@@ -47,8 +87,10 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
                         enterKeyHint="search"
                         type="search"
                         spellCheck="false"
-                        onChange={ev => setSearch(ev.target.value)}
-                        // onKeyDown={handleKeyDown}
+                        onChange={ev => { setSearch(ev.target.value); resetSuggestions(); updateCursor(ev) }}
+                        onKeyDown={handleKeyDown}
+                        onClick={updateCursor}
+                        onKeyUp={updateCursor}
                         value={searchQuery.query}
                         placeholder={searchPlaceholder}
                         className="w-full pl-5 ml-1 mb-2 mt-2 pr-16 py-3
@@ -56,6 +98,13 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
                         outline-none transition-all duration-150
                         bg-obs-base-0
                         "
+                    />
+
+                    <SearchAutocomplete
+                        suggestions={suggestions}
+                        highlightedIndex={suggestionIndex}
+                        onHover={setSuggestionIndex}
+                        onAccept={acceptSuggestion}
                     />
 
                     <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center space-x-1">
@@ -86,9 +135,9 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
                     </button>
                 </div>
             </div>
-            
+
         </div>
-        
+
     </div>
     </>
-} 
+}
