@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test"
-import { parseQuery, matchQuery, firstPassInclude, type QueryExpr } from "../search/query.ts"
+import { parseQuery, matchQuery, firstPassInclude, type QueryExpr, IS_VALUES, HAS_VALUES } from "../search/query.ts"
 import type { ParsedNode } from "../graph/types.ts"
 
 const baseLocation = { path: "test.md", position: { start: { line: 0, ch: 0 }, end: { line: 0, ch: 0 } } }
@@ -15,6 +15,20 @@ function header(searchKey: string): ParsedNode {
   return {
     nodeType: "header", searchKey, location: baseLocation, boost: 0, ageDays: 0,
     page: "page", header: searchKey, indent: 1,
+  }
+}
+
+function folder(searchKey: string): ParsedNode {
+  return {
+    nodeType: "folder", searchKey, location: baseLocation, boost: 0, ageDays: 0,
+    path: searchKey, name: searchKey, folderNote: "",
+  }
+}
+
+function attachment(searchKey: string): ParsedNode {
+  return {
+    nodeType: "attachment", searchKey, location: baseLocation, boost: 0, ageDays: 0,
+    name: searchKey, extension: "png", aliases: [],
   }
 }
 
@@ -186,6 +200,24 @@ describe("matchQuery", () => {
     expect(matchQuery(page("home"), expr)).toBe(true)
     expect(matchQuery(text("hello"), expr)).toBe(false)
   })
+
+  it("every IS_VALUES/HAS_VALUES entry is a real, matchable modifier (catches drift from matchModifier's switch)", () => {
+    for (const value of IS_VALUES) {
+      const expr: QueryExpr = { type: "modifier", field: "is", value }
+      const matchesSomething =
+        matchQuery(page("x"), expr) || matchQuery(header("x"), expr) ||
+        matchQuery(text("x", { isTask: true }), expr) || matchQuery(text("x"), expr) ||
+        matchQuery(folder("x"), expr) || matchQuery(attachment("x"), expr)
+      expect(matchesSomething).toBe(true)
+    }
+    for (const value of HAS_VALUES) {
+      const expr: QueryExpr = { type: "modifier", field: "has", value }
+      const matchesSomething =
+        matchQuery(text("has emoji 🎉"), expr) ||
+        matchQuery(text("has link", { hasLink: true }), expr)
+      expect(matchesSomething).toBe(true)
+    }
+  })
 })
 
 describe("firstPassInclude", () => {
@@ -239,6 +271,12 @@ describe("legacy bare shortcuts", () => {
   it("resolves full legacy names too, e.g. :page and :header", () => {
     expect(parseQuery(":page", ".")[0]).toEqual({ type: "modifier", field: "is", value: "page" })
     expect(parseQuery(":header", ".")[0]).toEqual({ type: "modifier", field: "is", value: "header" })
+  })
+
+  it("resolves the remaining single-letter shortcuts: :f, :h, :a", () => {
+    expect(parseQuery(":f", ".")[0]).toEqual({ type: "modifier", field: "is", value: "folder" })
+    expect(parseQuery(":h", ".")[0]).toEqual({ type: "modifier", field: "is", value: "header" })
+    expect(parseQuery(":a", ".")[0]).toEqual({ type: "modifier", field: "is", value: "attachment" })
   })
 
   it("falls back to a literal search for an unrecognized bare shortcut", () => {
