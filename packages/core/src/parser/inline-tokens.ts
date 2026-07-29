@@ -3,6 +3,15 @@ import MarkdownIt from "markdown-it"
 type Token = any
 import type { MetaActionToken, MetaMdtreeToken, ParsedTextToken } from "../graph/types.ts"
 
+// Remove the query string (`?…`) from any http(s) URL in the text, keeping
+// scheme/domain/path. Used to keep query-param noise out of search keys.
+export function stripUrlQueryStrings(text: string): string {
+  return text.replace(/https?:\/\/[^\s)]+/g, url => {
+    const q = url.indexOf("?")
+    return q === -1 ? url : url.slice(0, q)
+  })
+}
+
 // ── markdown-it plugins ───────────────────────────────────────────────────────
 
 function inlineHttpLinkPlugin(md: MarkdownIt): void {

@@ -2,7 +2,7 @@ import type { DvList, DvPage, HeaderNode, ParsedNode, ParsedTextToken, TextNode 
 import type { NotesGraph } from "./graph.ts"
 import { getKey } from "./graph.ts"
 import { calculateBoost, getAgeDays } from "./boost.ts"
-import { parseTokens } from "../parser/inline-tokens.ts"
+import { parseTokens, stripUrlQueryStrings } from "../parser/inline-tokens.ts"
 
 export type IndexSettings = {
   parentRelation: string // default: "parent"
@@ -68,7 +68,7 @@ function createNodeFromText(
     return graph.createVirtualPage(refs[0], location, ageDays)
   }
 
-  const searchKey = item.text.toLowerCase()
+  const searchKey = stripUrlQueryStrings(item.text).toLowerCase()
   const textNode: TextNode = {
     nodeType: "text",
     location,

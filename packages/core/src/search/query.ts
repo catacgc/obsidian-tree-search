@@ -1,6 +1,6 @@
 import type { ParsedNode } from "../graph/types.ts"
 
-export type QueryModifierField = "is" | "has"
+export type QueryModifierField = "is" | "has" | "in"
 
 export type QueryExpr =
   | { type: "contains"; value: string }
@@ -13,6 +13,25 @@ export type QueryExpr =
 
 export const IS_VALUES = ["page", "header", "text", "folder", "attachment", "task"]
 export const HAS_VALUES = ["emoji", "link", "page"]
+
+// `in:<n><unit>` durations, expressed in whole days. Both short (d/w/m/y) and
+// long (day/week/month/year, singular or plural) forms are accepted. `m` is
+// "month", not minutes — recency is only meaningful at day granularity here.
+const UNIT_DAYS: Record<string, number> = {
+  d: 1, day: 1, days: 1,
+  w: 7, week: 7, weeks: 7,
+  m: 30, month: 30, months: 30,
+  y: 365, year: 365, years: 365,
+}
+
+export function parseDuration(value: string): number | null {
+  const m = /^(\d+)\s*([a-z]+)$/.exec(value.trim().toLowerCase())
+  if (!m) return null
+  const n = parseInt(m[1], 10)
+  const unit = UNIT_DAYS[m[2]]
+  if (unit === undefined || n <= 0) return null
+  return n * unit
+}
 
 const LEGACY_MODIFIERS: Record<string, { field: QueryModifierField; value: string }> = {
   page: { field: "is", value: "page" },
@@ -102,10 +121,13 @@ function tokenize(input: string, separator: string): Token[] {
 // so a partially-typed query never crashes live search.
 
 function matchField(word: string): { field: QueryModifierField; value: string } | null {
-  const m = /^(is|has):(.+)$/.exec(word)
+  const m = /^(is|has|in):(.+)$/.exec(word)
   if (!m) return null
   const field = m[1] as QueryModifierField
   const typedValue = m[2]
+  // `in:` values are open-ended durations, not an enum — keep the raw string
+  // and validate it at match time via parseDuration.
+  if (field === "in") return { field, value: typedValue }
   const values = field === "is" ? IS_VALUES : HAS_VALUES
   const resolved = resolveUniquePrefix(values, typedValue)
   return { field, value: resolved ?? typedValue }
@@ -220,6 +242,12 @@ function matchModifier(attrs: ParsedNode, field: QueryModifierField, value: stri
       default: return false
     }
   }
+  if (field === "in") {
+    // Emoji-bearing nodes are treated as always "fresh" and match any window.
+    if (containsEmoji(attrs.searchKey)) return true
+    const days = parseDuration(value)
+    return days !== null && attrs.ageDays <= days
+  }
   // field === "has"
   switch (value) {
     case "emoji": return containsEmoji(attrs.searchKey)
@@ -255,4 +283,25 @@ export function matchQuery(attrs: ParsedNode, expr: QueryExpr): boolean {
 export function firstPassInclude(attrs: ParsedNode, expr: QueryExpr): boolean {
   if (expr.type === "not") return !matchQuery(attrs, expr.expr)
   return matchQuery(attrs, expr)
+}
+
+// Whether a node counts as a query "match" (a real hit) rather than structural
+// context: it satisfies at least one query stage. An empty query matches
+// everything (nothing is dimmed). Used to compute the `matched` flag carried on
+// each flattened result row.
+export function nodeMatchesQuery(attrs: ParsedNode, exprs: QueryExpr[]): boolean {
+  return exprs.length === 0 || exprs.some(e => matchQuery(attrs, e))
+}
+
+// Collects the modifier expressions of a given field from a query tree. Used by
+// the UI to re-evaluate which rendered nodes satisfy e.g. an `in:` recency
+// filter. Negation is deliberately not descended into: `-in:3m` means "not
+// recent", which should not mark anything as a match.
+export function collectModifiers(expr: QueryExpr, field: QueryModifierField): QueryExpr[] {
+  switch (expr.type) {
+    case "modifier": return expr.field === field ? [expr] : []
+    case "and":
+    case "or":       return expr.exprs.flatMap(e => collectModifiers(e, field))
+    default:         return []
+  }
 }

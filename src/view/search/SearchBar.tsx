@@ -1,4 +1,4 @@
-import React from "react";
+import React, {useEffect, useRef} from "react";
 import {SEARCH_ICON, REFRESH_ICON} from "../icons";
 import {useUrlOpener} from "./useUrlOpener";
 import {useAtom, useAtomValue, useSetAtom} from "jotai";
@@ -17,7 +17,7 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
     const {
         decExpandAtom, incExpandAtom, resetCollapseAtom, searchQueryAtom, selectedNodeAtom, getExpandLevel,
         searchPlaceholderAtom, suggestionsAtom, suggestionIndexAtom, cursorPosAtom, dismissSuggestionsAtom,
-        resetSuggestionsAtom, repositionSuggestionsAtom,
+        resetSuggestionsAtom, repositionSuggestionsAtom, focusSearchInputAtom,
     } = useMolecule(SearchViewMolecule)
 
     const decExpand = useSetAtom(decExpandAtom)
@@ -40,6 +40,17 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
     const dismissSuggestions = useSetAtom(dismissSuggestionsAtom)
     const resetSuggestions = useSetAtom(resetSuggestionsAtom)
     const repositionSuggestions = useSetAtom(repositionSuggestionsAtom)
+
+    const inputRef = useRef<HTMLInputElement>(null)
+    const focusSignal = useAtomValue(focusSearchInputAtom)
+    useEffect(() => {
+        if (focusSignal === 0) return
+        const el = inputRef.current
+        if (!el) return
+        el.focus()
+        // type="search" inputs reject setSelectionRange in some engines — best effort.
+        try { const n = el.value.length; el.setSelectionRange(n, n) } catch { /* ignore */ }
+    }, [focusSignal])
 
     const setSearch = (search: string) => {
         setSearchQuery({ query: search })
@@ -79,12 +90,13 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
 
     return <>
         <a style={{ display: "none" }} target="_blank" ref={linkRef} href="#"></a>
-    <div className="tw-reset sticky top-0 z-10">
+    <div className="tw-reset sticky top-0 z-30">
 
         <div className="relative flex items-center flex-1">
             <div className="flex items-center justify-between w-full max-w-4xl">
                 <div className="relative flex-1">
                     <input
+                        ref={inputRef}
                         enterKeyHint="search"
                         type="search"
                         spellCheck="false"

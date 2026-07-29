@@ -5,6 +5,7 @@ import {SearchViewMolecule} from "../react-context/state";
 import {SearchTreeNode} from "../SearchTreeNode";
 import {SearchBar} from "./SearchBar";
 import {SearchActions} from "./SearchActions";
+import {SearchHelp} from "./SearchHelp";
 import React from "react";
 
 export type TreeNode = {
@@ -14,6 +15,7 @@ export type TreeNode = {
     visible: boolean
     selected: boolean
     index: number
+    matched: boolean
 }
 
 export const SearchViewFlatten = () => {
@@ -35,6 +37,10 @@ export const SearchViewFlatten = () => {
         <div className="flex-1 overflow-y-auto">
             {viewState.isLoading ? (
                 <LoadingDots />
+            ) : viewState.searchResults.renderableNodes.length === 0 ? (
+                // Only the main search modal shows the syntax cheat sheet; auxiliary
+                // panes (file context, parents, tasks, inline results) stay blank.
+                viewState.isModal ? <SearchHelp /> : null
             ) : (
                 <>
                     {viewState.searchResults.renderableNodes.map((tree, index) => {

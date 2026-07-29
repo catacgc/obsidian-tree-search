@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test"
-import { parseQuery, matchQuery, firstPassInclude, type QueryExpr, IS_VALUES, HAS_VALUES } from "../search/query.ts"
+import { parseQuery, matchQuery, firstPassInclude, nodeMatchesQuery, parseDuration, collectModifiers, type QueryExpr, IS_VALUES, HAS_VALUES } from "../search/query.ts"
 import type { ParsedNode } from "../graph/types.ts"
 
 const baseLocation = { path: "test.md", position: { start: { line: 0, ch: 0 }, end: { line: 0, ch: 0 } } }
@@ -217,6 +217,105 @@ describe("matchQuery", () => {
         matchQuery(text("has link", { hasLink: true }), expr)
       expect(matchesSomething).toBe(true)
     }
+  })
+})
+
+describe("nodeMatchesQuery", () => {
+  it("treats an empty query as matching everything (nothing dimmed)", () => {
+    expect(nodeMatchesQuery(text("anything"), [])).toBe(true)
+  })
+
+  it("matches when the node satisfies any query stage", () => {
+    const stages = parseQuery("foo.bar", ".")
+    expect(nodeMatchesQuery(text("foo line"), stages)).toBe(true)   // matches stage foo
+    expect(nodeMatchesQuery(text("bar line"), stages)).toBe(true)   // matches stage bar
+    expect(nodeMatchesQuery(text("unrelated"), stages)).toBe(false) // context only
+  })
+
+  it("honors is:/has: field semantics within a stage", () => {
+    const stages = parseQuery("is:page", ".")
+    expect(nodeMatchesQuery(page("home"), stages)).toBe(true)
+    expect(nodeMatchesQuery(text("home"), stages)).toBe(false)
+  })
+})
+
+describe("parseDuration", () => {
+  it("converts short and long unit forms to whole days", () => {
+    expect(parseDuration("7d")).toBe(7)
+    expect(parseDuration("7days")).toBe(7)
+    expect(parseDuration("2w")).toBe(14)
+    expect(parseDuration("1m")).toBe(30)
+    expect(parseDuration("1month")).toBe(30)
+    expect(parseDuration("1y")).toBe(365)
+    expect(parseDuration("1year")).toBe(365)
+    expect(parseDuration("30d")).toBe(30)
+  })
+
+  it("rejects malformed, zero, or unknown-unit durations", () => {
+    expect(parseDuration("abc")).toBeNull()
+    expect(parseDuration("7")).toBeNull()
+    expect(parseDuration("d")).toBeNull()
+    expect(parseDuration("0d")).toBeNull()
+    expect(parseDuration("7x")).toBeNull()
+    expect(parseDuration("")).toBeNull()
+  })
+})
+
+describe("in: recency modifier", () => {
+  it("parses in:<duration> as an in modifier, keeping the raw value", () => {
+    expect(parseQuery("in:7d", ".")[0]).toEqual({ type: "modifier", field: "in", value: "7d" })
+    expect(parseQuery("in:1month", ".")[0]).toEqual({ type: "modifier", field: "in", value: "1month" })
+  })
+
+  it("matches nodes at or within the window and rejects older ones", () => {
+    const expr: QueryExpr = { type: "modifier", field: "in", value: "7d" }
+    expect(matchQuery({ ...text("recent"), ageDays: 3 }, expr)).toBe(true)
+    expect(matchQuery({ ...text("boundary"), ageDays: 7 }, expr)).toBe(true) // inclusive
+    expect(matchQuery({ ...text("stale"), ageDays: 30 }, expr)).toBe(false)
+  })
+
+  it("treats emoji-bearing nodes as always fresh, regardless of age", () => {
+    const expr: QueryExpr = { type: "modifier", field: "in", value: "7d" }
+    expect(matchQuery({ ...text("🎉 launched"), ageDays: 999 }, expr)).toBe(true)
+    expect(matchQuery({ ...text("no emoji here"), ageDays: 999 }, expr)).toBe(false)
+  })
+
+  it("never matches an invalid duration", () => {
+    const expr: QueryExpr = { type: "modifier", field: "in", value: "abc" }
+    expect(matchQuery({ ...text("recent"), ageDays: 0 }, expr)).toBe(false)
+  })
+})
+
+describe("collectModifiers", () => {
+  const inMods = (query: string) => parseQuery(query, ".").flatMap(e => collectModifiers(e, "in"))
+
+  it("collects a lone in: modifier", () => {
+    expect(inMods("in:3m")).toEqual([{ type: "modifier", field: "in", value: "3m" }])
+  })
+
+  it("collects an in: modifier nested under AND / OR", () => {
+    expect(inMods("foo in:3m")).toEqual([{ type: "modifier", field: "in", value: "3m" }])
+    expect(inMods("a | in:1y")).toEqual([{ type: "modifier", field: "in", value: "1y" }])
+  })
+
+  it("collects in: modifiers across stages", () => {
+    expect(inMods("in:3m.bar in:1y")).toEqual([
+      { type: "modifier", field: "in", value: "3m" },
+      { type: "modifier", field: "in", value: "1y" },
+    ])
+  })
+
+  it("ignores negated in:, other fields, and plain text", () => {
+    expect(inMods("-in:3m")).toEqual([])
+    expect(inMods("is:page")).toEqual([])
+    expect(inMods("has:emoji")).toEqual([])
+    expect(inMods("just text")).toEqual([])
+  })
+
+  it("collects a different field when asked", () => {
+    expect(parseQuery("is:page in:3m", ".").flatMap(e => collectModifiers(e, "is"))).toEqual([
+      { type: "modifier", field: "is", value: "page" },
+    ])
   })
 })
 

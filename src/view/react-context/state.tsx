@@ -1,5 +1,5 @@
 import {TreeNode} from '../search/SearchViewFlatten'
-import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, matchQuery, pruneResultTree, type QueryExpr, partitionArchived, suggestAt, type Suggestion} from '@mdtree/core'
+import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, matchQuery, nodeMatchesQuery, pruneResultTree, type QueryExpr, partitionArchived, suggestAt, type Suggestion} from '@mdtree/core'
 import {atom, useAtomValue} from 'jotai'
 import {ParsedNode, ParsedTextToken, TextNode, Location} from '@mdtree/core'
 
@@ -26,6 +26,7 @@ export type SearchViewState = {
     showSearch: boolean
     version: number
     isQuickLink: boolean
+    isModal: boolean
     scopeName: { name: string, instance: number }
 }
 
@@ -210,6 +211,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             showSearch,
             version,
             isQuickLink: scp.isQuickLink,
+            isModal: scp.isModal,
             scopeName: { name: scp.name, instance: instance }
         }
     })
@@ -252,8 +254,9 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         // Get the current expand level (which now includes the updated dynamic expand)
         const expandLevel = get(getExpandLevel)
 
-        // Flatten nodes with the correct expand level
-        const nodes = flattenIndex(result, expandLevel)
+        // Flatten nodes with the correct expand level, tagging each row's
+        // `matched` flag against the active query (drives dimming in the view).
+        const nodes = flattenIndex(result, expandLevel, get(matchExprsAtom))
 
         // Apply visibility logic immediately instead of separate update
         const nodesWithVisibility = nodes.map(node => ({
@@ -291,7 +294,8 @@ export const SearchViewMolecule = molecule((mol, scope) => {
                 hasChildren: false,
                 visible: true,
                 selected: false,
-                index: nodesWithVisibility.length
+                index: nodesWithVisibility.length,
+                matched: true
             } as any
             nodesWithVisibility.push(archiveNode)
         }
@@ -398,6 +402,16 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         return parseQuery(query, separator).flatMap(extractTerms)
     })
 
+    // Parsed query stages, used to compute each row's `matched` flag (rows that
+    // match no stage are pure ancestor/descendant context and get dimmed).
+    // Empty when there is no query.
+    const matchExprsAtom = atom<QueryExpr[]>((get) => {
+        const query = get(actualQueryAtom)
+        if (!query) return []
+        const separator = get(separatorAtom)
+        return parseQuery(query, separator)
+    })
+
     const cursorPosAtom = atom(0)
 
     const rawSuggestionsAtom = atom<Suggestion[]>((get) => {
@@ -428,6 +442,21 @@ export const SearchViewMolecule = molecule((mol, scope) => {
 
     const repositionSuggestionsAtom = atom(null, (_get, set) => set(rawSuggestionIndexAtom, 0))
 
+    // Nonce bumped whenever the query should re-focus the search input (e.g. after
+    // the syntax-help panel inserts a token). SearchBar watches it and focuses.
+    const focusSearchInputAtom = atom(0)
+
+    // Append a syntax token from the help panel to the current query (space-
+    // separated), or set it when the box is empty, then request input focus.
+    const appendQueryTokenAtom = atom(null, (get, set, token: string) => {
+        const current = get(searchQueryAtom).query
+        const trimmed = current.replace(/\s+$/, "")
+        const next = trimmed.length === 0 ? token : `${trimmed} ${token}`
+        set(searchQueryAtom, { query: next })
+        set(lastSearchAtom, { query: next })
+        set(focusSearchInputAtom, get(focusSearchInputAtom) + 1)
+    })
+
     return {
             scopeName: {name: scp.name, instance: instance},
             actualQueryAtom,
@@ -450,8 +479,10 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             setDefaultExpandLevelAtom,
             expandNodeAtom, selectedLineAtom, updateHoveredLineAtom, hoveredLineAtom,
             matchTermsAtom,
+            matchExprsAtom,
             cursorPosAtom, suggestionsAtom, suggestionIndexAtom, dismissSuggestionsAtom, resetSuggestionsAtom,
-            repositionSuggestionsAtom
+            repositionSuggestionsAtom,
+            focusSearchInputAtom, appendQueryTokenAtom
     }
 })
 
@@ -558,11 +589,12 @@ function merge(node1: TreeNode, node2: ParsedNode): TreeNode {
         hasChildren: false,
         visible: true,
         selected: false,
-        index: node1.index
+        index: node1.index,
+        matched: node1.matched
     }
 }
 
-export function flattenIndex(indexed: ResultNode[], defaultIndentLevel = 0): TreeNode[] {
+export function flattenIndex(indexed: ResultNode[], defaultIndentLevel = 0, matchExprs: QueryExpr[] = []): TreeNode[] {
     const result: TreeNode[] = []
 
     function flatten(unsorted: ResultNode[], indent = 0, parentIndex = 0): number {
@@ -602,7 +634,8 @@ export function flattenIndex(indexed: ResultNode[], defaultIndentLevel = 0): Tre
                 hasChildren: node.children.length > 0,
                 visible: indent <= defaultIndentLevel,
                 selected: false,
-                index: index
+                index: index,
+                matched: nodeMatchesQuery(node.node, matchExprs)
             })
             index += 1
             index = flatten(node.children, indent + 1, index)

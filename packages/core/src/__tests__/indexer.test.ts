@@ -188,6 +188,21 @@ describe("tagged child lines (code + tag, no obsidian link)", () => {
     const tokens = textNode.parsedTokens as Array<{ tokenType: string }>
     expect(tokens.some(t => t.tokenType === "meta_action")).toBe(true)
   })
+
+  it("drops link URL query strings from searchKey but keeps domain/path", () => {
+    const g = buildGraph(
+      parse(
+        "- [Current CA](https://adobe.sharepoint.com/x?ovuser=abc%2Ccostache%40adobe.com) note",
+        "n.md",
+      ),
+    )
+    // query-param noise ("cost" inside costache) must not pollute the search key…
+    const noise = searchIndex(g, "cost", ".")
+    expect(noise).toHaveLength(0)
+    // …while the URL's domain (before the "?") stays searchable.
+    const byDomain = searchIndex(g, "sharepoint", ".")
+    expect(byDomain.length).toBeGreaterThan(0)
+  })
 })
 
 describe("search integration", () => {

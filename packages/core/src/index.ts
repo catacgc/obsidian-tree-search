@@ -36,14 +36,15 @@ export type { VaultScanner, VaultFile, VaultFolder, WalkResult } from "./graph/s
 export { parseVaultFile } from "./parser/vault-file.ts"
 export { parseFrontmatter, extractAliases, extractTags, extractParents, type Frontmatter } from "./parser/frontmatter.ts"
 export { scanMarkdown } from "./parser/list-scanner.ts"
-export { parseTokens } from "./parser/inline-tokens.ts"
+export { parseTokens, stripUrlQueryStrings } from "./parser/inline-tokens.ts"
 export { parseCanvasData, type CanvasData, type NodeTextLine } from "./parser/canvas.ts"
 export { buildNodesFromTextLines } from "./parser/text-lines.ts"
 
 // Search
 export { searchIndex, advancedSearch, searchParents, flattenTasks, pruneResultTree, type ResultNode } from "./search/search.ts"
-export { parseQuery, matchQuery, firstPassInclude, containsEmoji as queryContainsEmoji, type QueryExpr, type QueryModifierField } from "./search/query.ts"
+export { parseQuery, matchQuery, firstPassInclude, nodeMatchesQuery, collectModifiers, containsEmoji as queryContainsEmoji, type QueryExpr, type QueryModifierField } from "./search/query.ts"
 export { suggestAt, spliceSuggestion, type Suggestion } from "./search/suggest.ts"
+export { describeQuerySyntax, type QuerySyntaxEntry, type QuerySyntaxGroup } from "./search/syntax.ts"
 export { flattenIndex, type TreeNode } from "./search/flatten.ts"
 export { reverseMarkdownParsing } from "./search/copy.ts"
 export { isArchived, partitionArchived } from "./search/archive.ts"

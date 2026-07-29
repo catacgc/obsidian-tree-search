@@ -1,4 +1,4 @@
-import { searchIndex, flattenIndex, partitionArchived, type NotesGraph } from "@mdtree/core"
+import { searchIndex, flattenIndex, parseQuery, partitionArchived, type NotesGraph } from "@mdtree/core"
 import type { IndexSettings } from "@mdtree/core"
 import { createVaultResults, type VaultResults } from "./response.ts"
 import { unlinkSync, existsSync } from "node:fs"
@@ -29,7 +29,8 @@ function handleRequest(req: Request, vault: VaultIndex): Response {
   try {
     const results = searchIndex(vault.graph, query, vault.settings.searchSeparator)
     const { visible, archivedCount } = partitionArchived(results)
-    const flattened = flattenIndex(visible).slice(0, limit)
+    const matchExprs = parseQuery(query, vault.settings.searchSeparator)
+    const flattened = flattenIndex(visible, 0, matchExprs).slice(0, limit)
     const response = createVaultResults(vault.vaultName, flattened, archivedCount)
     return Response.json(response)
   } catch (err) {

@@ -41,6 +41,32 @@ describe("suggestAt", () => {
   it("only considers the token immediately before the cursor, not the whole query", () => {
     expect(suggestAt("meeting is:p", 12)).toEqual([{ label: "is:page", insertText: "is:page" }])
   })
+
+  it("offers canonical duration presets for a bare in: prefix", () => {
+    expect(suggestAt("in:", 3)).toEqual([
+      { label: "in:7d", insertText: "in:7d" },
+      { label: "in:1m", insertText: "in:1m" },
+      { label: "in:1y", insertText: "in:1y" },
+    ])
+  })
+
+  it("completes a typed in: number with every unit", () => {
+    expect(suggestAt("in:2", 4)).toEqual([
+      { label: "in:2d", insertText: "in:2d" },
+      { label: "in:2w", insertText: "in:2w" },
+      { label: "in:2m", insertText: "in:2m" },
+      { label: "in:2y", insertText: "in:2y" },
+    ])
+  })
+
+  it("narrows in: unit completions to a partially-typed unit letter", () => {
+    expect(suggestAt("in:3d", 5)).toEqual([]) // already complete
+    expect(suggestAt("in:1", 4)).toContainEqual({ label: "in:1w", insertText: "in:1w" })
+  })
+
+  it("returns nothing for an in: token with a mixed number/unit shape", () => {
+    expect(suggestAt("in:2d3", 6)).toEqual([])
+  })
 })
 
 describe("spliceSuggestion", () => {

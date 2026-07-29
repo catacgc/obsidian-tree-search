@@ -1,5 +1,5 @@
 import { highlightLine, openFileByName } from "../obsidian-utils";
-import { ParsedNode, ParsedTextToken, Location } from "@mdtree/core";
+import { ParsedNode, ParsedTextToken, Location, stripUrlQueryStrings } from "@mdtree/core";
 import {useMolecule} from "bunshi/react";
 import {GlobalAppMolecule, SearchViewMolecule} from "./react-context/state";
 import {useAtomValue} from "jotai";
@@ -15,6 +15,19 @@ function highlightText(text: string, terms: string[]): React.ReactNode {
             ? <mark key={i} className="suggestion-highlight">{part}</mark>
             : part
     )}</>
+}
+
+// Highlight a link's visible name. If the name itself matches a term, highlight
+// the matching substrings; otherwise, if the (query-stripped) URL matches, the
+// hit lives in the invisible href, so underline the whole name to signal it.
+function renderLinkName(display: string, href: string, terms: string[]): React.ReactNode {
+    if (terms.length === 0) return display
+    const lower = display.toLowerCase()
+    if (terms.some(t => lower.includes(t.toLowerCase()))) return highlightText(display, terms)
+    const url = stripUrlQueryStrings(href).toLowerCase()
+    if (terms.some(t => url.includes(t.toLowerCase())))
+        return <mark className="suggestion-highlight">{display}</mark>
+    return display
 }
 
 export const NodeRenderer = (
@@ -122,7 +135,7 @@ export const TextNodeRenderer = (props: { parsedTokens: ParsedTextToken[]; match
         }
         case "link":
             return <>
-                <a className={"external-link"} href={token.href}>{token.content}</a>
+                <a className={"external-link"} href={token.href}>{renderLinkName(token.content ?? token.href, token.href, matchTerms)}</a>
                 {rest}
             </>
         case "image":

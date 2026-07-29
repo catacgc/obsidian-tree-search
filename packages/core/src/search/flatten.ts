@@ -1,5 +1,6 @@
 import type { ParsedNode } from "../graph/types.ts"
 import type { ResultNode } from "./search.ts"
+import { nodeMatchesQuery, type QueryExpr } from "./query.ts"
 
 export type TreeNode = {
   node: ParsedNode
@@ -8,9 +9,14 @@ export type TreeNode = {
   visible: boolean
   selected: boolean
   index: number
+  matched: boolean
 }
 
-export function flattenIndex(indexed: ResultNode[], defaultIndentLevel = 0): TreeNode[] {
+export function flattenIndex(
+  indexed: ResultNode[],
+  defaultIndentLevel = 0,
+  matchExprs: QueryExpr[] = [],
+): TreeNode[] {
   const result: TreeNode[] = []
 
   function flatten(unsorted: ResultNode[], indent = 0, parentIndex = 0): number {
@@ -25,6 +31,7 @@ export function flattenIndex(indexed: ResultNode[], defaultIndentLevel = 0): Tre
         visible: indent <= defaultIndentLevel,
         selected: false,
         index,
+        matched: nodeMatchesQuery(node.node, matchExprs),
       })
       index += 1
       index = flatten(node.children, indent + 1, index)

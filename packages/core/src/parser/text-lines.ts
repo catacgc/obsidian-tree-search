@@ -2,7 +2,7 @@ import type { HeaderNode, Location, PageNode, ParsedNode, ParsedTextToken, TextN
 import type { NotesGraph } from "../graph/graph.ts"
 import { getKey } from "../graph/graph.ts"
 import { calculateBoost } from "../graph/boost.ts"
-import { parseTokens } from "./inline-tokens.ts"
+import { parseTokens, stripUrlQueryStrings } from "./inline-tokens.ts"
 import type { NodeTextLine } from "./canvas.ts"
 
 /**
@@ -90,15 +90,16 @@ function createTextNode(
     return graph.createVirtualPage(refs[0], location, ageDays)
   }
 
+  const searchKey = stripUrlQueryStrings(text).toLowerCase()
   const textNode: TextNode = {
     nodeType: "text",
     location,
-    searchKey: text.toLowerCase(),
+    searchKey,
     parsedTokens: parsed,
     tags: [],
     isTask,
     isCompleted,
-    boost: calculateBoost("text", text.toLowerCase(), ageDays),
+    boost: calculateBoost("text", searchKey, ageDays),
     ageDays,
   }
 

@@ -9,18 +9,33 @@ export function suggestAt(query: string, cursorPos: number): Suggestion[] {
   const tokenStart = before.lastIndexOf(" ") + 1
   const token = before.slice(tokenStart).toLowerCase()
 
-  // Only a complete "is:x" or "has:x" token triggers suggestions — bare
+  // Only a complete "is:x" / "has:x" / "in:x" token triggers suggestions — bare
   // letters or a leading ":" don't (see the design doc's Non-goals: bare
   // letters collide with normal search terms, and a leading ":" belongs
-  // only to the legacy grammar, not this one).
-  const match = /^(is|has):([a-z]*)$/.exec(token)
+  // only to the legacy grammar, not this one). Digits are allowed so `in:7`
+  // can be completed.
+  const match = /^(is|has|in):([a-z0-9]*)$/.exec(token)
   if (!match) return []
 
   const [, field, typed] = match
+  if (field === "in") return suggestDurations(typed)
+
   const values = field === "is" ? IS_VALUES : HAS_VALUES
   return values
     .filter(v => v.startsWith(typed) && v !== typed)
     .map(v => ({ label: `${field}:${v}`, insertText: `${field}:${v}` }))
+}
+
+// Suggestions for `in:` durations. With no number typed we offer canonical
+// presets; once a number is present we complete it with each unit.
+function suggestDurations(typed: string): Suggestion[] {
+  const m = /^(\d*)([a-z]*)$/.exec(typed)
+  if (!m) return []
+  const [, num, unit] = m
+  const values = num
+    ? ["d", "w", "m", "y"].filter(u => u.startsWith(unit) && u !== unit).map(u => `${num}${u}`)
+    : ["7d", "1m", "1y"].filter(v => v.startsWith(unit))
+  return values.map(v => ({ label: `in:${v}`, insertText: `in:${v}` }))
 }
 
 export function spliceSuggestion(

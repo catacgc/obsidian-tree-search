@@ -26,6 +26,9 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
 
     const expandableClass = props.node.hasChildren ? "is-collapsed " : ""
     const highlighted = selectedLine == props.node.index ? "highlight" : "";
+    // Dim rows that match no query stage (context shown only for structure); the
+    // query's own hits stay bright. The `matched` flag is computed in flattenIndex.
+    const dimClass = props.node.matched ? "" : "ts-node-dim";
     const className = `ts-list-line ts-list-line-${props.node.indent + 1} ${highlighted} ${expandableClass}`;
 
     const indentLevel = props.node.indent + 1;
@@ -72,7 +75,7 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
         >
             <div
                 ref={nodeRef}
-                className={`ts-list-line ${highlighted} ${expandableClass}`}
+                className={`ts-list-line ${highlighted} ${expandableClass} ${dimClass}`}
                 dir="ltr"
                 style={{ '--indent-level': indentLevel } as React.CSSProperties}
             >

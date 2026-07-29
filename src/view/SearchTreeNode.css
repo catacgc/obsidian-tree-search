@@ -149,3 +149,8 @@
     text-decoration-color: rgb(var(--text-highlight-bg-rgb));
     text-underline-offset: 2px;
 }
+
+/* Query-match emphasis: dim rows that don't match the query (structural context). */
+.ts-node-dim {
+    opacity: 0.4;
+}
