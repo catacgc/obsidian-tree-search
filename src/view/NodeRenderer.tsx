@@ -1,4 +1,5 @@
 import { highlightLine, openFileByName } from "../obsidian-utils";
+import { triggerLinkPreview } from "./hover-preview";
 import { ParsedNode, ParsedTextToken, Location, stripUrlQueryStrings } from "@mdtree/core";
 import {useMolecule} from "bunshi/react";
 import {GlobalAppMolecule, SearchViewMolecule} from "./react-context/state";
@@ -54,13 +55,23 @@ const BaseNodeRender = (
         await openFileByName(app, name)
     }
 
+    // Cmd/Ctrl+hover over a link anchor previews the actual linked note.
+    // stopPropagation keeps the row's location preview from also firing.
+    function previewLink(ev: React.MouseEvent<HTMLAnchorElement>, linktext: string) {
+        if (app == undefined) return
+        ev.stopPropagation()
+        triggerLinkPreview(app, ev.nativeEvent, ev.currentTarget, linktext)
+    }
+
     switch (props.node.nodeType) {
         case "page":
             const page = props.node.page
             const isRef = props.node.isReference
             const aliases = props.node.aliases.join(", ")
             return <span className={isRef ? "is-unresolved" : ""}>
-                <a className={"obsidian-link " + (isRef ? "cm-underline" : "")} href="#" onClick={async ev => {
+                <a className={"obsidian-link " + (isRef ? "cm-underline" : "")} href="#"
+                   onMouseOver={ev => previewLink(ev, page)}
+                   onClick={async ev => {
                     await openFile(page)
                     ev.preventDefault()
                 }
@@ -123,8 +134,15 @@ export const TextNodeRenderer = (props: { parsedTokens: ParsedTextToken[]; match
         case "obsidian_link": {
             const display = (token.alias && !parseInt(token.alias)) ? token.alias : token.pageTarget
             const header = token.headerName ? ` > ${token.headerName.trim()}` : ""
+            const linktext = token.pageTarget + (token.headerName ? `#${token.headerName.trim()}` : "")
             return <span>
-                <a className={"obsidian-link"} href="#" onClick={async ev => {
+                <a className={"obsidian-link"} href="#"
+                   onMouseOver={ev => {
+                       if (app == undefined) return
+                       ev.stopPropagation()
+                       triggerLinkPreview(app, ev.nativeEvent, ev.currentTarget, linktext)
+                   }}
+                   onClick={async ev => {
                     await openFile(token.pageTarget)
                     ev.preventDefault()
                 }}>

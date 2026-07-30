@@ -14,6 +14,7 @@ import './view/styles.css';
 import {GlobalAtoms} from "./view/react-context/global";
 import {resetDefaultInjector} from "bunshi";
 import {RaycastServer} from "./view/raycast/raycast-server";
+import {HOVER_SOURCE_ID} from "./view/hover-preview";
 
 export default class TreeSearchPlugin extends Plugin {
     index: IndexedTree
@@ -46,6 +47,14 @@ export default class TreeSearchPlugin extends Plugin {
             SEARCH_VIEW,
             (leaf) => new SearchViewPanel(leaf, this.globalStore)
         );
+
+        // Opt the tree-search view into the core Page Preview plugin. `defaultMod`
+        // expresses the "Cmd/Ctrl+hover" gating and adds a Settings toggle; our
+        // hover handlers forward the native event so Page Preview can enforce it.
+        this.registerHoverLinkSource(HOVER_SOURCE_ID, {
+            display: "Tree Search",
+            defaultMod: true,
+        });
 
         this.registerView(
             FILE_CONTEXT,
