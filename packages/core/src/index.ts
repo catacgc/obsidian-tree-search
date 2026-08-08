@@ -26,7 +26,7 @@ export type {
 } from "./graph/types.ts"
 
 export { NotesGraph, getKey } from "./graph/graph.ts"
-export { calculateBoost, getAgeDays, containsEmoji } from "./graph/boost.ts"
+export { calculateBoost, getAgeDays, ageDaysFromText, isUndated, UNDATED_AGE, containsEmoji } from "./graph/boost.ts"
 export { indexSinglePage, DEFAULT_SETTINGS, type IndexSettings } from "./graph/indexer.ts"
 export { buildGraphFromScanner, reindexFileInGraph, type ParseCacheEntry } from "./graph/builder.ts"
 export { serializeCache, deserializeCache } from "./graph/cache.ts"
@@ -34,7 +34,8 @@ export type { VaultScanner, VaultFile, VaultFolder, WalkResult } from "./graph/s
 
 // Parser
 export { parseVaultFile } from "./parser/vault-file.ts"
-export { parseFrontmatter, extractAliases, extractTags, extractParents, type Frontmatter } from "./parser/frontmatter.ts"
+export { parseFrontmatter, extractAliases, extractTags, extractParents, extractPageDate, type Frontmatter } from "./parser/frontmatter.ts"
+export { makePeriodicDateResolver, type PeriodicNoteConfig, type MomentParse } from "./parser/periodic-notes.ts"
 export { scanMarkdown } from "./parser/list-scanner.ts"
 export { parseTokens, stripUrlQueryStrings } from "./parser/inline-tokens.ts"
 export { parseCanvasData, type CanvasData, type NodeTextLine } from "./parser/canvas.ts"
@@ -42,7 +43,7 @@ export { buildNodesFromTextLines } from "./parser/text-lines.ts"
 
 // Search
 export { searchIndex, advancedSearch, searchParents, flattenTasks, pruneResultTree, type ResultNode } from "./search/search.ts"
-export { parseQuery, matchQuery, firstPassInclude, nodeMatchesQuery, collectModifiers, containsEmoji as queryContainsEmoji, type QueryExpr, type QueryModifierField } from "./search/query.ts"
+export { parseQuery, matchQuery, firstPassInclude, nodeMatchesQuery, collectModifiers, extractArchiveReveal, containsEmoji as queryContainsEmoji, type QueryExpr, type QueryModifierField } from "./search/query.ts"
 export { suggestAt, spliceSuggestion, type Suggestion } from "./search/suggest.ts"
 export { describeQuerySyntax, type QuerySyntaxEntry, type QuerySyntaxGroup } from "./search/syntax.ts"
 export { flattenIndex, type TreeNode } from "./search/flatten.ts"

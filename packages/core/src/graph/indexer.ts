@@ -1,13 +1,19 @@
 import type { DvList, DvPage, HeaderNode, ParsedNode, ParsedTextToken, TextNode } from "./types.ts"
 import type { NotesGraph } from "./graph.ts"
 import { getKey } from "./graph.ts"
-import { calculateBoost, getAgeDays } from "./boost.ts"
+import { calculateBoost, getAgeDays, ageDaysFromText } from "./boost.ts"
 import { parseTokens, stripUrlQueryStrings } from "../parser/inline-tokens.ts"
+import { extractPageDate } from "../parser/frontmatter.ts"
 
 export type IndexSettings = {
   parentRelation: string // default: "parent"
   archiveTag: string // default: "archive"
   searchSeparator: string // default: "."
+  // Optional resolver mapping a vault-relative path to a daily/weekly note's
+  // date (ms epoch), or null when the path is not a periodic note. Injected by
+  // the runtime (Obsidian / CLI) since it needs a moment parser; undefined in
+  // DEFAULT_SETTINGS, which makes all periodic notes fall through to undated.
+  periodicDate?: (path: string) => number | null
 }
 
 export const DEFAULT_SETTINGS: IndexSettings = {
@@ -18,9 +24,7 @@ export const DEFAULT_SETTINGS: IndexSettings = {
 
 // ── shouldSkip ────────────────────────────────────────────────────────────────
 
-function shouldSkip(lst: DvList, archiveTag: string): boolean {
-  if (lst.tags.includes(archiveTag)) return true
-
+function shouldSkip(lst: DvList): boolean {
   if (lst.section.subpath) {
     const header = lst.section.subpath.replace(/#/g, " ").trim()
     if (header.startsWith("--") && header.endsWith("--")) return true
@@ -49,7 +53,9 @@ function createNodeFromText(
   graph: NotesGraph,
   page: DvPage,
   item: DvList,
+  pageAge: number,
   parseTokensFn: (text: string) => ParsedTextToken[],
+  forceArchived: boolean,
 ): ParsedNode {
   const parsed = item.precomputedTokens ?? parseTokensFn(item.rawText)
   const location = {
@@ -61,7 +67,9 @@ function createNodeFromText(
   }
 
   const refs = graph.getObsidianLinkReferences(parsed)
-  const ageDays = getAgeDays(page.file.mtime.ts, item.text)
+  // A date in the line's own text overrides the page's date; otherwise the node
+  // inherits the page's age (which may be UNDATED_AGE).
+  const ageDays = ageDaysFromText(item.text) ?? pageAge
 
   // Pure page reference — collapse to a virtual page/header node
   if (refs.length === 1 && refs[0].source === item.text) {
@@ -69,6 +77,15 @@ function createNodeFromText(
   }
 
   const searchKey = stripUrlQueryStrings(item.text).toLowerCase()
+  // Intrinsic archive: `forceArchived` (a line `#archive` tag, or the line
+  // living inside a frontmatter-archived page) or a `(meta-mdtree:: archive)`
+  // directive. Previously any of these skipped the line at index time; now it is
+  // indexed and marked, so it can be hidden (default) or revealed via
+  // `is:archived`. Descendant propagation is applied path-contextually at query
+  // time, not here (nodes are content-keyed and may have multiple parents).
+  const archived =
+    forceArchived ||
+    parsed.some(t => t.tokenType === "meta_mdtree" && t.directive === "archive")
   const textNode: TextNode = {
     nodeType: "text",
     location,
@@ -79,9 +96,11 @@ function createNodeFromText(
     isCompleted: item.completed,
     boost: calculateBoost("text", searchKey, ageDays),
     ageDays,
+    ...(archived ? { archived: true } : {}),
   }
 
   graph.addOrUpdateNode(textNode)
+  graph.trackNodePath(getKey(textNode), page.file.path)
 
   // Referenced pages become parents of the text node
   const refNodes = graph.createRefsNodes(refs, textNode, ageDays)
@@ -99,9 +118,11 @@ function createTreeFromTextLine(
   parentNode: ParsedNode,
   page: DvPage,
   item: DvList,
+  pageAge: number,
   parseTokensFn: (text: string) => ParsedTextToken[],
+  forceArchived: boolean,
 ): ParsedNode {
-  const createdNode = createNodeFromText(graph, page, item, parseTokensFn)
+  const createdNode = createNodeFromText(graph, page, item, pageAge, parseTokensFn, forceArchived)
 
   const closestParentHeader = getClosestHeader(page.headers, item.position.start.line)
 
@@ -124,8 +145,7 @@ function createTreeFromTextLine(
       closestParentHeader.heading,
       headerLocation,
       -1,
-      page.file.mtime.ts,
-      page.file.name,
+      pageAge,
     )
     graph.addChild(header, createdNode, createdNode.location, 0)
   } else {
@@ -147,7 +167,7 @@ function getClosestHeader(
 
 // ── Header tree builder ───────────────────────────────────────────────────────
 
-function createHeadersNodes(graph: NotesGraph, pageRef: ParsedNode, page: DvPage): void {
+function createHeadersNodes(graph: NotesGraph, pageRef: ParsedNode, page: DvPage, pageAge: number, archived: boolean): void {
   function findParent(idx: number): DvPage["headers"][number] | null {
     const header = page.headers[idx]
     if (header.level === 1) return null
@@ -171,8 +191,8 @@ function createHeadersNodes(graph: NotesGraph, pageRef: ParsedNode, page: DvPage
       h.heading,
       location,
       h.level,
-      page.file.mtime.ts,
-      page.file.name,
+      pageAge,
+      archived,
     )
 
     const parent = findParent(i)
@@ -189,8 +209,8 @@ function createHeadersNodes(graph: NotesGraph, pageRef: ParsedNode, page: DvPage
         parent.heading,
         parentLocation,
         parent.level,
-        page.file.mtime.ts,
-        page.file.name,
+        pageAge,
+        archived,
       )
       graph.addChild(parentNode, headerNode, location, page.file.mtime.ts)
     } else {
@@ -207,14 +227,18 @@ export function indexSinglePage(
   settings: IndexSettings,
   parseTokensFn: (text: string) => ParsedTextToken[] = parseTokens,
 ): ParsedNode | undefined {
-  const isArchived = (page.file.frontmatter["tags"] as string[] | undefined ?? []).includes(
+  const isArchivedPage = (page.file.frontmatter["tags"] as string[] | undefined ?? []).includes(
     settings.archiveTag,
   )
 
   const aliases = page.file.aliases.values
   const tags = page.file.tags ?? []
   const searchKey = `${page.file.name}|${aliases.join(" ")}`.toLowerCase()
-  const ageDays = getAgeDays(page.file.mtime.ts, page.file.name)
+  // Page date precedence: a date in the filename, else frontmatter
+  // `updated`/`created`, else a parsed daily/weekly-note date, else undated.
+  // Filesystem mtime is intentionally ignored.
+  const pageDate = extractPageDate(page.file.frontmatter) ?? settings.periodicDate?.(page.file.path) ?? null
+  const ageDays = getAgeDays(page.file.name, pageDate)
 
   const pageNode = {
     nodeType: "page" as const,
@@ -229,6 +253,7 @@ export function indexSinglePage(
     searchKey,
     boost: calculateBoost("page", searchKey, ageDays),
     ageDays,
+    ...(isArchivedPage ? { archived: true } : {}),
   }
 
   graph.removeExistingPageEdges(pageNode)
@@ -242,21 +267,26 @@ export function indexSinglePage(
       page.precomputedParentTokens?.get(parent) ?? parseTokensFn(parent)
     )
     if (refs.length === 0) continue
-    const refNode = graph.createVirtualPage(refs[0], pageNode.location, getAgeDays(page.file.mtime.ts))
+    const refNode = graph.createVirtualPage(refs[0], pageNode.location, ageDays)
     graph.addChild(refNode, pageNode, pageNode.location, page.file.mtime.ts)
   }
 
-  if (isArchived) return undefined
-
-  createHeadersNodes(graph, pageNode, page)
+  // Archived pages are no longer excluded from the index: their body is indexed
+  // and marked archived (below, via `forceArchived`) so it is hidden by default
+  // but revealable with `is:archived`.
+  createHeadersNodes(graph, pageNode, page, ageDays, isArchivedPage)
 
   const lineArchiveTag = "#" + settings.archiveTag
 
   function createSubtree(parent: ParsedNode, children: DvList[]): void {
     for (const child of children) {
       child.text = child.text.trim()
-      if (shouldSkip(child, lineArchiveTag)) continue
-      const created = createTreeFromTextLine(graph, parent, page, child, parseTokensFn)
+      if (shouldSkip(child)) continue
+      // A line is intrinsically archived if it carries the `#archive` tag or the
+      // whole page is archived (frontmatter tag); the directive form is detected
+      // from tokens inside createNodeFromText.
+      const forceArchived = isArchivedPage || child.tags.includes(lineArchiveTag)
+      const created = createTreeFromTextLine(graph, parent, page, child, ageDays, parseTokensFn, forceArchived)
       createSubtree(created, child.children)
     }
   }

@@ -10,6 +10,10 @@ export type TreeNode = {
   selected: boolean
   index: number
   matched: boolean
+  // True when this row is archived or sits under an archived ancestor (only
+  // populated when archived items are revealed via `is:archived`). Rendered
+  // greyed, independently of `matched`.
+  archived: boolean
 }
 
 export function flattenIndex(
@@ -32,6 +36,7 @@ export function flattenIndex(
         selected: false,
         index,
         matched: nodeMatchesQuery(node.node, matchExprs),
+        archived: node.effectiveArchived ?? false,
       })
       index += 1
       index = flatten(node.children, indent + 1, index)

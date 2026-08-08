@@ -77,6 +77,8 @@ export class VaultStore {
       }
       if (row.edge_type === "related") {
         graph.addRelatedEdge(row.from_key, row.to_key, loc, row.mtime)
+      } else if (row.edge_type === "folder") {
+        graph.addFolderEdge(row.from_key, row.to_key, loc)
       } else {
         // "parent" edges: reconstruct by looking up nodes and calling addChild
         const fromNode = graph.hasNode(row.from_key) ? graph.getNodeAttributes(row.from_key) : null

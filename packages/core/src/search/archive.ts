@@ -1,12 +1,10 @@
-import type { ParsedNode } from "../graph/types.ts"
 import type { ResultNode } from "./search.ts"
+import { isArchived } from "./query.ts"
 
-export function isArchived(node: ParsedNode): boolean {
-  if (node.nodeType !== "text") return false
-  return node.parsedTokens.some(
-    t => t.tokenType === "meta_mdtree" && t.directive === "archive",
-  )
-}
+// `isArchived` (the intrinsic per-node check) lives in query.ts so the query
+// matcher can reference it without an import cycle; re-exported here to keep the
+// historical import path (`search/archive.ts`) working.
+export { isArchived }
 
 function subtreeSize(node: ResultNode): number {
   let count = 1
@@ -14,23 +12,37 @@ function subtreeSize(node: ResultNode): number {
   return count
 }
 
+// Partition a result forest by archive visibility, path-contextually: a node is
+// *effectively archived* if it is intrinsically archived or any ancestor along
+// its path in this result tree is. Computed here (over the final forest) rather
+// than during tree construction so it is robust to build order and to any
+// downstream promotion that reparents nodes.
+//
+// - reveal = false (default): drop every effectively-archived subtree and report
+//   how many nodes were hidden (the caller shows an "Archive (N)" affordance).
+// - reveal = true: keep everything, stamp `effectiveArchived` on each kept node
+//   so the view can render archived rows greyed, and report a zero count.
 export function partitionArchived(
   results: ResultNode[],
+  reveal = false,
 ): { visible: ResultNode[]; archivedCount: number } {
   let archivedCount = 0
   const visible: ResultNode[] = []
-  for (const node of results) {
-    if (isArchived(node.node)) {
-      archivedCount += subtreeSize(node)
-      continue
+
+  function walk(nodes: ResultNode[], ancestorArchived: boolean): ResultNode[] {
+    const kept: ResultNode[] = []
+    for (const node of nodes) {
+      const effective = ancestorArchived || isArchived(node.node)
+      if (effective && !reveal) {
+        archivedCount += subtreeSize(node)
+        continue
+      }
+      const children = walk(node.children, effective)
+      kept.push({ ...node, effectiveArchived: effective, children })
     }
-    const filtered = partitionArchived(node.children)
-    archivedCount += filtered.archivedCount
-    visible.push(
-      filtered.archivedCount > 0
-        ? { ...node, children: filtered.visible }
-        : node,
-    )
+    return kept
   }
+
+  visible.push(...walk(results, false))
   return { visible, archivedCount }
 }

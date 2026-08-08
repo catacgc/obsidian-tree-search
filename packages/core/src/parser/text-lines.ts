@@ -1,7 +1,7 @@
 import type { HeaderNode, Location, PageNode, ParsedNode, ParsedTextToken, TextNode } from "../graph/types.ts"
 import type { NotesGraph } from "../graph/graph.ts"
 import { getKey } from "../graph/graph.ts"
-import { calculateBoost } from "../graph/boost.ts"
+import { calculateBoost, ageDaysFromText, UNDATED_AGE } from "../graph/boost.ts"
 import { parseTokens, stripUrlQueryStrings } from "./inline-tokens.ts"
 import type { NodeTextLine } from "./canvas.ts"
 
@@ -48,10 +48,11 @@ function createNodeForLine(
   graph: NotesGraph,
   parseTokensFn: (text: string) => ParsedTextToken[],
 ): ParsedNode {
+  const pageArchived = pageNode.archived === true
   if (line.type === "header") {
-    return createHeaderNode(pageNode.page, line.text, line.location, line.indent)
+    return createHeaderNode(pageNode.page, line.text, line.location, line.indent, pageArchived)
   }
-  return createTextNode(graph, line.text, line.location, line.task === "task" || line.task === "completed", line.task === "completed", pageNode.ageDays, parseTokensFn)
+  return createTextNode(graph, line.text, line.location, line.task === "task" || line.task === "completed", line.task === "completed", pageNode.ageDays, parseTokensFn, pageArchived)
 }
 
 function createHeaderNode(
@@ -59,8 +60,10 @@ function createHeaderNode(
   header: string,
   location: Location,
   indent: number,
+  archived: boolean,
 ): HeaderNode {
   const searchKey = `${page}#${header}`.toLowerCase()
+  const ageDays = ageDaysFromText(header) ?? UNDATED_AGE
   return {
     nodeType: "header",
     page,
@@ -68,8 +71,9 @@ function createHeaderNode(
     indent,
     location,
     searchKey,
-    boost: calculateBoost("header", searchKey, 0),
-    ageDays: 0,
+    boost: calculateBoost("header", searchKey, ageDays),
+    ageDays,
+    ...(archived ? { archived: true } : {}),
   }
 }
 
@@ -79,9 +83,12 @@ function createTextNode(
   location: Location,
   isTask: boolean,
   isCompleted: boolean,
-  ageDays: number,
+  inheritedAge: number,
   parseTokensFn: (text: string) => ParsedTextToken[],
+  pageArchived: boolean,
 ): ParsedNode {
+  // A date in the line's own text overrides the inherited (page) age.
+  const ageDays = ageDaysFromText(text) ?? inheritedAge
   const parsed = parseTokensFn(text)
   const refs = graph.getObsidianLinkReferences(parsed)
 
@@ -91,6 +98,9 @@ function createTextNode(
   }
 
   const searchKey = stripUrlQueryStrings(text).toLowerCase()
+  const archived =
+    pageArchived ||
+    parsed.some(t => t.tokenType === "meta_mdtree" && t.directive === "archive")
   const textNode: TextNode = {
     nodeType: "text",
     location,
@@ -101,6 +111,7 @@ function createTextNode(
     isCompleted,
     boost: calculateBoost("text", searchKey, ageDays),
     ageDays,
+    ...(archived ? { archived: true } : {}),
   }
 
   graph.addOrUpdateNode(textNode)

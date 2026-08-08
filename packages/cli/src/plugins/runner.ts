@@ -2,6 +2,17 @@ import { mkdirSync } from "node:fs"
 import { join } from "node:path"
 import type { InstalledPlugin, VaultPluginConfig } from "./types.ts"
 
+/** Vault-relative folder that holds one generated note per plugin. */
+export const PLUGIN_OUTPUT_DIR = "Apps"
+
+/** Turns a plugin namespace into a title-cased note name, e.g. "arc" -> "Arc". */
+function outputFileName(namespace: string): string {
+  return namespace
+    .split("-")
+    .map(part => (part ? part.charAt(0).toUpperCase() + part.slice(1) : part))
+    .join("-")
+}
+
 /**
  * Runs a plugin subprocess, passing config as JSON on stdin.
  * The plugin writes Markdown to stdout, which is saved to the output path.
@@ -14,8 +25,10 @@ export async function runPlugin(
   vaultRoot: string,
 ): Promise<string | null> {
   const entrypoint = join(plugin.installPath, plugin.entrypoint)
-  const outputDir = join(vaultRoot, ".mdtree", "plugins")
-  const outputPath = join(outputDir, `${plugin.namespace}.md`)
+  // Write into a normal vault folder (not a dot-dir) so the note is visible to
+  // Obsidian and picked up by regular vault scans. One note per plugin.
+  const outputDir = join(vaultRoot, PLUGIN_OUTPUT_DIR)
+  const outputPath = join(outputDir, `${outputFileName(plugin.namespace)}.md`)
 
   mkdirSync(outputDir, { recursive: true })
 

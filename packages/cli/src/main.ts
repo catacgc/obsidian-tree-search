@@ -50,7 +50,7 @@ program
 program
   .command("query <query>")
   .description("Search vault(s) directly from SQLite without a running server")
-  .option("--limit <number>", "Max results to return", parseInt, 100)
+  .option("--limit <number>", "Max results to return", v => parseInt(v, 10), 100)
   .option("--out <path>", "SQLite path (single vault only)")
   .option("--json", "Output full JSON instead of plain text")
   .action(async (queryStr, opts) => {

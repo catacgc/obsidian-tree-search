@@ -154,3 +154,13 @@
 .ts-node-dim {
     opacity: 0.4;
 }
+
+/* Archived rows, revealed via is:archived. Distinct from context-dim: greyed
+   with a strikethrough so "archived" reads differently from "just context".
+   Composes with .ts-node-dim (an archived, unmatched row gets both). */
+.ts-node-archived {
+    opacity: 0.55;
+    color: var(--text-muted);
+    text-decoration: line-through;
+    text-decoration-color: var(--text-faint);
+}

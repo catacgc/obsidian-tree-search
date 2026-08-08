@@ -1,4 +1,4 @@
-import { searchIndex, flattenIndex, parseQuery, partitionArchived, type NotesGraph } from "@mdtree/core"
+import { searchIndex, flattenIndex, parseQuery, extractArchiveReveal, partitionArchived, type NotesGraph } from "@mdtree/core"
 import type { IndexSettings } from "@mdtree/core"
 import { createVaultResults, type VaultResults } from "./response.ts"
 import { unlinkSync, existsSync } from "node:fs"
@@ -28,8 +28,10 @@ function handleRequest(req: Request, vault: VaultIndex): Response {
 
   try {
     const results = searchIndex(vault.graph, query, vault.settings.searchSeparator)
-    const { visible, archivedCount } = partitionArchived(results)
-    const matchExprs = parseQuery(query, vault.settings.searchSeparator)
+    // `is:archived` is a reveal toggle, not a matcher: strip it for the match
+    // expressions (dimming) and use its presence to reveal archived rows.
+    const { reveal, stages: matchExprs } = extractArchiveReveal(parseQuery(query, vault.settings.searchSeparator))
+    const { visible, archivedCount } = partitionArchived(results, reveal)
     const flattened = flattenIndex(visible, 0, matchExprs).slice(0, limit)
     const response = createVaultResults(vault.vaultName, flattened, archivedCount)
     return Response.json(response)

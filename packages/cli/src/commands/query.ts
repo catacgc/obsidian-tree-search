@@ -1,5 +1,5 @@
 import { resolve, basename } from "node:path"
-import { DEFAULT_SETTINGS, NotesGraph, searchIndex, flattenIndex, parseQuery, partitionArchived, reverseMarkdownParsing } from "@mdtree/core"
+import { DEFAULT_SETTINGS, NotesGraph, searchIndex, flattenIndex, parseQuery, extractArchiveReveal, partitionArchived, reverseMarkdownParsing } from "@mdtree/core"
 import type { TreeNode } from "@mdtree/core"
 import { VaultStore, defaultDbPath } from "../store/sqlite.ts"
 
@@ -20,7 +20,10 @@ export async function runQuery(opts: QueryOptions): Promise<void> {
   const allResults: TreeNode[] = []
   let totalArchived = 0
 
-  const matchExprs = parseQuery(opts.queryStr, DEFAULT_SETTINGS.searchSeparator)
+  // `is:archived` is a reveal toggle: strip it from the match expressions and
+  // use its presence to reveal (rather than hide) archived rows.
+  const { reveal, stages: matchExprs } =
+    extractArchiveReveal(parseQuery(opts.queryStr, DEFAULT_SETTINGS.searchSeparator))
 
   for (const dir of opts.dirs) {
     const vaultRoot = resolve(dir)
@@ -33,7 +36,7 @@ export async function runQuery(opts: QueryOptions): Promise<void> {
     store.close()
 
     const results = searchIndex(graph, opts.queryStr, DEFAULT_SETTINGS.searchSeparator)
-    const { visible, archivedCount: vaultArchived } = partitionArchived(results)
+    const { visible, archivedCount: vaultArchived } = partitionArchived(results, reveal)
     const flat = flattenIndex(visible, 0, matchExprs)
     allResults.push(...flat)
     totalArchived += vaultArchived

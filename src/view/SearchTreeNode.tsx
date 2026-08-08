@@ -32,6 +32,9 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
     // Dim rows that match no query stage (context shown only for structure); the
     // query's own hits stay bright. The `matched` flag is computed in flattenIndex.
     const dimClass = props.node.matched ? "" : "ts-node-dim";
+    // Archived rows (revealed via is:archived) get a distinct greyed treatment,
+    // composed with — and independent of — the context-dim above.
+    const archivedClass = props.node.archived ? "ts-node-archived" : "";
     const className = `ts-list-line ts-list-line-${props.node.indent + 1} ${highlighted} ${expandableClass}`;
 
     const indentLevel = props.node.indent + 1;
@@ -88,7 +91,7 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
         >
             <div
                 ref={nodeRef}
-                className={`ts-list-line ${highlighted} ${expandableClass} ${dimClass}`}
+                className={`ts-list-line ${highlighted} ${expandableClass} ${dimClass} ${archivedClass}`}
                 dir="ltr"
                 style={{ '--indent-level': indentLevel } as React.CSSProperties}
             >

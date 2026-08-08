@@ -1,11 +1,14 @@
 import type { NotesGraph } from "../graph/graph.ts"
 import type { ParsedNode } from "../graph/types.ts"
-import { firstPassInclude, matchQuery, parseQuery, type QueryExpr } from "./query.ts"
+import { firstPassInclude, matchQuery, parseQuery, extractArchiveReveal, queryTargetsFolders, type QueryExpr } from "./query.ts"
 
 export type ResultNode = {
   node: ParsedNode
   children: ResultNode[]
   parents: string[]
+  // Set by `partitionArchived` when revealing: true if this node is archived or
+  // sits under an archived ancestor in this result tree. Drives grey rendering.
+  effectiveArchived?: boolean
 }
 
 // ── Tree builder ──────────────────────────────────────────────────────────────
@@ -15,6 +18,7 @@ function buildTree(
   graph: NotesGraph,
   roots: Map<string, ResultNode>,
   traversed: Set<string>,
+  includeFolderEdges = false,
 ): ResultNode {
   traversed.add(nodeKey)
 
@@ -25,6 +29,10 @@ function buildTree(
   }
 
   for (const edge of graph.outboundEdgeEntries(nodeKey)) {
+    // Folder-containment edges are only followed when the query targets folders,
+    // so folder trees stay out of ordinary searches.
+    if (edge.attributes.type === "folder" && !includeFolderEdges) continue
+
     let childNode: ResultNode | null = null
 
     if (roots.has(edge.target)) {
@@ -36,7 +44,7 @@ function buildTree(
     traversed.add(edge.edge)
 
     if (!childNode) {
-      childNode = buildTree(edge.target, graph, roots, traversed)
+      childNode = buildTree(edge.target, graph, roots, traversed, includeFolderEdges)
     }
 
     childNode.node = { ...childNode.node, ...{ location: edge.attributes.location } }
@@ -112,7 +120,11 @@ export function searchIndex(
 ): ResultNode[] {
   if (qs.length < 3) return []
 
-  const expressions = parseQuery(qs, separator)
+  // Strip `is:archived` out of the matching stages (it is a visibility toggle,
+  // not a matcher) so it never filters results; a bare `is:archived` stage is
+  // substituted with the archived predicate so it still selects archived nodes.
+  const { stages: expressions } = extractArchiveReveal(parseQuery(qs, separator))
+  const includeFolderEdges = queryTargetsFolders(expressions)
 
   const roots = new Map<string, ResultNode>()
   const firstPass = expressions[0]
@@ -125,7 +137,7 @@ export function searchIndex(
 
   for (const nodeKey of firstPageCandidates) {
     if (roots.has(nodeKey) || traversed.has(nodeKey)) continue
-    const newNode = buildTree(nodeKey, graph, roots, traversed)
+    const newNode = buildTree(nodeKey, graph, roots, traversed, includeFolderEdges)
     roots.set(nodeKey, newNode)
   }
 
@@ -147,7 +159,9 @@ export function advancedSearch(
 
   if (!query) return tree.children
 
-  const expressions = parseQuery(query, separator)
+  // Strip `is:archived` from matching (it is a visibility toggle handled by
+  // partitionArchived, not a matcher).
+  const { stages: expressions } = extractArchiveReveal(parseQuery(query, separator))
 
   return filterDown(tree.children, expressions)
 }

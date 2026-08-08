@@ -10,7 +10,9 @@ import {
   loadPluginMeta,
 } from "../plugins/registry.ts"
 import { promptAllFields } from "../plugins/prompt.ts"
+import { runPluginAndIndex } from "../plugins/trigger.ts"
 import { VaultStore, defaultDbPath } from "../store/sqlite.ts"
+import { DEFAULT_SETTINGS, NotesGraph } from "@mdtree/core"
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -45,7 +47,7 @@ async function runInstall(source: string) {
     console.log(
       `Installed "${installed.name}" (${installed.namespace}) v${installed.version}`,
     )
-    console.log(`  Run: mdtree plugin config ${installed.namespace} --vault <path>`)
+    console.log(`  Run: mdtree --dir <vault> plugin config ${installed.namespace}`)
   } catch (err) {
     console.error(`Install failed: ${(err as Error).message}`)
     process.exit(1)
@@ -123,6 +125,49 @@ async function runConfig(namespace: string, vaultOpt: string) {
   console.log(`\nConfig saved for ${namespace} in vault "${vaultName}".`)
 }
 
+// ── plugin run ────────────────────────────────────────────────────────────────
+
+async function runRun(name: string | undefined, vaultOpt: string) {
+  const vaultRoot = resolve(vaultOpt)
+  const vaultName = basename(vaultRoot)
+
+  const plugins = name
+    ? (getInstalledPlugin(name) ? [getInstalledPlugin(name)!] : [])
+    : listInstalledPlugins()
+
+  if (name && plugins.length === 0) {
+    console.error(`Plugin not found: ${name}`)
+    process.exit(1)
+  }
+  if (plugins.length === 0) {
+    console.log("No plugins installed.")
+    return
+  }
+
+  const store = new VaultStore(defaultDbPath(vaultName))
+  const graph = new NotesGraph()
+  store.loadIntoGraph(vaultName, graph)
+
+  let ran = 0
+  for (const plugin of plugins) {
+    const indexed = await runPluginAndIndex(
+      plugin,
+      vaultRoot,
+      vaultName,
+      graph,
+      DEFAULT_SETTINGS,
+      store,
+    )
+    if (indexed) ran++
+    else if (name) {
+      console.log(`Plugin "${plugin.namespace}" is disabled for vault "${vaultName}" or produced no output.`)
+    }
+  }
+
+  store.close()
+  console.log(`Done — ${ran} plugin(s) indexed into vault "${vaultName}".`)
+}
+
 // ── plugin remove ─────────────────────────────────────────────────────────────
 
 function runRemove(namespace: string, vaultOpt: string | undefined) {
@@ -166,9 +211,16 @@ function runSetEnabled(namespace: string, vaultOpt: string, enabled: boolean) {
 // ── Command builder (attached to main program) ────────────────────────────────
 
 export function addPluginCommands(program: Command): void {
+  // Plugin commands target vault(s) via the global --dir option (repeatable,
+  // like index/query). Falls back to the current directory when no --dir is given.
+  const dirs = (): string[] => {
+    const d = program.opts().dir as string[]
+    return d.length > 0 ? d : [process.cwd()]
+  }
+
   const plugin = program
     .command("plugin")
-    .description("Manage mdtree plugins")
+    .description("Manage mdtree plugins (target vault(s) via the global --dir option)")
 
   plugin
     .command("install <source>")
@@ -177,31 +229,37 @@ export function addPluginCommands(program: Command): void {
 
   plugin
     .command("list")
-    .description("List installed plugins")
-    .option("--vault <path>", "Show enabled/disabled status for this vault", process.cwd())
-    .action(opts => runList(opts.vault))
+    .description("List installed plugins and their status in the --dir vault")
+    .action(() => runList(dirs()[0]))
 
   plugin
     .command("config <name>")
-    .description("Configure a plugin for the current vault (interactive)")
-    .option("--vault <path>", "Vault to configure the plugin for", process.cwd())
-    .action((name, opts) => runConfig(name, opts.vault))
+    .description("Configure a plugin for the --dir vault (interactive)")
+    .action(name => runConfig(name, dirs()[0]))
+
+  plugin
+    .command("run [name]")
+    .description("Run a plugin (or all enabled plugins) now and reindex its output")
+    .action(async name => {
+      for (const dir of dirs()) await runRun(name, dir)
+    })
 
   plugin
     .command("remove <name>")
-    .description("Uninstall a plugin globally")
-    .option("--vault <path>", "Also remove the plugin's output file from this vault", process.cwd())
-    .action((name, opts) => runRemove(name, opts.vault))
+    .description("Uninstall a plugin globally (and remove its output from the --dir vault)")
+    .action(name => runRemove(name, dirs()[0]))
 
   plugin
     .command("enable <name>")
-    .description("Enable a plugin for the current vault")
-    .option("--vault <path>", "Target vault", process.cwd())
-    .action((name, opts) => runSetEnabled(name, opts.vault, true))
+    .description("Enable a plugin for the --dir vault(s)")
+    .action(name => {
+      for (const dir of dirs()) runSetEnabled(name, dir, true)
+    })
 
   plugin
     .command("disable <name>")
-    .description("Disable a plugin for the current vault")
-    .option("--vault <path>", "Target vault", process.cwd())
-    .action((name, opts) => runSetEnabled(name, opts.vault, false))
+    .description("Disable a plugin for the --dir vault(s)")
+    .action(name => {
+      for (const dir of dirs()) runSetEnabled(name, dir, false)
+    })
 }

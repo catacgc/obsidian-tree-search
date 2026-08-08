@@ -1,6 +1,6 @@
 import { highlightLine, openFileByName } from "../obsidian-utils";
 import { triggerLinkPreview } from "./hover-preview";
-import { ParsedNode, ParsedTextToken, Location, stripUrlQueryStrings } from "@mdtree/core";
+import { ParsedNode, ParsedTextToken, Location, stripUrlQueryStrings, isUndated } from "@mdtree/core";
 import {useMolecule} from "bunshi/react";
 import {GlobalAppMolecule, SearchViewMolecule} from "./react-context/state";
 import {useAtomValue} from "jotai";
@@ -37,7 +37,7 @@ export const NodeRenderer = (
 
     return <>
         <BaseNodeRender {...props}/>
-        <span> ({props.node.ageDays} days ago) </span>
+        {!isUndated(props.node.ageDays) && <span> ({props.node.ageDays} days ago) </span>}
     </>
 }
 
@@ -85,21 +85,27 @@ const BaseNodeRender = (
             return <span>{props.node.monthLiteral} {props.node.year}</span>
         case "folder":
             const folderNote = props.node.folderNote
+            // In the hierarchy the nesting conveys the path, so show the basename.
+            const folderLabel = props.node.name || props.node.path
             return <span>
                 <a className={"obsidian-link "} href="#" onClick={async ev => {
                     await openFile(folderNote)
                     ev.preventDefault()
                 }}>
-                {highlightText(props.node.path, matchTerms)} 📂
+                {highlightText(folderLabel, matchTerms)} 📂
                 </a>
             </span>
         case "folderNote":
+            const folderNoteName = props.node.folder.name
+            const folderNotePage = props.node.page.page
             return <span>
-                <a className="obsidian-link" href="#" onClick={async ev => {
-                    await openFile((props.node as any).page.page)
+                <a className="obsidian-link" href="#"
+                   onMouseOver={ev => previewLink(ev, folderNotePage)}
+                   onClick={async ev => {
+                    await openFile(folderNotePage)
                     ev.preventDefault()
                 }
-                }>{highlightText((props.node as any).folder.name, matchTerms)}</a> 📂📄
+                }>{highlightText(folderNoteName, matchTerms)}</a> 📂📄
             </span>
         case "pointer":
             return <span>⚠️ Pointer node should not be rendered</span>

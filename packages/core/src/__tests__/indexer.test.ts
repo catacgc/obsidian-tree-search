@@ -3,6 +3,8 @@ import { NotesGraph } from "../graph/graph.ts"
 import { indexSinglePage, DEFAULT_SETTINGS } from "../graph/indexer.ts"
 import { parseVaultFile } from "../parser/vault-file.ts"
 import { searchIndex } from "../search/search.ts"
+import { partitionArchived } from "../search/archive.ts"
+import { parseQuery, extractArchiveReveal } from "../search/query.ts"
 
 const MTIME = 1_700_000_000_000 // fixed timestamp for deterministic tests
 
@@ -34,15 +36,23 @@ describe("indexSinglePage", () => {
       expect(node.aliases).toContain("Alias Two")
     })
 
-    it("archived page (frontmatter tag) creates no child nodes", () => {
+    it("archived page (frontmatter tag) is indexed but marked archived", () => {
       const g = buildGraph(
-        parse("---\ntags:\n  - archive\n---\n\n## Section\n\n- [[Link]]", "old.md"),
+        parse("---\ntags:\n  - archive\n---\n\n## Section\n\n- buy milk #groceries", "old.md"),
       )
-      // Page node still exists
+      // Page node exists and is intrinsically archived
       expect(g.hasNode("[[old]]")).toBe(true)
-      // But no header or text children
-      const edges = g.outboundEdgeEntries("[[old]]")
-      expect(edges).toHaveLength(0)
+      expect(g.getNodeAttributes("[[old]]").archived).toBe(true)
+      // Its body is now indexed (no longer excluded); the header exists and the
+      // text line carries the archived flag so it is hidden by default but
+      // revealable via is:archived.
+      expect(g.hasNode("old#section")).toBe(true)
+      // Headers inside an archived page are marked archived too (they belong to
+      // exactly one page, so this is unambiguous).
+      expect(g.getNodeAttributes("old#section").archived).toBe(true)
+      const textNodes = g.filterNodes((_, n) => n.nodeType === "text")
+      expect(textNodes).toHaveLength(1)
+      expect(g.getNodeAttributes(textNodes[0]).archived).toBe(true)
     })
   })
 
@@ -322,5 +332,53 @@ describe("meta-mdtree archive", () => {
       return (attrs as { searchKey: string }).searchKey.includes("plain text")
     })
     expect(nodes.length).toBe(1)
+  })
+})
+
+describe("archive visibility (end-to-end)", () => {
+  const alphaTree = "- project alpha (meta-mdtree:: archive)\n    - deep alpha task #todo"
+
+  it("hides an archived subtree (and its non-archived descendants) by default", () => {
+    const g = buildGraph(parse(alphaTree, "n.md"))
+    const { visible, archivedCount } = partitionArchived(searchIndex(g, "alpha", "."), false)
+    expect(visible).toHaveLength(0)
+    expect(archivedCount).toBeGreaterThan(0)
+  })
+
+  it("reveals the archived subtree greyed with `alpha is:archived`", () => {
+    const g = buildGraph(parse(alphaTree, "n.md"))
+    const q = "alpha is:archived"
+    const { reveal } = extractArchiveReveal(parseQuery(q, "."))
+    expect(reveal).toBe(true)
+    const { visible } = partitionArchived(searchIndex(g, q, "."), reveal)
+    expect(visible.length).toBeGreaterThan(0)
+    // The archived root and its descendant are both stamped effectiveArchived.
+    expect(visible[0].effectiveArchived).toBe(true)
+    expect(visible[0].children.every(c => c.effectiveArchived)).toBe(true)
+  })
+
+  it("keeps a page archived even when referenced (merged) from another file", () => {
+    // Regression: a bare `[[Old Note]]` reference from a live page merges a
+    // reference PageNode (archived undefined) into the real one; the merge must
+    // not clear the archived flag, or the archived page leaks into results.
+    const g = buildGraph(
+      parse("---\ntags:\n  - archive\n---\n\n## Section\n\n- stale thing #todo", "Old Note.md"),
+      parse("- see [[Old Note]] for context #todo", "Live.md"),
+    )
+    expect(g.getNodeAttributes("[[old note]]").archived).toBe(true)
+    // A plain search for a term unique to the archived page's body finds nothing
+    // visible (the archived subtree is hidden); revealing brings it back.
+    expect(partitionArchived(searchIndex(g, "stale thing", "."), false).visible).toHaveLength(0)
+    expect(partitionArchived(searchIndex(g, "stale thing is:archived", "."), true).visible.length).toBeGreaterThan(0)
+  })
+
+  it("bare is:archived surfaces only archived items", () => {
+    const g = buildGraph(parse("- keep me #todo\n- toss me (meta-mdtree:: archive)", "n.md"))
+    const q = "is:archived"
+    const { reveal } = extractArchiveReveal(parseQuery(q, "."))
+    const { visible } = partitionArchived(searchIndex(g, q, "."), reveal)
+    expect(visible.length).toBeGreaterThan(0)
+    expect(visible.every(n => n.effectiveArchived)).toBe(true)
+    expect(visible.some(n => n.node.searchKey.includes("keep me"))).toBe(false)
   })
 })

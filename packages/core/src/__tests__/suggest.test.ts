@@ -10,6 +10,9 @@ describe("suggestAt", () => {
       { label: "is:folder", insertText: "is:folder" },
       { label: "is:attachment", insertText: "is:attachment" },
       { label: "is:task", insertText: "is:task" },
+      { label: "is:completed", insertText: "is:completed" },
+      { label: "is:undated", insertText: "is:undated" },
+      { label: "is:archived", insertText: "is:archived" },
     ])
   })
 

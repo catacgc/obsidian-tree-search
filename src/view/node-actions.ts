@@ -1,6 +1,6 @@
 import { reverseMarkdownParsing } from "./copy";
 import { TreeNode } from "./search/SearchViewFlatten";
-import { ObsidianLinkToken, ParsedTextToken, isArchived, Location } from "@mdtree/core";
+import { ObsidianLinkToken, ParsedTextToken, isArchived, Location, isUndated } from "@mdtree/core";
 import {App} from "obsidian";
 
 export interface VaultResults {
@@ -99,7 +99,7 @@ export function createRaycastResponse(app: App, results: TreeNode[]): VaultResul
         results: results.map((result, index) => {
             const actions = getTreeNodeActions(app, result)
             return {
-                title: renderTitle(result, [], app) + ` (${result.node.ageDays} days ago)`,
+                title: renderTitle(result, [], app) + (isUndated(result.node.ageDays) ? "" : ` (${result.node.ageDays} days ago)`),
                 level: result.indent,
                 index: result.index,
                 nodeType: result.node.nodeType,

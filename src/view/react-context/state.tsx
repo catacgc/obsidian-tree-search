@@ -1,5 +1,5 @@
 import {TreeNode} from '../search/SearchViewFlatten'
-import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, matchQuery, nodeMatchesQuery, pruneResultTree, type QueryExpr, partitionArchived, suggestAt, type Suggestion} from '@mdtree/core'
+import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, matchQuery, nodeMatchesQuery, pruneResultTree, type QueryExpr, partitionArchived, extractArchiveReveal, suggestAt, type Suggestion} from '@mdtree/core'
 import {atom, useAtomValue} from 'jotai'
 import {ParsedNode, ParsedTextToken, TextNode, Location} from '@mdtree/core'
 
@@ -148,7 +148,10 @@ export const SearchModalMolecule = molecule((mol, scope) => {
             })())
             : searchResults
 
-        const { visible, archivedCount } = partitionArchived(scoped)
+        // `is:archived` reveals (rather than hides) archived rows; its presence
+        // in the query flips partitioning from drop-with-count to keep-and-grey.
+        const { reveal } = extractArchiveReveal(parseQuery(searchQuery, separator))
+        const { visible, archivedCount } = partitionArchived(scoped, reveal)
         set(searchMol.updateSearchResultsAtom, visible, archivedCount)
     })
 
@@ -409,7 +412,9 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         const query = get(actualQueryAtom)
         if (!query) return []
         const separator = get(separatorAtom)
-        return parseQuery(query, separator)
+        // Strip `is:archived` (a reveal toggle, not a matcher) so it never drives
+        // the per-row `matched`/dimming computation.
+        return extractArchiveReveal(parseQuery(query, separator)).stages
     })
 
     const cursorPosAtom = atom(0)
@@ -590,7 +595,8 @@ function merge(node1: TreeNode, node2: ParsedNode): TreeNode {
         visible: true,
         selected: false,
         index: node1.index,
-        matched: node1.matched
+        matched: node1.matched,
+        archived: node1.archived
     }
 }
 
@@ -635,7 +641,8 @@ export function flattenIndex(indexed: ResultNode[], defaultIndentLevel = 0, matc
                 visible: indent <= defaultIndentLevel,
                 selected: false,
                 index: index,
-                matched: nodeMatchesQuery(node.node, matchExprs)
+                matched: nodeMatchesQuery(node.node, matchExprs),
+                archived: node.effectiveArchived ?? false
             })
             index += 1
             index = flatten(node.children, indent + 1, index)

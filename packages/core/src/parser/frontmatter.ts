@@ -51,6 +51,27 @@ export function extractTags(fm: Frontmatter): string[] {
 }
 
 /**
+ * Extract a page's explicit date (ms epoch) from frontmatter, preferring
+ * `updated` over `created`. Returns null when neither yields a valid date.
+ *
+ * js-yaml parses unquoted ISO dates into JS `Date` objects; quoted values and
+ * other formats arrive as strings, which we run through `Date.parse`.
+ */
+export function extractPageDate(fm: Frontmatter): number | null {
+  for (const field of ["updated", "created"]) {
+    const raw = fm[field]
+    if (raw instanceof Date) {
+      const ts = raw.getTime()
+      if (!isNaN(ts)) return ts
+    } else if (typeof raw === "string") {
+      const ts = Date.parse(raw)
+      if (!isNaN(ts)) return ts
+    }
+  }
+  return null
+}
+
+/**
  * Extract parent relation references from frontmatter.
  * parentRelation is the configurable field name (default: "parent").
  */

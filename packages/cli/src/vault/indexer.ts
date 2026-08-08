@@ -11,7 +11,15 @@ import {
   deserializeCache,
 } from "@mdtree/core"
 import { NodeVaultScanner } from "./node-scanner.ts"
+import { getPeriodicResolver } from "./periodic-config.ts"
 import type { VaultStore } from "../store/sqlite.ts"
+
+// Attach the vault's daily/weekly-note date resolver unless the caller already
+// supplied one, so every indexing path ages periodic notes from their filename.
+async function withPeriodicDate(vaultRoot: string, settings: IndexSettings): Promise<IndexSettings> {
+  if (settings.periodicDate) return settings
+  return { ...settings, periodicDate: await getPeriodicResolver(vaultRoot) }
+}
 
 function cacheFilePath(vaultRoot: string): string {
   return join(vaultRoot, ".mdtree", "cache.json")
@@ -41,7 +49,8 @@ export async function buildGraph(
 ): Promise<{ graph: NotesGraph; cache: Map<string, ParseCacheEntry> }> {
   const cacheFile = cacheFilePath(vaultRoot)
   const cache = await loadCacheFromFile(cacheFile)
-  const graph = await buildGraphFromScanner(new NodeVaultScanner(vaultRoot), settings, cache)
+  const resolvedSettings = await withPeriodicDate(vaultRoot, settings)
+  const graph = await buildGraphFromScanner(new NodeVaultScanner(vaultRoot), resolvedSettings, cache)
   await saveCacheToFile(cacheFile, cache)
   return { graph, cache }
 }
@@ -57,7 +66,8 @@ export async function reindexFile(
 ): Promise<void> {
   const relPath = relative(vaultRoot, absPath)
 
-  await reindexFileInGraph(relPath, graph, new NodeVaultScanner(vaultRoot), settings, parseCache)
+  const resolvedSettings = await withPeriodicDate(vaultRoot, settings)
+  await reindexFileInGraph(relPath, graph, new NodeVaultScanner(vaultRoot), resolvedSettings, parseCache)
 
   if (store && vault) {
     store.deleteByPath(vault, relPath)

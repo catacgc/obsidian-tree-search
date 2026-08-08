@@ -1,5 +1,6 @@
 import { describe, it, expect } from "bun:test"
-import { parseQuery, matchQuery, firstPassInclude, nodeMatchesQuery, parseDuration, collectModifiers, type QueryExpr, IS_VALUES, HAS_VALUES } from "../search/query.ts"
+import { parseQuery, matchQuery, firstPassInclude, nodeMatchesQuery, parseDuration, collectModifiers, extractArchiveReveal, type QueryExpr, IS_VALUES, HAS_VALUES } from "../search/query.ts"
+import { UNDATED_AGE } from "../graph/boost.ts"
 import type { ParsedNode } from "../graph/types.ts"
 
 const baseLocation = { path: "test.md", position: { start: { line: 0, ch: 0 }, end: { line: 0, ch: 0 } } }
@@ -166,9 +167,17 @@ describe("matchQuery", () => {
     expect(matchQuery(page("home"), expr)).toBe(false)
   })
 
-  it("is:task matches only task-flagged text nodes", () => {
+  it("is:task matches only open (uncompleted) task-flagged text nodes", () => {
     const expr: QueryExpr = { type: "modifier", field: "is", value: "task" }
     expect(matchQuery(text("buy milk", { isTask: true }), expr)).toBe(true)
+    expect(matchQuery(text("buy milk", { isTask: true, isCompleted: true }), expr)).toBe(false)
+    expect(matchQuery(text("buy milk"), expr)).toBe(false)
+  })
+
+  it("is:completed matches only completed task-flagged text nodes", () => {
+    const expr: QueryExpr = { type: "modifier", field: "is", value: "completed" }
+    expect(matchQuery(text("buy milk", { isTask: true, isCompleted: true }), expr)).toBe(true)
+    expect(matchQuery(text("buy milk", { isTask: true }), expr)).toBe(false)
     expect(matchQuery(text("buy milk"), expr)).toBe(false)
   })
 
@@ -207,7 +216,10 @@ describe("matchQuery", () => {
       const matchesSomething =
         matchQuery(page("x"), expr) || matchQuery(header("x"), expr) ||
         matchQuery(text("x", { isTask: true }), expr) || matchQuery(text("x"), expr) ||
-        matchQuery(folder("x"), expr) || matchQuery(attachment("x"), expr)
+        matchQuery(text("x", { isTask: true, isCompleted: true }), expr) ||
+        matchQuery(folder("x"), expr) || matchQuery(attachment("x"), expr) ||
+        matchQuery({ ...page("x"), ageDays: UNDATED_AGE }, expr) ||
+        matchQuery({ ...text("x"), archived: true }, expr)
       expect(matchesSomething).toBe(true)
     }
     for (const value of HAS_VALUES) {
@@ -283,6 +295,22 @@ describe("in: recency modifier", () => {
   it("never matches an invalid duration", () => {
     const expr: QueryExpr = { type: "modifier", field: "in", value: "abc" }
     expect(matchQuery({ ...text("recent"), ageDays: 0 }, expr)).toBe(false)
+  })
+
+  it("never matches an undated node in any window", () => {
+    expect(matchQuery({ ...text("undated"), ageDays: UNDATED_AGE }, { type: "modifier", field: "in", value: "1y" })).toBe(false)
+    // ...unless it bears an emoji, which is always fresh
+    expect(matchQuery({ ...text("🎉 undated"), ageDays: UNDATED_AGE }, { type: "modifier", field: "in", value: "1d" })).toBe(true)
+  })
+})
+
+describe("is:undated modifier", () => {
+  const expr: QueryExpr = { type: "modifier", field: "is", value: "undated" }
+
+  it("matches only nodes with the undated sentinel age", () => {
+    expect(matchQuery({ ...text("undated"), ageDays: UNDATED_AGE }, expr)).toBe(true)
+    expect(matchQuery({ ...text("dated"), ageDays: 0 }, expr)).toBe(false)
+    expect(matchQuery({ ...text("old but dated"), ageDays: 5000 }, expr)).toBe(false)
   })
 })
 
@@ -372,10 +400,20 @@ describe("legacy bare shortcuts", () => {
     expect(parseQuery(":header", ".")[0]).toEqual({ type: "modifier", field: "is", value: "header" })
   })
 
-  it("resolves the remaining single-letter shortcuts: :f, :h, :a", () => {
+  it("resolves the remaining single-letter shortcuts: :f, :h", () => {
     expect(parseQuery(":f", ".")[0]).toEqual({ type: "modifier", field: "is", value: "folder" })
     expect(parseQuery(":h", ".")[0]).toEqual({ type: "modifier", field: "is", value: "header" })
-    expect(parseQuery(":a", ".")[0]).toEqual({ type: "modifier", field: "is", value: "attachment" })
+  })
+
+  it("treats :a as ambiguous now that both :attachment and :archived exist", () => {
+    // Both start with 'a', so the single letter can no longer resolve uniquely.
+    expect(parseQuery(":a", ".")[0]).toEqual({ type: "contains", value: ":a" })
+    expect(parseQuery(":at", ".")[0]).toEqual({ type: "modifier", field: "is", value: "attachment" })
+    expect(parseQuery(":ar", ".")[0]).toEqual({ type: "modifier", field: "is", value: "archived" })
+  })
+
+  it("resolves :archived to is:archived (the reveal toggle)", () => {
+    expect(parseQuery(":archived", ".")[0]).toEqual({ type: "modifier", field: "is", value: "archived" })
   })
 
   it("falls back to a literal search for an unrecognized bare shortcut", () => {
@@ -387,5 +425,45 @@ describe("legacy bare shortcuts", () => {
       type: "not",
       expr: { type: "modifier", field: "is", value: "page" },
     })
+  })
+})
+
+describe("extractArchiveReveal", () => {
+  const ARCHIVED: QueryExpr = { type: "modifier", field: "is", value: "archived" }
+
+  it("no archive flag → reveal false, stages unchanged", () => {
+    const { reveal, stages } = extractArchiveReveal(parseQuery("foo bar", "."))
+    expect(reveal).toBe(false)
+    expect(stages).toEqual([{ type: "and", exprs: [{ type: "contains", value: "foo" }, { type: "contains", value: "bar" }] }])
+  })
+
+  it("strips is:archived from a mixed stage and reveals", () => {
+    const { reveal, stages } = extractArchiveReveal(parseQuery("foo is:archived", "."))
+    expect(reveal).toBe(true)
+    expect(stages).toEqual([{ type: "contains", value: "foo" }])
+  })
+
+  it("bare is:archived degrades to the archived predicate", () => {
+    const { reveal, stages } = extractArchiveReveal(parseQuery("is:archived", "."))
+    expect(reveal).toBe(true)
+    expect(stages).toEqual([ARCHIVED])
+  })
+
+  it("legacy :archived behaves the same", () => {
+    const { reveal, stages } = extractArchiveReveal(parseQuery(":archived", "."))
+    expect(reveal).toBe(true)
+    expect(stages).toEqual([ARCHIVED])
+  })
+
+  it("substitutes per-stage: `xxx . is:archived` reveals archived under xxx", () => {
+    const { reveal, stages } = extractArchiveReveal(parseQuery("xxx . is:archived", "."))
+    expect(reveal).toBe(true)
+    expect(stages).toEqual([{ type: "contains", value: "xxx" }, ARCHIVED])
+  })
+
+  it("-is:archived is a no-op (does not reveal)", () => {
+    const { reveal, stages } = extractArchiveReveal(parseQuery("foo -is:archived", "."))
+    expect(reveal).toBe(false)
+    expect(stages).toEqual([{ type: "contains", value: "foo" }])
   })
 })

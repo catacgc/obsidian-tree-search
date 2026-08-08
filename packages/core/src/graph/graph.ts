@@ -4,6 +4,7 @@ import type {
   EdgeAttributes,
   EdgeEntry,
   FolderNode,
+  FolderNote,
   HeaderNode,
   Location,
   MonthNode,
@@ -13,7 +14,7 @@ import type {
   ParsedTextToken,
   TextNode,
 } from "./types.ts"
-import { calculateBoost, getAgeDays } from "./boost.ts"
+import { calculateBoost, getAgeDays, ageDaysFromText, UNDATED_AGE } from "./boost.ts"
 
 // ── Key derivation ─────────────────────────────────────────────────────────────
 
@@ -22,7 +23,7 @@ export function getKey(node: ParsedNode): string {
     case "page":
       return `[[${node.page.toLowerCase().replace(/\.canvas$/, "")}]]`
     case "folderNote":
-      return `folderNote:${node.folder.name.toLowerCase()}`
+      return `folderNote:${node.folder.path.toLowerCase()}`
     case "pointer":
       return `pointer:${node.target}`
     case "header":
@@ -69,6 +70,8 @@ export class NotesGraph {
       this.nodes.set(key, this.mergePageNode(this.nodes.get(key) as PageNode, node))
     } else if (node.nodeType === "header") {
       this.nodes.set(key, this.mergeHeaderNode(this.nodes.get(key) as HeaderNode, node))
+    } else {
+      this.nodes.set(key, { ...node })
     }
   }
 
@@ -82,6 +85,10 @@ export class NotesGraph {
       isReference,
       searchKey,
       boost: Math.max(existing.boost, incoming.boost),
+      // Preserve archived across merges: a page indexed from its own file (with
+      // the flag) is often also created as a bare reference from other files
+      // (without it), in either order — don't let the reference clear it.
+      ...(existing.archived || incoming.archived ? { archived: true } : {}),
     }
   }
 
@@ -90,6 +97,9 @@ export class NotesGraph {
       ...existing,
       indent: Math.max(existing.indent, incoming.indent),
       boost: Math.max(existing.boost, incoming.boost),
+      // Archived if either creation marked it so (a header may be created both as
+      // a parent reference and as itself; don't let an unmarked one clear it).
+      ...(existing.archived || incoming.archived ? { archived: true } : {}),
     }
   }
 
@@ -149,6 +159,11 @@ export class NotesGraph {
 
   addRelatedEdge(fromKey: string, toKey: string, location: Location, mtime = 0): void {
     this.addEdge(fromKey, toKey, { mtime, type: "related", location })
+  }
+
+  // Filesystem-containment edge (folder → subfolder / folder → contained note).
+  addFolderEdge(fromKey: string, toKey: string, location: Location): void {
+    this.addEdge(fromKey, toKey, { mtime: 0, type: "folder", location })
   }
 
   hasEdge(from: string, to: string): boolean {
@@ -219,6 +234,30 @@ export class NotesGraph {
     this.nodesByPath.delete(srcPath)
   }
 
+  /** Remove a single node and every edge touching it. */
+  removeNode(key: string): void {
+    for (const edge of [...(this.out.get(key) ?? []), ...(this.in.get(key) ?? [])]) {
+      const outList = this.out.get(edge.from)
+      if (outList) {
+        const idx = outList.indexOf(edge)
+        if (idx !== -1) outList.splice(idx, 1)
+      }
+      const inList = this.in.get(edge.to)
+      if (inList) {
+        const idx = inList.indexOf(edge)
+        if (idx !== -1) inList.splice(idx, 1)
+      }
+      const byPath = this.edgesByPath.get(edge.attributes.location.path)
+      if (byPath) {
+        const idx = byPath.indexOf(edge)
+        if (idx !== -1) byPath.splice(idx, 1)
+      }
+    }
+    this.nodes.delete(key)
+    this.out.delete(key)
+    this.in.delete(key)
+  }
+
   /** Track that a node was created by a specific file (for incremental cleanup) */
   trackNodePath(key: string, srcPath: string): void {
     if (!this.nodesByPath.has(srcPath)) this.nodesByPath.set(srcPath, new Set())
@@ -286,11 +325,12 @@ export class NotesGraph {
     heading: string,
     location: BaseNode["location"],
     indent = -1,
-    modifiedTime?: number,
-    filename?: string,
+    inheritedAge: number = UNDATED_AGE,
+    archived = false,
   ): HeaderNode {
     const searchKey = `${page}#${heading}`.toLowerCase()
-    const ageDays = getAgeDays(modifiedTime, filename ? filename + heading : undefined)
+    // A date in the heading text wins; otherwise inherit the page's age.
+    const ageDays = ageDaysFromText(heading) ?? inheritedAge
     const node: HeaderNode = {
       nodeType: "header",
       page,
@@ -300,6 +340,9 @@ export class NotesGraph {
       searchKey,
       boost: calculateBoost("header", searchKey, ageDays),
       ageDays,
+      // A header belongs to exactly one page (keyed by page#header), so marking
+      // it archived when its page is archived is unambiguous.
+      ...(archived ? { archived: true } : {}),
     }
     this.addOrUpdateNode(node)
     return node
@@ -311,7 +354,7 @@ export class NotesGraph {
     location: Location,
   ): FolderNode {
     const searchKey = (folderName || "(root)").toLowerCase()
-    const ageDays = getAgeDays(undefined, folderName)
+    const ageDays = getAgeDays(folderName)
     const node: FolderNode = {
       nodeType: "folder",
       path: folderPath,
@@ -326,6 +369,24 @@ export class NotesGraph {
     return node
   }
 
+  // A folder whose directory contains a same-named note (Obsidian "folder note")
+  // is represented in the folder hierarchy by a single folderNote node bundling
+  // the folder and its note, instead of showing them as two separate rows.
+  createFolderNoteNode(folder: FolderNode, page: PageNode): FolderNote {
+    const node: FolderNote = {
+      nodeType: "folderNote",
+      folder,
+      page,
+      location: page.location,
+      searchKey: folder.searchKey,
+      boost: Math.max(folder.boost, page.boost),
+      ageDays: Math.min(folder.ageDays, page.ageDays),
+      ...(page.archived ? { archived: true } : {}),
+    }
+    this.addOrUpdateNode(node)
+    return node
+  }
+
   addAttachmentNode(
     name: string,
     extension: string,
@@ -333,7 +394,9 @@ export class NotesGraph {
     mtime: number,
   ): AttachmentNode {
     const searchKey = name.toLowerCase()
-    const ageDays = getAgeDays(mtime, name)
+    // Attachments have no semantic date unless one is embedded in the filename;
+    // filesystem mtime is intentionally ignored.
+    const ageDays = getAgeDays(name)
     const node: AttachmentNode = {
       nodeType: "attachment",
       name,
@@ -355,7 +418,8 @@ export class NotesGraph {
     const date = new Date(ts)
     const monthLiteral = date.toLocaleString("default", { month: "long" })
     const searchKey = `${monthLiteral} ${date.getFullYear()}`.toLowerCase()
-    const ageDays = getAgeDays(ts)
+    // Month nodes carry a real, semantic timestamp — use it directly.
+    const ageDays = getAgeDays(undefined, ts)
     const node: MonthNode = {
       nodeType: "month",
       month: date.getMonth() + 1,

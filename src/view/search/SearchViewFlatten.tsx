@@ -16,6 +16,7 @@ export type TreeNode = {
     selected: boolean
     index: number
     matched: boolean
+    archived?: boolean
 }
 
 export const SearchViewFlatten = () => {

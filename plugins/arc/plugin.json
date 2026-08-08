@@ -1,0 +1,8 @@
+{
+  "namespace": "arc",
+  "name": "Arc Browser",
+  "version": "1.0.0",
+  "description": "Indexes pinned links and folders from Arc Browser spaces",
+  "author": "mdtree-community",
+  "entrypoint": "run.ts"
+}

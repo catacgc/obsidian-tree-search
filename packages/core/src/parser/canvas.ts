@@ -1,6 +1,6 @@
 import type { Location, PageNode, ParsedTextToken } from "../graph/types.ts"
 import type { NotesGraph } from "../graph/graph.ts"
-import { calculateBoost } from "../graph/boost.ts"
+import { calculateBoost, UNDATED_AGE } from "../graph/boost.ts"
 import { buildNodesFromTextLines } from "./text-lines.ts"
 
 // ── Canvas JSON types ─────────────────────────────────────────────────────────
@@ -257,8 +257,8 @@ function createCanvasPageNode(path: string, basename: string, graph: NotesGraph)
       position: { start: { line: 0, ch: 0 }, end: { line: 0, ch: 0 } },
     },
     searchKey,
-    boost: calculateBoost("page", searchKey, 0),
-    ageDays: 0,
+    boost: calculateBoost("page", searchKey, UNDATED_AGE),
+    ageDays: UNDATED_AGE,
   }
   graph.removeExistingPageEdges(node)
   graph.addOrUpdateNode(node)

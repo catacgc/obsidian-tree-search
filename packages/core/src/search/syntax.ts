@@ -24,7 +24,10 @@ const IS_DESCRIPTIONS: Record<string, string> = {
   text: "text & list lines",
   folder: "folders",
   attachment: "attachments",
-  task: "tasks",
+  task: "open tasks",
+  completed: "completed tasks",
+  undated: "no date",
+  archived: "reveal archived (greyed)",
 }
 
 const HAS_DESCRIPTIONS: Record<string, string> = {
@@ -87,7 +90,8 @@ export function describeQuerySyntax(): QuerySyntaxGroup[] {
         { syntax: ":header", description: "headings", insertText: ":header" },
         { syntax: ":folder", description: "folders", insertText: ":folder" },
         { syntax: ":attachment", description: "attachments", insertText: ":attachment" },
-        { syntax: ":task", description: "tasks", insertText: ":task" },
+        { syntax: ":task", description: "open tasks", insertText: ":task" },
+        { syntax: ":archived", description: "reveal archived (greyed)", insertText: ":archived" },
         { syntax: ":emoji", description: "has an emoji", insertText: ":emoji" },
       ],
     },

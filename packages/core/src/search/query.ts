@@ -1,4 +1,5 @@
 import type { ParsedNode } from "../graph/types.ts"
+import { isUndated } from "../graph/boost.ts"
 
 export type QueryModifierField = "is" | "has" | "in"
 
@@ -11,8 +12,24 @@ export type QueryExpr =
   | { type: "or"; exprs: QueryExpr[] }
   | { type: "modifier"; field: QueryModifierField; value: string }
 
-export const IS_VALUES = ["page", "header", "text", "folder", "attachment", "task"]
+export const IS_VALUES = ["page", "header", "text", "folder", "attachment", "task", "completed", "undated", "archived"]
 export const HAS_VALUES = ["emoji", "link", "page"]
+
+// Intrinsic archive check: a node authored as archived via any of the three
+// forms. The index-time derived `archived` flag covers page frontmatter and
+// line `#archive` tags; the `(meta-mdtree:: archive)` directive is also
+// detected directly from tokens so directly-constructed text nodes work too.
+// This is *intrinsic* only — path-contextual propagation to descendants is
+// applied at query time in `partitionArchived`.
+export function isArchived(node: ParsedNode): boolean {
+  if (node.archived === true) return true
+  return (
+    node.nodeType === "text" &&
+    node.parsedTokens.some(
+      t => t.tokenType === "meta_mdtree" && t.directive === "archive",
+    )
+  )
+}
 
 // `in:<n><unit>` durations, expressed in whole days. Both short (d/w/m/y) and
 // long (day/week/month/year, singular or plural) forms are accepted. `m` is
@@ -39,6 +56,8 @@ const LEGACY_MODIFIERS: Record<string, { field: QueryModifierField; value: strin
   folder: { field: "is", value: "folder" },
   attachment: { field: "is", value: "attachment" },
   task: { field: "is", value: "task" },
+  completed: { field: "is", value: "completed" },
+  archived: { field: "is", value: "archived" },
   emoji: { field: "has", value: "emoji" },
 }
 
@@ -236,9 +255,13 @@ function matchModifier(attrs: ParsedNode, field: QueryModifierField, value: stri
       case "page": return attrs.nodeType === "page"
       case "header": return attrs.nodeType === "header"
       case "text": return attrs.nodeType === "text"
-      case "folder": return attrs.nodeType === "folder"
+      // A folderNote stands in for its folder, so it satisfies `is:folder` too.
+      case "folder": return attrs.nodeType === "folder" || attrs.nodeType === "folderNote"
       case "attachment": return attrs.nodeType === "attachment"
-      case "task": return attrs.nodeType === "text" && attrs.isTask === true
+      case "task": return attrs.nodeType === "text" && attrs.isTask === true && attrs.isCompleted !== true
+      case "completed": return attrs.nodeType === "text" && attrs.isTask === true && attrs.isCompleted === true
+      case "undated": return isUndated(attrs.ageDays)
+      case "archived": return isArchived(attrs)
       default: return false
     }
   }
@@ -293,6 +316,21 @@ export function nodeMatchesQuery(attrs: ParsedNode, exprs: QueryExpr[]): boolean
   return exprs.length === 0 || exprs.some(e => matchQuery(attrs, e))
 }
 
+// Whether any stage of the query selects folders (`is:folder`). Drives whether
+// folder-containment edges are traversed when building result trees, so folder
+// hierarchies surface only when explicitly requested.
+export function queryTargetsFolders(exprs: QueryExpr[]): boolean {
+  const hasFolderModifier = (e: QueryExpr): boolean => {
+    switch (e.type) {
+      case "modifier": return e.field === "is" && e.value === "folder"
+      case "and":
+      case "or":       return e.exprs.some(hasFolderModifier)
+      default:         return false
+    }
+  }
+  return exprs.some(hasFolderModifier)
+}
+
 // Collects the modifier expressions of a given field from a query tree. Used by
 // the UI to re-evaluate which rendered nodes satisfy e.g. an `in:` recency
 // filter. Negation is deliberately not descended into: `-in:3m` means "not
@@ -304,4 +342,64 @@ export function collectModifiers(expr: QueryExpr, field: QueryModifierField): Qu
     case "or":       return expr.exprs.flatMap(e => collectModifiers(e, field))
     default:         return []
   }
+}
+
+// ── Archive reveal ──────────────────────────────────────────────────────────────
+//
+// `is:archived` / `:archived` is not an ordinary matcher — as a matcher it would
+// mean "AND archived" (only-archived), but the intent is a *reveal toggle*: keep
+// the normal results and additionally show archived items (greyed). So it is
+// extracted from the query into a `reveal` flag and stripped from matching, with
+// one degradation: a stage whose only content was the flag collapses to empty and
+// is replaced by the archived predicate, so a bare `is:archived` still matches the
+// archived items. `-is:archived` is a no-op (archived is hidden by default anyway).
+
+const ARCHIVED = { type: "modifier", field: "is", value: "archived" } as const
+
+function isArchivedModifier(expr: QueryExpr): boolean {
+  return expr.type === "modifier" && expr.field === "is" && expr.value === "archived"
+}
+
+function stripArchived(expr: QueryExpr): { expr: QueryExpr; reveal: boolean } {
+  switch (expr.type) {
+    case "modifier":
+      return isArchivedModifier(expr)
+        ? { expr: { type: "empty" }, reveal: true }
+        : { expr, reveal: false }
+    case "not": {
+      const inner = stripArchived(expr.expr)
+      // `-is:archived` → drop it entirely and do NOT reveal (it just restates
+      // the default of hiding archived).
+      if (inner.expr.type === "empty") return { expr: { type: "empty" }, reveal: false }
+      return { expr: { type: "not", expr: inner.expr }, reveal: inner.reveal }
+    }
+    case "and":
+    case "or": {
+      let reveal = false
+      const kept: QueryExpr[] = []
+      for (const e of expr.exprs) {
+        const r = stripArchived(e)
+        reveal ||= r.reveal
+        if (r.expr.type !== "empty") kept.push(r.expr)
+      }
+      if (kept.length === 0) return { expr: { type: "empty" }, reveal }
+      if (kept.length === 1) return { expr: kept[0], reveal }
+      return { expr: { type: expr.type, exprs: kept }, reveal }
+    }
+    default:
+      return { expr, reveal: false }
+  }
+}
+
+export function extractArchiveReveal(stages: QueryExpr[]): { reveal: boolean; stages: QueryExpr[] } {
+  let reveal = false
+  const out = stages.map(stage => {
+    const r = stripArchived(stage)
+    reveal ||= r.reveal
+    // A stage that contained *only* the flag collapses to empty — substitute the
+    // archived predicate so `is:archived` (alone, or as a whole stage) matches.
+    if (r.reveal && r.expr.type === "empty") return { ...ARCHIVED }
+    return r.expr
+  })
+  return { reveal, stages: out }
 }

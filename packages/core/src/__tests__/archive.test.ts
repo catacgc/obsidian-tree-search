@@ -125,4 +125,51 @@ describe("partitionArchived", () => {
     expect(visible).toHaveLength(0)
     expect(archivedCount).toBe(0)
   })
+
+  it("path-contextually hides non-archived descendants of an archived ancestor", () => {
+    // Only the ancestor is intrinsically archived; the child is not, yet it is
+    // effectively archived because it sits under one → hidden by default.
+    const results = [
+      rn(textNode("archived-parent", true), [
+        rn(textNode("plain-child"), [rn(textNode("plain-grandchild"))]),
+      ]),
+    ]
+    const { visible, archivedCount } = partitionArchived(results)
+    expect(visible).toHaveLength(0)
+    expect(archivedCount).toBe(3) // parent + child + grandchild
+  })
+})
+
+describe("partitionArchived — reveal", () => {
+  it("keeps archived items and stamps effectiveArchived when reveal=true", () => {
+    const results = [
+      rn(textNode("active")),
+      rn(textNode("archived", true), [rn(textNode("child"))]),
+    ]
+    const { visible, archivedCount } = partitionArchived(results, true)
+    expect(archivedCount).toBe(0)
+    expect(visible).toHaveLength(2)
+    const [active, archived] = visible
+    expect(active.effectiveArchived).toBe(false)
+    expect(archived.effectiveArchived).toBe(true)
+    // Propagated path-contextually to the non-archived child.
+    expect(archived.children[0].effectiveArchived).toBe(true)
+  })
+
+  it("does not mark unrelated siblings as archived when revealing", () => {
+    const results = [
+      rn(textNode("parent"), [
+        rn(textNode("archived-branch", true), [rn(textNode("deep"))]),
+        rn(textNode("active-branch")),
+      ]),
+    ]
+    const { visible } = partitionArchived(results, true)
+    const parent = visible[0]
+    expect(parent.effectiveArchived).toBe(false)
+    const archivedBranch = parent.children.find(c => c.node.searchKey === "archived-branch")!
+    const activeBranch = parent.children.find(c => c.node.searchKey === "active-branch")!
+    expect(archivedBranch.effectiveArchived).toBe(true)
+    expect(archivedBranch.children[0].effectiveArchived).toBe(true)
+    expect(activeBranch.effectiveArchived).toBe(false)
+  })
 })

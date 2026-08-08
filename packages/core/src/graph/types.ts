@@ -12,6 +12,12 @@ export type BaseNode = {
   location: Location
   boost: number
   ageDays: number
+  // Intrinsic archive flag, derived at index time from any of the three
+  // authoring forms (page frontmatter `#archive`, a line `#archive` tag, or a
+  // `(meta-mdtree:: archive)` directive). `isArchived()` reads this (and, for
+  // directly-constructed nodes, the directive token). Path-contextual
+  // propagation to descendants happens at query time in `partitionArchived`.
+  archived?: boolean
 }
 
 export type PageNode = BaseNode & {
@@ -127,7 +133,11 @@ export type ParsedTextToken = TextToken | ObsidianLinkToken | LinkToken | ImageT
 
 export type EdgeAttributes = {
   mtime: number
-  type: "parent" | "related" | "month"
+  // "folder" is a filesystem-containment edge (folder → subfolder / folder →
+  // contained note). Unlike "parent" (link/frontmatter hierarchy), it is only
+  // traversed when a query targets folders (see buildTree), so folder trees
+  // surface under `is:folder` without leaking into ordinary searches.
+  type: "parent" | "related" | "month" | "folder"
   location: Location
 }
 

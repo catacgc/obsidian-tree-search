@@ -1,9 +1,9 @@
-import { NotesGraph } from "./graph.ts"
+import { NotesGraph, getKey } from "./graph.ts"
 import { indexSinglePage, DEFAULT_SETTINGS, type IndexSettings } from "./indexer.ts"
 import { parseVaultFile } from "../parser/vault-file.ts"
 import { parseCanvasData, type CanvasData } from "../parser/canvas.ts"
-import type { VaultScanner } from "./scanner.ts"
-import type { DvPage } from "./types.ts"
+import type { VaultScanner, VaultFile, VaultFolder } from "./scanner.ts"
+import type { DvPage, FolderNode } from "./types.ts"
 
 export type ParseCacheEntry = {
   page: DvPage
@@ -20,6 +20,80 @@ function basename(path: string, stripExt?: string): string {
   const name = path.split("/").pop() ?? path
   if (stripExt && name.endsWith(stripExt)) return name.slice(0, -stripExt.length)
   return name
+}
+
+function dirname(path: string): string {
+  const slash = path.lastIndexOf("/")
+  return slash === -1 ? "" : path.slice(0, slash)
+}
+
+const EMPTY_POSITION = { start: { line: 0, ch: 0 }, end: { line: 0, ch: 0 } }
+
+// The graph key of the primary node a file produces: pages/canvases key by their
+// (extension-stripped) basename, attachments by their full name.
+function fileNodeKey(path: string): string {
+  const ext = extname(path)
+  if (ext === ".md" || ext === ".canvas") return `[[${basename(path, ext).toLowerCase()}]]`
+  return basename(path).toLowerCase()
+}
+
+// Wire folders into a browsable hierarchy: parent folder → subfolder, and folder
+// → each note/file it directly contains. A folder that has a same-named note
+// (an Obsidian "folder note") is collapsed into a single folderNote node that
+// stands in for the folder everywhere and inherits the folder's contents as
+// children — the note itself is not repeated as a child. All edges use the
+// dedicated "folder" type so they only surface under `is:folder` (see buildTree).
+function linkFolderHierarchy(
+  graph: NotesGraph,
+  folders: VaultFolder[],
+  files: VaultFile[],
+): void {
+  const filePaths = new Set(files.map(f => f.path))
+
+  // First pass: pick each folder's representative node key, substituting a
+  // folderNote node (and dropping the plain folder node) where a note exists.
+  const repByPath = new Map<string, string>()
+  const folderNoteFile = new Map<string, string>()
+
+  for (const folder of folders) {
+    const folderKey = folder.path.toLowerCase()
+    if (!graph.hasNode(folderKey)) continue
+    const folderNode = graph.getNodeAttributes(folderKey)
+    if (folderNode.nodeType !== "folder") continue
+
+    const notePath = (folderNode as FolderNode).folderNote
+    const pageKey = `[[${(folder.name || "root").toLowerCase()}]]`
+    if (filePaths.has(notePath) && graph.hasNode(pageKey)) {
+      const pageNode = graph.getNodeAttributes(pageKey)
+      if (pageNode.nodeType === "page") {
+        const fnNode = graph.createFolderNoteNode(folderNode as FolderNode, pageNode)
+        graph.removeNode(folderKey)
+        repByPath.set(folder.path, getKey(fnNode))
+        folderNoteFile.set(folder.path, notePath)
+        continue
+      }
+    }
+    repByPath.set(folder.path, folderKey)
+  }
+
+  // Second pass: parent folder → child folder containment edges.
+  for (const folder of folders) {
+    const rep = repByPath.get(folder.path)
+    const parentRep = repByPath.get(dirname(folder.path))
+    if (!rep || !parentRep) continue
+    graph.addFolderEdge(parentRep, rep, { path: folder.path, position: EMPTY_POSITION })
+  }
+
+  // Third pass: folder → contained file edges (excluding each folder's own note).
+  for (const file of files) {
+    const dir = dirname(file.path)
+    const rep = repByPath.get(dir)
+    if (!rep) continue
+    if (folderNoteFile.get(dir) === file.path) continue
+    const childKey = fileNodeKey(file.path)
+    if (!graph.hasNode(childKey)) continue
+    graph.addFolderEdge(rep, childKey, { path: dir, position: EMPTY_POSITION })
+  }
 }
 
 async function indexScannedFile(
@@ -130,6 +204,8 @@ export async function buildGraphFromScanner(
       await indexScannedFile(canvasFiles[i].path, result.content, result.mtime, graph, settings)
     }
   }
+
+  linkFolderHierarchy(graph, folders, files)
 
   if (parseCache) {
     const currentPaths = new Set(files.map(f => f.path))
