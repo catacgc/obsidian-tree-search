@@ -60,3 +60,4 @@ export {
   type SectionWrite,
   type PullDeletion,
 } from "./search/pull.ts"
+export { upsertOrganiseSections } from "./search/organise-sections.ts"
