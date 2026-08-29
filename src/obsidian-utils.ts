@@ -1,6 +1,5 @@
 import {App, normalizePath, TFile, FuzzySuggestModal, TFolder, FuzzyMatch} from "obsidian";
-import {Location, PullDeletion, PageNode} from "@mdtree/core";
-import type {NotesGraph, OrganiseHome} from "@mdtree/core";
+import {Location, PullDeletion, type NotesGraph, type OrganiseHome} from "@mdtree/core";
 
 // Reverse engineer the Canvas api
 interface CanvasNode {
@@ -300,7 +299,8 @@ export async function unarchivePage(app: App, path: string, archiveTag: string) 
  * children of the pull tree.
  */
 export function resolveHome(app: App, graph: NotesGraph, pageKey: string, organisingNotePath: string): OrganiseHome {
-    const node = graph.getNodeAttributes(pageKey) as PageNode
+    const node = graph.getNodeAttributes(pageKey)
+    if (node.nodeType !== "page") throw new Error(`resolveHome called with a non-page key: ${pageKey}`)
     if (!node.isReference) return { path: node.location.path, exists: true }
 
     const slash = organisingNotePath.lastIndexOf("/")
