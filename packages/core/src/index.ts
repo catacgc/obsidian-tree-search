@@ -52,12 +52,11 @@ export { isArchived, partitionArchived } from "./search/archive.ts"
 export {
   buildPullTree,
   formatOccurrenceDate,
-  findExistingOccurrence,
-  planPullWrites,
+  planOrganiseWrites,
   planDeletions,
   type PullNode,
   type PullLine,
-  type PullWriteAnchor,
-  type PullWrite,
+  type OrganiseHome,
+  type SectionWrite,
   type PullDeletion,
 } from "./search/pull.ts"
