@@ -1,5 +1,5 @@
 import {App, normalizePath, TFile, FuzzySuggestModal, TFolder, FuzzyMatch} from "obsidian";
-import {Location, PullDeletion, type NotesGraph, type OrganiseHome} from "@mdtree/core";
+import {Location, PullDeletion, upsertOrganiseSections, type NotesGraph, type OrganiseHome, type SectionWrite} from "@mdtree/core";
 
 // Reverse engineer the Canvas api
 interface CanvasNode {
@@ -309,97 +309,59 @@ export function resolveHome(app: App, graph: NotesGraph, pageKey: string, organi
     return { path: candidatePath, exists: app.vault.getFileByPath(candidatePath) != null }
 }
 
-const INDENT_UNIT = "  "
-
-function leadingWhitespace(line: string): string {
-    return line.match(/^\s*/)?.[0] ?? ""
-}
-
-function renderPullLines(lines: PullWrite["lines"], baseIndent: string, extraDepth = 0): string[] {
-    return lines.map(l => `${baseIndent}${INDENT_UNIT.repeat(l.depth + extraDepth)}- ${l.text}`)
-}
-
-// The insertion point for new content merged under an already-existing
-// occurrence: right after that line's own existing children (any run of
-// immediately-following lines indented deeper than the anchor), so a repeat
-// pull appends after what's already there instead of interleaving with it.
-function findInsertionPointAfterChildren(lines: string[], anchorLine: number): number {
-    const anchorIndent = leadingWhitespace(lines[anchorLine] ?? "").length
-    let i = anchorLine + 1
-    while (i < lines.length && leadingWhitespace(lines[i]).length > anchorIndent) {
-        i++
-    }
-    return i
-}
-
-type PendingOp =
-    | { at: number; kind: "insert"; lines: PullWrite["lines"] }
-    | { at: number; kind: "delete" }
-
-type ResolvedOp =
-    | { at: number; kind: "insert"; lines: string[] }
-    | { at: number; kind: "delete" }
-
 /**
- * Applies a "Pull children" plan to the vault: the single cursor-anchored
- * write (if any) is inserted at the active editor's cursor; every
- * existing-anchored write is appended under that occurrence's own children;
- * every deletion removes its now-redundant source line. Per file, insertion
- * points and delete targets are computed against the file's original content
- * before any mutation, then applied in a single descending-line-number pass,
- * so earlier edits never invalidate the line numbers of edits still to come.
+ * Applies an organise plan to the vault: for each `SectionWrite`, creates
+ * its home file first if it doesn't exist yet, then upserts its two managed
+ * sections (see `upsertOrganiseSections`); then applies every deletion.
+ * Per file, deletions are applied first, against the file's original
+ * content and in descending line-number order, so multiple deletions in the
+ * same file never invalidate each other's line numbers - and so that a
+ * subsequent section upsert (which is marker/text based, not line-number
+ * based) is never thrown off by lines the deletions already removed above
+ * it. A file that receives both a section write and deletions is only read
+ * and written once.
  */
-export async function applyPullPlan(app: App, writes: PullWrite[], deletions: PullDeletion[]): Promise<void> {
-    const cursorWrite = writes.find(w => w.anchor.type === "cursor")
-    if (cursorWrite) {
-        const text = renderPullLines(cursorWrite.lines, "").join("\n")
-        await insertHere(app, text)
-    }
-
-    const opsByFile = new Map<string, PendingOp[]>()
-
-    for (const write of writes) {
-        if (write.anchor.type !== "existing") continue
-        const { path, position } = write.anchor.location
-        if (!opsByFile.has(path)) opsByFile.set(path, [])
-        opsByFile.get(path)!.push({ at: position.start.line, kind: "insert", lines: write.lines })
-    }
-
+export async function applyOrganisePlan(app: App, writes: SectionWrite[], deletions: PullDeletion[]): Promise<void> {
+    const deletionsByPath = new Map<string, PullDeletion[]>()
     for (const deletion of deletions) {
-        const { path, position } = deletion.location
-        if (!opsByFile.has(path)) opsByFile.set(path, [])
-        opsByFile.get(path)!.push({ at: position.start.line, kind: "delete" })
+        if (!deletionsByPath.has(deletion.location.path)) deletionsByPath.set(deletion.location.path, [])
+        deletionsByPath.get(deletion.location.path)!.push(deletion)
     }
 
-    for (const [path, ops] of opsByFile) {
-        const file = app.vault.getFileByPath(path)
+    const writesByPath = new Map<string, SectionWrite>()
+    for (const write of writes) {
+        if (write.children.length === 0 && write.mentions.length === 0) continue
+        writesByPath.set(write.home.path, write)
+    }
+
+    const touchedPaths = new Set<string>([...deletionsByPath.keys(), ...writesByPath.keys()])
+
+    for (const path of touchedPaths) {
+        const write = writesByPath.get(path)
+
+        let file = app.vault.getFileByPath(path)
+        if (!file && write && !write.home.exists) {
+            file = await app.vault.create(path, "")
+        }
         if (!file) continue
 
-        const content = await app.vault.read(file)
-        const lines = content.split("\n")
+        const lines = (await app.vault.read(file)).split("\n")
 
-        // Resolve each "insert" op's actual splice target and rendered text
-        // against the pristine, pre-mutation content before anything moves.
-        const resolved: ResolvedOp[] = ops.map(op => {
-            if (op.kind === "delete") return op
-            const anchorIndent = leadingWhitespace(lines[op.at] ?? "")
-            const insertAt = findInsertionPointAfterChildren(lines, op.at)
-            return { at: insertAt, kind: "insert" as const, lines: renderPullLines(op.lines, anchorIndent, 1) }
-        })
-
-        // Ties (an insert and a delete resolving to the same index) process the
-        // delete first, so the insert lands where the deleted line used to be
-        // rather than displacing it.
-        resolved.sort((a, b) => b.at - a.at || (a.kind === "delete" ? -1 : 1))
-
-        for (const op of resolved) {
-            if (op.kind === "delete") {
-                lines.splice(op.at, 1)
-            } else {
-                lines.splice(op.at, 0, ...op.lines)
-            }
+        const dels = deletionsByPath.get(path)
+        if (dels) {
+            const sorted = [...dels].sort((a, b) => b.location.position.start.line - a.location.position.start.line)
+            for (const deletion of sorted) lines.splice(deletion.location.position.start.line, 1)
         }
 
-        await app.vault.modify(file, lines.join("\n"))
+        let content = lines.join("\n")
+        if (write) {
+            content = upsertOrganiseSections(
+                content,
+                write.children.map(l => `- ${l.text}`),
+                write.mentions.map(l => `- ${l.text}`),
+            )
+        }
+
+        await app.vault.modify(file, content)
     }
 }
