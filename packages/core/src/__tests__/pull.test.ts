@@ -292,4 +292,83 @@ describe("Pull children - end-to-end example", () => {
     )
     expect(writes).toEqual([])
   })
+
+  it("keeps distinct homes separate and merges siblings resolving to the same home", () => {
+    // Build a graph with root and two page-children A and B, each with text mentions
+    // from separate daily notes. This ensures resolveHome is called for them.
+    const parentPage = parse("- [[A]]\n- [[B]]", "Organiser.md")
+    const dailyNoteA = parse("- [[A]] note from A", "2025-01-01.md")
+    const dailyNoteB = parse("- [[B]] note from B", "2025-01-02.md")
+    const g = buildGraph(parentPage, dailyNoteA, dailyNoteB)
+
+    const tree = buildPullTree(g, "[[organiser]]")!
+    const rootHome: OrganiseHome = { path: "Organising.md", exists: true }
+
+    // First: distinct homes stay separate.
+    const resolveHomeDistinct = (key: string): OrganiseHome =>
+      key === "[[a]]" ? { path: "A.md", exists: false } : { path: "B.md", exists: false }
+
+    const writesDistinct = planOrganiseWrites(tree, rootHome, checkAll, resolveHomeDistinct)
+
+    expect(writesDistinct).toHaveLength(3) // Organising.md, A.md, B.md
+    const orgWrite = writesDistinct.find(w => w.home.path === "Organising.md")!
+    const aWrite = writesDistinct.find(w => w.home.path === "A.md")!
+    const bWrite = writesDistinct.find(w => w.home.path === "B.md")!
+
+    expect(orgWrite.children.map(l => l.text)).toEqual(["[[A]]", "[[B]]"])
+    expect(aWrite.mentions.length).toBe(1) // Has the mention from dailyNoteA
+    expect(bWrite.mentions.length).toBe(1) // Has the mention from dailyNoteB
+
+    // Second: siblings resolving to the same home get merged into one SectionWrite.
+    const resolveHomeSame = (): OrganiseHome => ({ path: "Common.md", exists: false })
+
+    const writesSame = planOrganiseWrites(tree, rootHome, checkAll, resolveHomeSame)
+
+    expect(writesSame).toHaveLength(2) // Organising.md, Common.md
+    const orgWriteSame = writesSame.find(w => w.home.path === "Organising.md")!
+    const commonWrite = writesSame.find(w => w.home.path === "Common.md")!
+
+    // A and B themselves are added to root's .children (they're page-children of root)
+    expect(orgWriteSame.children.map(l => l.text)).toEqual(["[[A]]", "[[B]]"])
+    // Their descendants merge into Common.md
+    expect(commonWrite.mentions.length).toBe(2) // Both mentions end up here
+  })
+
+  it("resolves homes correctly at depth > 1, chaining through lazy homeThunk", () => {
+    // Build: Parent -> Child -> Grandchild (all pages via nested wikilinks),
+    // with a text mention under Grandchild to ensure all homes get created.
+    const parentPage = parse("- [[Child]]", "Parent.md")
+    const childPage = parse("- [[Grandchild]]", "Child.md")
+    const grandchildPage = parse("- [[Grandchild]] important note", "Grandchild.md")
+    const g = buildGraph(parentPage, childPage, grandchildPage)
+
+    const tree = buildPullTree(g, "[[parent]]")!
+    const rootHome: OrganiseHome = { path: "Organising.md", exists: true }
+
+    const resolveHome = (key: string): OrganiseHome => {
+      if (key === "[[child]]") return { path: "Child.md", exists: false }
+      if (key === "[[grandchild]]") return { path: "Grandchild.md", exists: false }
+      return rootHome
+    }
+
+    const writes = planOrganiseWrites(tree, rootHome, checkAll, resolveHome)
+
+    // Three homes: root, Child.md, Grandchild.md.
+    expect(writes).toHaveLength(3)
+
+    // Root (Organising.md) contains [[Child]].
+    const rootWrite = writes.find(w => w.home.path === "Organising.md")!
+    expect(rootWrite.children.map(l => l.text)).toEqual(["[[Child]]"])
+    expect(rootWrite.mentions).toEqual([])
+
+    // Child.md contains [[Grandchild]], NOT nested under [[Child]] or under root.
+    const childWrite = writes.find(w => w.home.path === "Child.md")!
+    expect(childWrite.children.map(l => l.text)).toEqual(["[[Grandchild]]"])
+    expect(childWrite.mentions).toEqual([])
+
+    // Grandchild.md has the mention from Grandchild.md file, not nested elsewhere.
+    const grandchildWrite = writes.find(w => w.home.path === "Grandchild.md")!
+    expect(grandchildWrite.children).toEqual([])
+    expect(grandchildWrite.mentions.length).toBe(1) // Has the "important note" mention
+  })
 })
