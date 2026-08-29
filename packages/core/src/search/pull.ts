@@ -99,79 +99,76 @@ export function formatOccurrenceDate(node: ParsedNode): string | null {
   return new Date(ms).toISOString().slice(0, 10)
 }
 
-// ── Merge detection ──────────────────────────────────────────────────────────
-
-/**
- * Does `key` already have a known occurrence in `destinationPath`? Checked
- * against the graph (already-indexed state), not a live scan of the
- * destination buffer - consistent with how the rest of the plugin treats the
- * graph as the source of truth. Covers both "the destination IS this node's
- * own canonical file" and "this node is referenced/nested somewhere in the
- * destination file".
- */
-export function findExistingOccurrence(graph: NotesGraph, key: string, destinationPath: string): Location | null {
-  if (!graph.hasNode(key)) return null
-  const node = graph.getNodeAttributes(key)
-  if (node.location.path === destinationPath) return node.location
-
-  const inbound = graph.inboundEdgeEntries(key).find(e => e.attributes.location.path === destinationPath)
-  return inbound ? inbound.attributes.location : null
-}
-
 // ── Write plan ────────────────────────────────────────────────────────────────
 
 export type PullLine = { depth: number; text: string }
 
-export type PullWriteAnchor = { type: "cursor" } | { type: "existing"; location: Location }
+/** A topic's resolved destination note. `exists: false` means the caller
+ * (which owns `app.vault`) still needs to create it before writing. */
+export type OrganiseHome = { path: string; exists: boolean }
 
-export type PullWrite = { anchor: PullWriteAnchor; lines: PullLine[] }
+/** Everything to write into one home: its new direct-topic links (bare,
+ * undated - `depth` is always 0, kept only so `PullLine` stays one shared
+ * shape) and its new text mentions (verbatim line + date, as before). */
+export type SectionWrite = { home: OrganiseHome; children: PullLine[]; mentions: PullLine[] }
 
 /**
- * Renders the checked nodes of `root` (never `root` itself - only its
- * descendants are ever materialized) into one or more writes. A checked node
- * with no existing occurrence in the destination renders fresh, inline, at
- * its parent's insertion point. A checked node that already occurs in the
- * destination is never duplicated there - only its own checked children (if
- * any) are rendered, as a separate write anchored to that existing
- * occurrence's location, so re-running a pull on a note that already
- * received part of this subtree appends rather than duplicates.
+ * Plans where every checked node in `root` ends up, organised by topic
+ * rather than flattened into wherever the pull was started. `root`'s own
+ * checked children go to `rootHome` (the note you're organising from -
+ * always exists, never auto-created). From there, every checked **page**
+ * child is (a) added as a bare link line to the *current* anchor's
+ * `children` list, and (b) recursed into using *its own* resolved home
+ * (`resolveHome(child.key)`) as the new anchor for its descendants - this is
+ * what routes a topic's own detail lines into its own note even when the
+ * pull started somewhere else. Every checked **text** child (a mention) is
+ * added to the current anchor's `mentions` list and recursed into using the
+ * *same* anchor (a mention's own sub-lines, if any, still belong to whatever
+ * topic the mention itself belongs to).
+ *
+ * `resolveHome` is only ever called for a page-child that has at least one
+ * checked child of its own - a checked leaf topic with nothing beneath it
+ * never gets a home computed (and so never causes a new file to be created)
+ * for content it wouldn't actually receive.
  */
-export function planPullWrites(
+export function planOrganiseWrites(
   root: PullNode,
+  rootHome: OrganiseHome,
   isChecked: (key: string) => boolean,
-  existingOccurrenceOf: (key: string) => Location | null,
-): PullWrite[] {
-  const writes: PullWrite[] = []
+  resolveHome: (pageKey: string) => OrganiseHome,
+): SectionWrite[] {
+  const byHomePath = new Map<string, SectionWrite>()
 
-  function renderNode(node: PullNode, depth: number, out: PullLine[]): void {
-    const date = formatOccurrenceDate(node.node)
-    const text = reverseMarkdownParsing(node.node) + (date ? ` ${date}` : "")
-    out.push({ depth, text })
-    renderChildrenInto(node, depth + 1, out)
+  function ensureWrite(home: OrganiseHome): SectionWrite {
+    const existing = byHomePath.get(home.path)
+    if (existing) return existing
+    const created: SectionWrite = { home, children: [], mentions: [] }
+    byHomePath.set(home.path, created)
+    return created
   }
 
-  function renderChildrenInto(node: PullNode, depth: number, out: PullLine[]): void {
+  function visit(node: PullNode, homeThunk: () => OrganiseHome): void {
     for (const child of node.children) {
       if (!isChecked(child.key)) continue
 
-      const existing = existingOccurrenceOf(child.key)
-      if (existing) {
-        const mergeLines: PullLine[] = []
-        renderChildrenInto(child, 0, mergeLines)
-        if (mergeLines.length > 0) {
-          writes.push({ anchor: { type: "existing", location: existing }, lines: mergeLines })
-        }
+      if (child.node.nodeType === "page") {
+        const write = ensureWrite(homeThunk())
+        write.children.push({ depth: 0, text: reverseMarkdownParsing(child.node) })
+
+        let childHome: OrganiseHome | null = null
+        visit(child, () => childHome ?? (childHome = resolveHome(child.key)))
       } else {
-        renderNode(child, depth, out)
+        const write = ensureWrite(homeThunk())
+        const date = formatOccurrenceDate(child.node)
+        write.mentions.push({ depth: 0, text: reverseMarkdownParsing(child.node) + (date ? ` ${date}` : "") })
+
+        visit(child, homeThunk)
       }
     }
   }
 
-  const topLines: PullLine[] = []
-  renderChildrenInto(root, 0, topLines)
-  if (topLines.length > 0) writes.push({ anchor: { type: "cursor" }, lines: topLines })
-
-  return writes
+  visit(root, () => rootHome)
+  return Array.from(byHomePath.values())
 }
 
 // ── Deletion plan ─────────────────────────────────────────────────────────────

@@ -5,10 +5,10 @@ import { parseVaultFile } from "../parser/vault-file.ts"
 import {
   buildPullTree,
   formatOccurrenceDate,
-  findExistingOccurrence,
-  planPullWrites,
+  planOrganiseWrites,
   planDeletions,
   type PullNode,
+  type OrganiseHome,
 } from "../search/pull.ts"
 import type { PageNode, TextNode } from "../graph/types.ts"
 
@@ -199,20 +199,17 @@ describe("Pull children - end-to-end example", () => {
     expect(child.children.map(c => c.node.nodeType)).toEqual(["text", "text"])
   })
 
-  it("renders a fresh pull verbatim, with a date on each mention line and none on the [[Child]] header", () => {
+  it("routes the root's direct page-children into the root's own home, as a bare link with no attached date", () => {
     const g = freshGraph()
     const tree = buildPullTree(g, "[[parent]]")!
-    const writes = planPullWrites(tree, checkAll, () => null)
+    const rootHome: OrganiseHome = { path: "Organising.md", exists: true }
+    const resolveHome = (key: string): OrganiseHome => ({ path: `home-for-${key}`, exists: false })
 
-    expect(writes).toHaveLength(1)
-    expect(writes[0].anchor).toEqual({ type: "cursor" })
+    const writes = planOrganiseWrites(tree, rootHome, checkAll, resolveHome)
 
-    const rendered = writes[0].lines.map(l => `${"  ".repeat(l.depth)}- ${l.text}`).join("\n")
-    expect(rendered).toBe(
-      "- [[Child]]\n" +
-      "  - [[Child]] [http://test-url](http://test-url) 2025-03-22\n" +
-      "  - [[Child]] test note without url 2025-03-22"
-    )
+    const rootWrite = writes.find(w => w.home.path === "Organising.md")!
+    expect(rootWrite.children).toEqual([{ depth: 0, text: "[[Child]]" }])
+    expect(rootWrite.mentions).toEqual([])
   })
 
   it("deletes fully-consumed source lines when everything is checked", () => {
@@ -244,54 +241,55 @@ describe("Pull children - end-to-end example", () => {
     expect(deletions).toHaveLength(1)
   })
 
-  it("merges under an existing occurrence instead of duplicating it", () => {
+  it("routes a page-child's own text-mentions into that child's resolved home, not the root's", () => {
     const g = freshGraph()
     const tree = buildPullTree(g, "[[parent]]")!
-    const childKey = tree.children[0].key
+    const rootHome: OrganiseHome = { path: "Organising.md", exists: true }
+    const resolveHome = (key: string): OrganiseHome =>
+      key === "[[child]]" ? { path: "Child.md", exists: false } : { path: "Organising.md", exists: true }
 
-    // Simulate the destination note already containing a "- [[Child]]" bullet.
-    const existingLoc = loc("Notes/Parent.md", 4)
-    const writes = planPullWrites(tree, checkAll, key => (key === childKey ? existingLoc : null))
+    const writes = planOrganiseWrites(tree, rootHome, checkAll, resolveHome)
 
+    const childWrite = writes.find(w => w.home.path === "Child.md")!
+    expect(childWrite.children).toEqual([])
+    expect(childWrite.mentions.map(l => l.text)).toEqual([
+      "[[Child]] [http://test-url](http://test-url) 2025-03-22",
+      "[[Child]] test note without url 2025-03-22",
+    ])
+
+    const rootWrite = writes.find(w => w.home.path === "Organising.md")!
+    expect(rootWrite.mentions).toEqual([])
+  })
+
+  it("never resolves a home for a checked page-child that ends up with no checked descendants of its own", () => {
+    const g = freshGraph()
+    const tree = buildPullTree(g, "[[parent]]")!
+    const childKey = tree.children[0].key // "[[child]]"
+    const resolveHomeCalls: string[] = []
+    const resolveHome = (key: string): OrganiseHome => {
+      resolveHomeCalls.push(key)
+      return { path: key, exists: false }
+    }
+    // Only [[Child]] itself is checked - none of its own mention children are.
+    const isChecked = (key: string) => key === childKey
+
+    const writes = planOrganiseWrites(tree, { path: "Organising.md", exists: true }, isChecked, resolveHome)
+
+    expect(resolveHomeCalls).toEqual([])
     expect(writes).toHaveLength(1)
-    expect(writes[0].anchor).toEqual({ type: "existing", location: existingLoc })
-    // Only [[Child]]'s new children are appended - [[Child]]'s own line is not repeated.
-    const rendered = writes[0].lines.map(l => `${"  ".repeat(l.depth)}- ${l.text}`).join("\n")
-    expect(rendered).toBe(
-      "- [[Child]] [http://test-url](http://test-url) 2025-03-22\n" +
-      "- [[Child]] test note without url 2025-03-22"
-    )
+    expect(writes[0].home.path).toBe("Organising.md")
+    expect(writes[0].children).toEqual([{ depth: 0, text: "[[Child]]" }])
   })
 
-  it("excludes an unchecked node and its descendants from the write plan", () => {
+  it("omits a home from the result entirely when nothing is checked", () => {
     const g = freshGraph()
     const tree = buildPullTree(g, "[[parent]]")!
-    const childKey = tree.children[0].key
-    const writes = planPullWrites(tree, key => key !== childKey, () => null)
+    const writes = planOrganiseWrites(
+      tree,
+      { path: "Organising.md", exists: true },
+      () => false,
+      () => ({ path: "unused", exists: false }),
+    )
     expect(writes).toEqual([])
-  })
-})
-
-// ── findExistingOccurrence ───────────────────────────────────────────────────────
-
-describe("findExistingOccurrence", () => {
-  it("returns null when the node has no occurrence in the destination", () => {
-    const dailyNote1 = parse("- [[Parent]]\n  - [[Child]]", "2025-03-20.md")
-    const g = buildGraph(dailyNote1)
-    expect(findExistingOccurrence(g, "[[child]]", "Unrelated.md")).toBeNull()
-  })
-
-  it("finds the location where a node is nested in the destination file", () => {
-    const dailyNote1 = parse("- [[Parent]]\n  - [[Child]]", "2025-03-20.md")
-    const g = buildGraph(dailyNote1)
-    const found = findExistingOccurrence(g, "[[child]]", "2025-03-20.md")
-    expect(found?.path).toBe("2025-03-20.md")
-  })
-
-  it("matches when the destination is the node's own canonical file", () => {
-    const own = parse("# Parent note", "Parent.md")
-    const g = buildGraph(own)
-    const found = findExistingOccurrence(g, "[[parent]]", "Parent.md")
-    expect(found?.path).toBe("Parent.md")
   })
 })
