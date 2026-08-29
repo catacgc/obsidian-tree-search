@@ -1,5 +1,6 @@
 import {App, normalizePath, TFile, FuzzySuggestModal, TFolder, FuzzyMatch} from "obsidian";
-import {Location, PullWrite, PullDeletion} from "@mdtree/core";
+import {Location, PullDeletion, PageNode} from "@mdtree/core";
+import type {NotesGraph, OrganiseHome} from "@mdtree/core";
 
 // Reverse engineer the Canvas api
 interface CanvasNode {
@@ -290,6 +291,23 @@ export async function unarchivePage(app: App, path: string, archiveTag: string) 
 }
 
 // ── Pull children ─────────────────────────────────────────────────────────────
+
+/**
+ * A topic's home note: its own real file if it has one, otherwise a
+ * same-folder-as-the-organising-note candidate path (which may or may not
+ * exist yet - `exists` tells the caller whether to create it). `pageKey`
+ * must name a "page" node; callers only ever call this for page-type
+ * children of the pull tree.
+ */
+export function resolveHome(app: App, graph: NotesGraph, pageKey: string, organisingNotePath: string): OrganiseHome {
+    const node = graph.getNodeAttributes(pageKey) as PageNode
+    if (!node.isReference) return { path: node.location.path, exists: true }
+
+    const slash = organisingNotePath.lastIndexOf("/")
+    const folder = slash === -1 ? "" : organisingNotePath.slice(0, slash)
+    const candidatePath = folder ? `${folder}/${node.page}.md` : `${node.page}.md`
+    return { path: candidatePath, exists: app.vault.getFileByPath(candidatePath) != null }
+}
 
 const INDENT_UNIT = "  "
 
