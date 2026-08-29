@@ -165,7 +165,31 @@ function getDefaultActions(result: TreeNode, vault: string): RaycastAction[] {
             keepOpen: true,
             location: result.node.location
         }
+    ] : isFile ? [
+        isArchived(result.node) ? {
+            type: "browse",
+            url: unarchivePageUrl(result.node.location.path, vault),
+            title: `Unarchive`,
+            icon: Icons.bookmark,
+            keepOpen: true,
+            location: result.node.location
+        } : {
+            type: "browse",
+            url: archivePageUrl(result.node.location.path, vault),
+            title: `Archive`,
+            icon: Icons.bookmark,
+            keepOpen: true,
+            location: result.node.location
+        }
     ] : []
+
+    const pullChildrenAction: RaycastAction[] = (isFile && result.node.nodeType === "page") ? [{
+        type: "browse",
+        url: pullChildrenUrl(result.node.page, vault),
+        title: `Pull children into this note`,
+        icon: Icons.pencil,
+        shortcut: { modifiers: ["ctrl"], key: "p" }
+    }] : []
 
     const defaults: RaycastAction[] = [
         {
@@ -190,7 +214,7 @@ function getDefaultActions(result: TreeNode, vault: string): RaycastAction[] {
             shortcut: { modifiers: ["ctrl"], key: "i" }
         }]
 
-    return [...defaults, ...moveFolderAction, ...archiveAction]
+    return [...defaults, ...moveFolderAction, ...archiveAction, ...pullChildrenAction]
 }
 
 function renderTitle(result: TreeNode, actions: RaycastAction[], app: App): string {
@@ -266,6 +290,22 @@ function archiveUrl(location: TreeNode["node"]["location"], vault: string): stri
 
 function unarchiveUrl(location: TreeNode["node"]["location"], vault: string): string {
     const uri = `raycastaction=unarchive&vault=${vault}&filepath=${location.path}&sl=${location.position.start.line}&sc=${location.position.start.ch}&el=${location.position.end.line}&ec=${location.position.end.ch}`;
+    return `obsidian://tree-search-uri?${encodeURI(uri)}`;
+}
+
+function archivePageUrl(path: string, vault: string): string {
+    const uri = `raycastaction=archivePage&vault=${vault}&filepath=${path}`;
+    return `obsidian://tree-search-uri?${encodeURI(uri)}`;
+}
+
+function unarchivePageUrl(path: string, vault: string): string {
+    const uri = `raycastaction=unarchivePage&vault=${vault}&filepath=${path}`;
+    return `obsidian://tree-search-uri?${encodeURI(uri)}`;
+}
+
+function pullChildrenUrl(pageName: string, vault: string): string {
+    const key = `[[${pageName.toLowerCase()}]]`;
+    const uri = `raycastaction=pullChildren&vault=${vault}&filepath=${key}`;
     return `obsidian://tree-search-uri?${encodeURI(uri)}`;
 }
 

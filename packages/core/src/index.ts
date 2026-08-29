@@ -49,3 +49,15 @@ export { describeQuerySyntax, type QuerySyntaxEntry, type QuerySyntaxGroup } fro
 export { flattenIndex, type TreeNode } from "./search/flatten.ts"
 export { reverseMarkdownParsing } from "./search/copy.ts"
 export { isArchived, partitionArchived } from "./search/archive.ts"
+export {
+  buildPullTree,
+  formatOccurrenceDate,
+  findExistingOccurrence,
+  planPullWrites,
+  planDeletions,
+  type PullNode,
+  type PullLine,
+  type PullWriteAnchor,
+  type PullWrite,
+  type PullDeletion,
+} from "./search/pull.ts"

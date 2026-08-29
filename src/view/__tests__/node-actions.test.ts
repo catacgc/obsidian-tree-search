@@ -167,6 +167,79 @@ describe("archive/unarchive actions", () => {
     })
 })
 
+describe("archive/unarchive actions for pages", () => {
+    const mockApp = { vault: { getName: () => "TestVault", getFileByPath: () => null } } as any
+
+    function createPageTreeNode(archived: boolean): any {
+        return {
+            node: {
+                nodeType: "page",
+                page: "Page Name",
+                isReference: false,
+                aliases: [],
+                tags: [],
+                searchKey: "page name|",
+                location: {
+                    path: "Page Name.md",
+                    position: { start: { line: 0, ch: 0 }, end: { line: 0, ch: 0 } }
+                },
+                boost: 0,
+                ageDays: 1,
+                ...(archived ? { archived: true } : {})
+            },
+            indent: 0,
+            hasChildren: false,
+            visible: true,
+            selected: false,
+            index: 0
+        }
+    }
+
+    it("shows Archive action for non-archived page node", () => {
+        const actions = getTreeNodeActions(mockApp, createPageTreeNode(false))
+
+        const archiveAction = actions.find(a => a.title === "Archive")
+        expect(archiveAction).toBeDefined()
+        expect(archiveAction?.icon).toBe("bookmark-16")
+    })
+
+    it("shows Unarchive action for archived page node", () => {
+        const actions = getTreeNodeActions(mockApp, createPageTreeNode(true))
+
+        const unarchiveAction = actions.find(a => a.title === "Unarchive")
+        expect(unarchiveAction).toBeDefined()
+        expect(unarchiveAction?.icon).toBe("bookmark-16")
+    })
+
+    it("archive action URL contains raycastaction=archivePage with no line/col params", () => {
+        const actions = getTreeNodeActions(mockApp, createPageTreeNode(false))
+
+        const archiveAction = actions.find(a => a.title === "Archive")
+        expect(archiveAction?.type).toBe("browse")
+        if (archiveAction?.type === "browse") {
+            expect(archiveAction.url).toContain("raycastaction=archivePage")
+            expect(archiveAction.url).toContain("vault=TestVault")
+            expect(archiveAction.url).toContain("filepath=Page")
+            expect(archiveAction.url).not.toContain("sl=")
+            expect(archiveAction.url).not.toContain("sc=")
+            expect(archiveAction.url).not.toContain("el=")
+            expect(archiveAction.url).not.toContain("ec=")
+        }
+    })
+
+    it("unarchive action URL contains raycastaction=unarchivePage", () => {
+        const actions = getTreeNodeActions(mockApp, createPageTreeNode(true))
+
+        const unarchiveAction = actions.find(a => a.title === "Unarchive")
+        expect(unarchiveAction?.type).toBe("browse")
+        if (unarchiveAction?.type === "browse") {
+            expect(unarchiveAction.url).toContain("raycastaction=unarchivePage")
+            expect(unarchiveAction.url).toContain("vault=TestVault")
+            expect(unarchiveAction.url).toContain("filepath=Page")
+        }
+    })
+})
+
 describe("insert-link (quick-link) actions", () => {
     const mockApp = { vault: { getName: () => "TestVault", getFileByPath: () => null } } as any
 

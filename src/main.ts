@@ -7,7 +7,7 @@ import {IndexedTree} from "./indexing/indexed-tree";
 import {FILE_CONTEXT, FileContextView} from "./view/file-context/file-context";
 import {ContextCodeBlock} from "./view/markdown-code-block/ContextCodeBlock";
 import {SearchModal} from "./view/search-modal/SearchModal";
-import {archiveLine, highlightLine, insertLine, moveToFolder, openFileByName, revealFolder, showFolder, unarchiveLine} from './obsidian-utils';
+import {archiveLine, archivePage, highlightLine, insertLine, moveToFolder, openFileByName, revealFolder, showFolder, unarchiveLine, unarchivePage} from './obsidian-utils';
 import {createStore} from 'jotai';
 import {getSettings, updateSettings} from './view/react-context/settings';
 import './view/styles.css';
@@ -15,6 +15,18 @@ import {GlobalAtoms} from "./view/react-context/global";
 import {resetDefaultInjector} from "bunshi";
 import {RaycastServer} from "./view/raycast/raycast-server";
 import {HOVER_SOURCE_ID} from "./view/hover-preview";
+import {PullPreviewModal} from "./view/pull-children/PullPreviewModal";
+
+// Extracts the graph key ([[page]] or page#header) for the first wikilink on
+// `line`, so "Pull into this note" can resolve a root node from wherever the
+// cursor happens to sit.
+function extractLinkKeyFromLine(line: string): string | null {
+    const match = line.match(/\[\[([^\]|#]+)(?:#([^\]|]+))?/);
+    if (!match) return null;
+    const page = match[1].trim().toLowerCase();
+    const header = match[2]?.trim().toLowerCase();
+    return header ? `${page}#${header}` : `[[${page}]]`;
+}
 
 export default class TreeSearchPlugin extends Plugin {
     index: IndexedTree
@@ -104,6 +116,36 @@ export default class TreeSearchPlugin extends Plugin {
             }
         });
 
+        this.addCommand({
+            id: 'pull-children',
+            name: 'Pull into this note',
+            editorCallback: async (editor) => {
+                const activeFile = this.app.workspace.getActiveFile()
+
+                if (!activeFile) {
+                    new Notice("Open a note before pulling children into it")
+                    return
+                }
+
+                // A wikilink under the cursor takes precedence (lets you pull a
+                // different page's children into the current note); otherwise
+                // fall back to the active note's own key, so running the command
+                // anywhere in Parent.md pulls [[parent]]'s children into itself.
+                const rootKey = extractLinkKeyFromLine(editor.getLine(editor.getCursor().line))
+                    ?? `[[${activeFile.basename.toLowerCase()}]]`
+
+                // Reindex the destination note before building the preview, so a
+                // pull run shortly after a previous one (e.g. from a different
+                // parent) sees the lines that pull just wrote. Without this, the
+                // background debounced reindex may not have caught up yet, so
+                // findExistingOccurrence misses the merge target and re-inserts
+                // (and re-dates) content that's already there.
+                await this.index.refreshPage(activeFile)
+
+                new PullPreviewModal(this.app, this.globalStore.get(GlobalAtoms.graphAtom), rootKey, activeFile.path).open()
+            }
+        });
+
         this.addSettingTab(new SettingsTab(this.app, this));
         await this.loadSettings();
 
@@ -156,10 +198,22 @@ export default class TreeSearchPlugin extends Plugin {
                 await openFileByName(this.app, uri.filepath + (uri.hash ? `#${uri.hash}` : ""))
             } else if (uri.raycastaction === "moveToFolder") {
                 moveToFolder(this.app, uri.filepath)
+            } else if (uri.raycastaction === "archivePage") {
+                await archivePage(this.app, uri.filepath, getSettings(this.globalStore).archiveTag)
+            } else if (uri.raycastaction === "unarchivePage") {
+                await unarchivePage(this.app, uri.filepath, getSettings(this.globalStore).archiveTag)
             } else if (uri.raycastaction === "archive") {
                 await archiveLine(this.app, location)
             } else if (uri.raycastaction === "unarchive") {
                 await unarchiveLine(this.app, location)
+            } else if (uri.raycastaction === "pullChildren") {
+                const destinationFile = this.app.workspace.getActiveFile()
+                if (!destinationFile) {
+                    new Notice("Open a note before pulling children into it")
+                } else {
+                    await this.index.refreshPage(destinationFile)
+                    new PullPreviewModal(this.app, this.globalStore.get(GlobalAtoms.graphAtom), uri.filepath, destinationFile.path).open()
+                }
             } else {
                 await highlightLine(this.app, location)
             }
