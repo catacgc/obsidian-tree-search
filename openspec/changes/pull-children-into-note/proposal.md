@@ -1,3 +1,5 @@
+> **Superseded** by "Pull and organise notes" (`docs/superpowers/specs/2026-08-27-pull-and-organise-notes-design.md`), implemented 2026-08-27. That change reverses this proposal's "single-destination, cursor-anchored" targeting in favor of per-topic home routing. Kept here for history; do not implement this proposal as originally written.
+
 ## Why
 
 Daily notes accumulate scattered, ad-hoc mentions of a topic (`- [[Child]] http://some-url`, a bare `[[Child]]` nested under `[[Parent]]`, etc.) that the indexer already links together in the graph — but that structure only ever surfaces as a transient search result. There is no way to turn "everything the graph already knows is related to this note" into a permanent, de-duplicated outline on the note itself, so users either re-type the rollup by hand or leave the knowledge scattered across dated captures forever. "Pull children" lets a user consolidate a topic's graph subtree into the note in front of them in one action, then cleans up the now-redundant source lines.
