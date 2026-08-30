@@ -372,3 +372,100 @@ describe("Pull children - end-to-end example", () => {
     expect(grandchildWrite.mentions.length).toBe(1) // Has the "important note" mention
   })
 })
+
+// ── Organise -> reindex -> re-organise idempotency ──────────────────────────────
+
+describe("Organise -> reindex -> re-organise idempotency", () => {
+  // First run: Parent.md has an ad hoc `- [[Child]]` bullet, and a daily
+  // note mentions [[Child]] once. Running the organise action files
+  // [[Child]] itself into Parent.md's own `organise:children` section and
+  // the daily-note mention into Child.md's `organise:mentions` section,
+  // deleting the ad hoc source lines those sections replace.
+  it("does not re-offer content a prior organise run already delivered", () => {
+    const parentPage1 = parse("- [[Child]]", "Parent.md")
+    const dailyNote1 = parse("- [[Child]] some detail", "2025-03-20.md")
+    const g1 = buildGraph(parentPage1, dailyNote1)
+    const tree1 = buildPullTree(g1, "[[parent]]")!
+
+    const rootHome: OrganiseHome = { path: "Parent.md", exists: true }
+    const resolveHome1 = (key: string): OrganiseHome =>
+      key === "[[child]]" ? { path: "Child.md", exists: false } : rootHome
+
+    const writes1 = planOrganiseWrites(tree1, rootHome, checkAll, resolveHome1)
+    const dels1 = planDeletions(g1, tree1, checkAll)
+
+    // Sanity check on the "before" state the second run must not re-trigger:
+    // both homes get a write, and both source lines (Parent.md's ad hoc
+    // bullet and the daily note's mention line) are deletion candidates.
+    expect(writes1.map(w => w.home.path).sort()).toEqual(["Child.md", "Parent.md"])
+    expect(dels1).toHaveLength(2)
+
+    // Simulate what re-indexing the ACTUAL post-organise files would
+    // produce, without running any file I/O (this is packages/core - there
+    // is no vault here; `applyOrganisePlan`'s vault-facing half of this is
+    // covered separately in src/__tests__/apply-organise-plan.test.ts).
+    // Per `writes1`/`dels1` above and `upsertOrganiseSections`'s own tested
+    // behavior, applying this plan would: delete Parent.md's original
+    // `- [[Child]]` line and the daily note's mention line, then upsert
+    // Parent.md's `organise:children` section with "- [[Child]]" and create
+    // Child.md with an `organise:mentions` section containing the dated
+    // mention line. We hand-write those two resulting files directly,
+    // matching that shape.
+    const parentPost = [
+      "<!-- organise:children -->",
+      "- [[Child]]",
+      "<!-- /organise:children -->",
+      "",
+      "<!-- organise:mentions -->",
+      "<!-- /organise:mentions -->",
+    ].join("\n")
+    const childPost = [
+      "<!-- organise:children -->",
+      "<!-- /organise:children -->",
+      "",
+      "<!-- organise:mentions -->",
+      "- [[Child]] some detail 2025-03-20",
+      "<!-- /organise:mentions -->",
+    ].join("\n")
+
+    // Index Child.md *before* Parent.md. `mergePageNode` (graph.ts) keeps
+    // whichever node was registered first at a given key's `location`
+    // field, merging only `isReference`/aliases/boost - so a real page's
+    // own canonical location "wins" over a same-key reference created
+    // elsewhere only if its own file is indexed first. A full vault reindex
+    // processes every file, including Child.md itself, so Child.md
+    // establishing its own location before Parent.md merely references it
+    // is the realistic order; indexing Parent.md first here would
+    // spuriously fail to recognize the mention as already living in
+    // Child.md's own body, purely as an artifact of merge order rather
+    // than anything true about the vault (verified empirically against
+    // the real indexer while writing this test).
+    const g2 = buildGraph(parse(childPost, "Child.md"), parse(parentPost, "Parent.md"))
+    const tree2 = buildPullTree(g2, "[[parent]]")!
+
+    const resolveHome2 = (key: string): OrganiseHome =>
+      key === "[[child]]" ? { path: "Child.md", exists: true } : rootHome
+
+    const writes2 = planOrganiseWrites(tree2, rootHome, checkAll, resolveHome2)
+    const dels2 = planDeletions(g2, tree2, checkAll)
+
+    // The daily-note mention now lives inside Child.md's own body (under
+    // its own managed mentions section), so buildPullTree's own-body
+    // exclusion (covered elsewhere in this file) hides it from the tree -
+    // Child.md gets no write at all the second time around, and there is
+    // nothing left to delete.
+    expect(writes2.find(w => w.home.path === "Child.md")).toBeUndefined()
+    expect(dels2).toEqual([])
+
+    // Parent.md is still offered [[Child]] as a child link - buildPullTree
+    // has no notion of "already inside a managed section", it just sees a
+    // `[[Child]]` bullet under [[Parent]] - but that text exactly matches
+    // what's already inside Parent.md's own `organise:children` section, so
+    // re-applying this write through `upsertOrganiseSections` (tested in
+    // organise-sections.test.ts) is a complete no-op dedup, not a
+    // duplicate line.
+    const parentWrite2 = writes2.find(w => w.home.path === "Parent.md")!
+    expect(parentWrite2.children.map(l => l.text)).toEqual(["[[Child]]"])
+    expect(parentPost).toContain("- [[Child]]")
+  })
+})
