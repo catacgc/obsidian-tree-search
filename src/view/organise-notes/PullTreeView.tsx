@@ -1,16 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { App, Notice } from "obsidian";
+import { App, Component, MarkdownRenderer, Notice } from "obsidian";
 import {
     NotesGraph,
     PullNode,
-    findExistingOccurrence,
     formatOccurrenceDate,
-    planPullWrites,
+    planOrganiseWrites,
     planDeletions,
     reverseMarkdownParsing,
-    Location,
+    type OrganiseHome,
 } from "@mdtree/core";
-import { applyPullPlan } from "../../obsidian-utils";
+import { applyOrganisePlan, highlightLine, resolveHome } from "../../obsidian-utils";
 
 function collectDescendantKeys(node: PullNode, out: Set<string>): void {
     for (const child of node.children) {
@@ -39,30 +38,30 @@ function subtreeState(node: PullNode, checked: Set<string>): SubtreeState {
     return "partial";
 }
 
-type ExistingLookup = (key: string) => Location | null;
+type HomeLookup = (pageKey: string) => OrganiseHome;
 
 type Props = {
     app: App;
     graph: NotesGraph;
     root: PullNode;
-    destinationPath: string;
-    onDone: () => void;
+    notePath: string;
+    onApplied: (touchedPaths: string[]) => void;
 };
 
-export function PullTreeView({ app, graph, root, destinationPath, onDone }: Props) {
+export function PullTreeView({ app, graph, root, notePath, onApplied }: Props) {
     const [checked, setChecked] = useState<Set<string>>(() => {
         const all = new Set<string>();
         collectDescendantKeys(root, all);
         return all;
     });
 
-    const existingOf: ExistingLookup = useMemo(() => {
-        const cache = new Map<string, Location | null>();
-        return (key: string) => {
-            if (!cache.has(key)) cache.set(key, findExistingOccurrence(graph, key, destinationPath));
-            return cache.get(key) ?? null;
+    const homeOf: HomeLookup = useMemo(() => {
+        const cache = new Map<string, OrganiseHome>();
+        return (pageKey: string) => {
+            if (!cache.has(pageKey)) cache.set(pageKey, resolveHome(app, graph, pageKey, notePath));
+            return cache.get(pageKey)!;
         };
-    }, [graph, destinationPath]);
+    }, [app, graph, notePath]);
 
     function toggle(node: PullNode, value: boolean): void {
         setChecked(prev => {
@@ -77,55 +76,81 @@ export function PullTreeView({ app, graph, root, destinationPath, onDone }: Prop
         });
     }
 
+    function resetSelection(): void {
+        const all = new Set<string>();
+        collectDescendantKeys(root, all);
+        setChecked(all);
+    }
+
     async function onConfirm(): Promise<void> {
         const isChecked = (key: string) => checked.has(key);
-        const writes = planPullWrites(root, isChecked, existingOf);
+        const writes = planOrganiseWrites(root, { path: notePath, exists: true }, isChecked, homeOf);
         const deletions = planDeletions(graph, root, isChecked);
 
         if (writes.length === 0) {
-            new Notice("Nothing selected to pull");
-            onDone();
+            new Notice("Nothing selected to organise");
             return;
         }
 
-        await applyPullPlan(app, writes, deletions);
-        const lineCount = writes.reduce((n, w) => n + w.lines.length, 0);
-        new Notice(`Pulled ${lineCount} line${lineCount === 1 ? "" : "s"}, removed ${deletions.length} source line${deletions.length === 1 ? "" : "s"}`);
-        onDone();
+        await applyOrganisePlan(app, writes, deletions);
+        const lineCount = writes.reduce((n, w) => n + w.children.length + w.mentions.length, 0);
+        const homeCount = writes.length;
+        new Notice(
+            `Organised ${lineCount} line${lineCount === 1 ? "" : "s"} into ${homeCount} note${homeCount === 1 ? "" : "s"}, ` +
+            `removed ${deletions.length} source line${deletions.length === 1 ? "" : "s"}`
+        );
+        onApplied(writes.map(w => w.home.path));
     }
 
     return (
         <div className="tw-reset flex flex-col gap-3 p-2 max-h-[70vh] overflow-auto">
             <div className="text-sm text-obs-base-60">
-                Select what to pull into this note. Unchecking a node also excludes its children.
+                Select what to organise. Each topic&apos;s own detail lines are filed into that topic&apos;s own note.
             </div>
             <div className="flex flex-col gap-0.5">
                 {root.children.length === 0 && (
-                    <div className="text-sm text-obs-base-60 italic">Nothing to pull - this node has no children.</div>
+                    <div className="text-sm text-obs-base-60 italic">Nothing to organise - this node has no children.</div>
                 )}
                 {root.children.map(child => (
-                    <PullRow key={child.key} node={child} depth={0} checked={checked} onToggle={toggle} existingOf={existingOf} />
+                    <PullRow key={child.key} app={app} node={child} depth={0} checked={checked} onToggle={toggle} homeOf={homeOf} />
                 ))}
             </div>
             <div className="flex justify-end gap-2 pt-2 border-t border-obs-border">
-                <button className="tw-reset" onClick={onDone}>Cancel</button>
-                <button className="tw-reset font-semibold" onClick={onConfirm}>Pull selected</button>
+                <button className="tw-reset" onClick={resetSelection}>Reset</button>
+                <button className="tw-reset font-semibold" onClick={onConfirm}>Organise selected</button>
             </div>
         </div>
     );
 }
 
-function PullRow({ node, depth, checked, onToggle, existingOf }: {
+function MarkdownLine({ app, text, sourcePath }: { app: App; text: string; sourcePath: string }) {
+    const ref = useRef<HTMLSpanElement>(null);
+
+    useEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+        const component = new Component();
+        component.load();
+        el.empty();
+        MarkdownRenderer.render(app, text, el, sourcePath, component).catch(() => { /* best-effort render */ });
+        return () => component.unload();
+    }, [app, text, sourcePath]);
+
+    return <span ref={ref} className="inline" />;
+}
+
+function PullRow({ app, node, depth, checked, onToggle, homeOf }: {
+    app: App;
     node: PullNode;
     depth: number;
     checked: Set<string>;
     onToggle: (node: PullNode, value: boolean) => void;
-    existingOf: ExistingLookup;
+    homeOf: HomeLookup;
 }) {
     const ref = useRef<HTMLInputElement>(null);
     const isChecked = checked.has(node.key);
     const state = subtreeState(node, checked);
-    const existing = existingOf(node.key);
+    const home = node.node.nodeType === "page" ? homeOf(node.key) : null;
 
     useEffect(() => {
         if (ref.current) ref.current.indeterminate = state === "partial";
@@ -140,15 +165,22 @@ function PullRow({ node, depth, checked, onToggle, existingOf }: {
                     checked={isChecked}
                     onChange={e => onToggle(node, e.target.checked)}
                 />
-                <span className="text-sm">{describeNode(node)}</span>
-                {existing && (
+                <MarkdownLine app={app} text={describeNode(node)} sourcePath={node.node.location.path} />
+                <button
+                    type="button"
+                    className="tw-reset text-xs text-obs-base-40 underline"
+                    onClick={() => highlightLine(app, node.node.location)}
+                >
+                    reveal source
+                </button>
+                {home && (
                     <span className="text-xs text-obs-accent italic">
-                        already in this note (line {existing.position.start.line + 1})
+                        → {home.exists ? "" : "(new) "}{home.path}
                     </span>
                 )}
             </label>
             {node.children.map(child => (
-                <PullRow key={child.key} node={child} depth={depth + 1} checked={checked} onToggle={onToggle} existingOf={existingOf} />
+                <PullRow key={child.key} app={app} node={child} depth={depth + 1} checked={checked} onToggle={onToggle} homeOf={homeOf} />
             ))}
         </div>
     );
