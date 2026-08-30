@@ -116,7 +116,7 @@ export function PullTreeView({ app, graph, root, notePath, onApplied }: Props) {
                 ))}
             </div>
             <div className="flex justify-end gap-2 pt-2 border-t border-obs-border">
-                <button className="tw-reset" onClick={resetSelection}>Reset</button>
+                <button className="tw-reset" onClick={resetSelection}>Select all</button>
                 <button className="tw-reset font-semibold" onClick={onConfirm}>Organise selected</button>
             </div>
         </div>
