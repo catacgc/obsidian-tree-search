@@ -186,7 +186,7 @@ function getDefaultActions(result: TreeNode, vault: string): RaycastAction[] {
     const pullChildrenAction: RaycastAction[] = (isFile && result.node.nodeType === "page") ? [{
         type: "browse",
         url: pullChildrenUrl(result.node.page, vault),
-        title: `Pull children into this note`,
+        title: `Pull and organise notes`,
         icon: Icons.pencil,
         shortcut: { modifiers: ["ctrl"], key: "p" }
     }] : []
