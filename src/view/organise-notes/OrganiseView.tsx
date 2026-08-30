@@ -1,4 +1,4 @@
-import { App, ItemView, Notice, ViewStateResult, WorkspaceLeaf } from "obsidian";
+import { ItemView, Notice, ViewStateResult, WorkspaceLeaf } from "obsidian";
 import { createRoot, Root } from "react-dom/client";
 import React from "react";
 import { buildPullTree } from "@mdtree/core";
@@ -52,8 +52,9 @@ export class OrganiseView extends ItemView {
 
     async setState(state: unknown, result: ViewStateResult): Promise<void> {
         if (isOrganiseViewState(state)) {
+            const previous = this.viewState;
             this.viewState = state;
-            this.render();
+            if (!this.render()) this.viewState = previous;
         }
         await super.setState(state, result);
     }
@@ -67,16 +68,20 @@ export class OrganiseView extends ItemView {
         this.root = null;
     }
 
-    private render(): void {
-        if (!this.viewState) return;
+    /** Returns whether the tree was actually (re)built and rendered - false
+     * means `viewState` points at a root that isn't in the index right now,
+     * so the caller (`setState`) can revert to the previous target instead
+     * of leaving the tab title pointing at a root the pane isn't showing. */
+    private render(): boolean {
+        if (!this.viewState) return false;
         const { rootKey, notePath } = this.viewState;
         const graph = this.store.get(GlobalAtoms.graphAtom);
-        const app = this.store.get(GlobalAtoms.appAtom) as App;
+        const app = this.store.get(GlobalAtoms.appAtom);
 
         const pullTree = buildPullTree(graph, rootKey, MAX_DEPTH);
         if (!pullTree) {
             new Notice(`Tree Search: "${rootKey}" was not found in the index`);
-            return;
+            return false;
         }
 
         this.root?.unmount();
@@ -90,6 +95,7 @@ export class OrganiseView extends ItemView {
                 onApplied={paths => this.handleApplied(paths)}
             />
         );
+        return true;
     }
 
     private async handleApplied(touchedPaths: string[]): Promise<void> {
