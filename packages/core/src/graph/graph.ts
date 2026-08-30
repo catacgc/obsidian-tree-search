@@ -78,11 +78,18 @@ export class NotesGraph {
   private mergePageNode(existing: PageNode, incoming: PageNode): PageNode {
     const aliases = [...new Set([...existing.aliases, ...incoming.aliases])]
     const isReference = existing.isReference && incoming.isReference
+    // A real file's own location is always more authoritative than a prior
+    // reference guess: only adopt `incoming.location` when the existing entry
+    // was a virtual reference and the incoming one is now a confirmed real
+    // page. In every other case (existing already real; both references;
+    // existing real + incoming reference), keep `existing.location`.
+    const location = existing.isReference && !incoming.isReference ? incoming.location : existing.location
     const searchKey = `${existing.page}|${aliases.join(" ")}`.toLowerCase()
     return {
       ...existing,
       aliases,
       isReference,
+      location,
       searchKey,
       boost: Math.max(existing.boost, incoming.boost),
       // Preserve archived across merges: a page indexed from its own file (with

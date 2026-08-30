@@ -98,6 +98,24 @@ describe("NotesGraph", () => {
       expect(node.isReference).toBe(false)
     })
 
+    it("adopts the real file's location when a reference is later confirmed as a real page", () => {
+      const ref = makePage("Child", "Daily.md", true)
+      const real = makePage("Child", "Child.md", false)
+      g.addOrUpdateNode(ref)
+      g.addOrUpdateNode(real)
+      const node = g.getNodeAttributes("[[child]]") as PageNode
+      expect(node.location.path).toBe("Child.md")
+    })
+
+    it("keeps the real file's own location when a later reference mentions it elsewhere", () => {
+      const real = makePage("Child", "Child.md", false)
+      const ref = makePage("Child", "Daily.md", true)
+      g.addOrUpdateNode(real)
+      g.addOrUpdateNode(ref)
+      const node = g.getNodeAttributes("[[child]]") as PageNode
+      expect(node.location.path).toBe("Child.md")
+    })
+
     it("canvas page key strips .canvas extension", () => {
       const canvas: PageNode = { ...makePage("Board.canvas", "Board.canvas"), page: "Board.canvas" }
       g.addOrUpdateNode(canvas)

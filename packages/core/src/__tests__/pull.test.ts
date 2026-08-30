@@ -340,8 +340,19 @@ describe("Pull children - end-to-end example", () => {
   })
 
   it("resolves homes correctly at depth > 1, chaining through lazy homeThunk", () => {
-    // Build: Parent -> Child -> Grandchild (all pages via nested wikilinks),
-    // with a text mention under Grandchild to ensure all homes get created.
+    // Build: Parent -> Child -> Grandchild (all pages via nested wikilinks).
+    // Grandchild.md's own body carries a text line mentioning itself
+    // ("important note") - this used to (mis)report as a mention needing a
+    // home, until mergePageNode's location-stickiness bug (../graph/graph.ts)
+    // was fixed: [[grandchild]] is first registered as a bare-wikilink
+    // reference while indexing Child.md's "- [[Grandchild]]" line, then
+    // re-registered as a real page while indexing Grandchild.md itself.
+    // mergePageNode now correctly adopts the real file's location on that
+    // transition, so [[grandchild]]'s canonical location becomes Grandchild.md
+    // (previously it stayed stuck at Child.md forever). That makes
+    // buildPullTree's own-body exclusion (ownBodyPath, ../search/pull.ts)
+    // correctly recognize the "important note" line as [[Grandchild]]'s own
+    // body - not a mention to route anywhere - so it's excluded entirely.
     const parentPage = parse("- [[Child]]", "Parent.md")
     const childPage = parse("- [[Grandchild]]", "Child.md")
     const grandchildPage = parse("- [[Grandchild]] important note", "Grandchild.md")
@@ -358,23 +369,29 @@ describe("Pull children - end-to-end example", () => {
 
     const writes = planOrganiseWrites(tree, rootHome, checkAll, resolveHome)
 
-    // Three homes: root, Child.md, Grandchild.md.
-    expect(writes).toHaveLength(3)
+    // Only two homes: root and Child.md. Grandchild.md never gets a
+    // SectionWrite at all, since its only content is its own already-there
+    // body line, correctly excluded as own-body rather than surfaced as a
+    // mention (see comment above the test).
+    expect(writes).toHaveLength(2)
 
     // Root (Organising.md) contains [[Child]].
     const rootWrite = writes.find(w => w.home.path === "Organising.md")!
     expect(rootWrite.children.map(l => l.text)).toEqual(["[[Child]]"])
     expect(rootWrite.mentions).toEqual([])
 
-    // Child.md contains [[Grandchild]], NOT nested under [[Child]] or under root.
+    // Child.md contains [[Grandchild]] - the "chaining through lazy
+    // homeThunk" this test targets: [[Grandchild]] is a page-child of
+    // [[Child]], so its link lands in [[Child]]'s resolved home (Child.md),
+    // NOT nested inline under root, before recursing into [[Grandchild]]'s
+    // own resolved home for its descendants.
     const childWrite = writes.find(w => w.home.path === "Child.md")!
     expect(childWrite.children.map(l => l.text)).toEqual(["[[Grandchild]]"])
     expect(childWrite.mentions).toEqual([])
 
-    // Grandchild.md has the mention from Grandchild.md file, not nested elsewhere.
-    const grandchildWrite = writes.find(w => w.home.path === "Grandchild.md")!
-    expect(grandchildWrite.children).toEqual([])
-    expect(grandchildWrite.mentions.length).toBe(1) // Has the "important note" mention
+    // Grandchild.md is never even created as a home - there is nothing left
+    // to route there once its own body content is correctly excluded.
+    expect(writes.find(w => w.home.path === "Grandchild.md")).toBeUndefined()
   })
 })
 
@@ -417,9 +434,9 @@ function applyPlanToFiles(files: Map<string, string>, writes: SectionWrite[], de
 
 describe("Organise -> reindex -> re-organise idempotency", () => {
   // Parent.md has an ad hoc `- [[Child]]` bullet, and a daily note mentions
-  // [[Child]] once. This test proves (or disproves) idempotency using the
-  // REAL incremental-reindex mechanism production actually uses, rather
-  // than an idealized from-scratch `buildGraph` rebuild:
+  // [[Child]] once. This test proves true idempotency through the REAL
+  // incremental-reindex mechanism production actually uses, rather than an
+  // idealized from-scratch `buildGraph` rebuild:
   //  - `OrganiseView.handleApplied` (src/view/organise-notes/OrganiseView.tsx)
   //    refreshes exactly `writes.map(w => w.home.path)` - the SectionWrite
   //    homes, sequentially, in that order - via `reindexFileInGraph`
@@ -429,14 +446,21 @@ describe("Organise -> reindex -> re-organise idempotency", () => {
   //    list, so its removal from disk is not reflected in the graph by this
   //    code path (a separate `vault.on("modify")` listener in src/main.ts
   //    handles that asynchronously in production; out of scope to model
-  //    here).
+  //    here) - this is why one stale mention legitimately survives below.
+  //    That's a distinct, already-understood staleness window (the graph
+  //    catches up on the next real vault-modify event), not a duplication
+  //    bug - see the comment where it's asserted, further down.
   //  - An earlier version of this test built a fresh `buildGraph` for the
   //    "post-organise" state and hand-picked an indexing order that made
   //    everything look idempotent. That was a false-confidence test: a
   //    fresh rebuild with a cherry-picked order doesn't prove anything about
   //    what the real incremental path does. This version uses the real
-  //    `reindexFileInGraph` against the real graph instead.
-  it("reproduces a known, pre-existing mergePageNode location-stickiness bug via the real incremental reindex path", async () => {
+  //    `reindexFileInGraph` against the real graph instead - infrastructure
+  //    worth keeping even now that the bug that originally motivated
+  //    writing it this way (`mergePageNode`'s location-stickiness,
+  //    ../graph/graph.ts) is fixed, since it's what makes this a REAL
+  //    production-path test rather than an idealized one.
+  it("does not re-offer content a prior organise run already delivered, via the real incremental reindex path", async () => {
     const parentContent1 = "- [[Child]]"
     const dailyContent1 = "- [[Child]] some detail"
     const parentPage1 = parse(parentContent1, "Parent.md")
@@ -484,28 +508,26 @@ describe("Organise -> reindex -> re-organise idempotency", () => {
       await reindexFileInGraph(path, g, scanner, DEFAULT_SETTINGS)
     }
 
-    // Root cause, asserted directly: [[child]] was first registered as a
+    // Fix, asserted directly: [[child]] was first registered as a
     // *reference* while indexing Parent.md's original `- [[Child]]` bullet
-    // (before Child.md existed at all). `NotesGraph.mergePageNode`
-    // (../graph/graph.ts) keeps whichever `location` a node was FIRST
-    // registered with forever, across both full rebuilds and incremental
-    // re-indexes - it only merges `isReference`/aliases/boost. So even
-    // after Child.md is created and incrementally indexed as [[child]]'s
-    // real, non-reference home, [[child]]'s canonical location is STILL
-    // Parent.md, not Child.md. This is a real, pre-existing limitation of
-    // the graph library, predating and unrelated to "Pull and organise
-    // notes" - out of scope to fix here, but load-bearing for what follows.
+    // (before Child.md existed at all), then re-registered as a real page
+    // once Child.md was created and incrementally reindexed above.
+    // `NotesGraph.mergePageNode` (../graph/graph.ts) now correctly adopts
+    // the real file's own location on that reference-to-real transition, so
+    // [[child]]'s canonical location is Child.md, not stuck at Parent.md
+    // (where it was first merely mentioned).
     const childAttrs = g.getNodeAttributes("[[child]]")
     expect(childAttrs.isReference).toBe(false) // correctly promoted to a real page...
-    expect(childAttrs.location.path).toBe("Parent.md") // ...but stuck with the wrong location.
+    expect(childAttrs.location.path).toBe("Child.md") // ...with the correct, authoritative location.
 
     // Consequence: buildPullTree's own-body exclusion (`ownBodyPath`,
     // ../search/pull.ts) compares an edge's location to [[child]]'s
     // canonical location to decide whether a child is [[Child]]'s own body.
-    // Since that canonical location is wrong (Parent.md instead of
-    // Child.md), the mention line living inside Child.md's own
-    // `organise:mentions` section is NOT recognized as own-body, and gets
-    // pulled right back into the tree as a fresh candidate.
+    // Now that this location is correct (Child.md), the mention line living
+    // inside Child.md's own `organise:mentions` section - the exact content
+    // the first organise run just delivered there - IS recognized as
+    // own-body, and is correctly excluded rather than pulled right back in
+    // as a fresh candidate.
     const tree2 = buildPullTree(g, "[[parent]]")!
     const resolveHome2 = (key: string): OrganiseHome =>
       key === "[[child]]" ? { path: "Child.md", exists: true } : rootHome
@@ -515,29 +537,32 @@ describe("Organise -> reindex -> re-organise idempotency", () => {
 
     const childWrite2 = writes2.find(w => w.home.path === "Child.md")
     expect(childWrite2).toBeDefined()
-    // Two spurious mentions, not zero: the graph still holds the STALE edge
-    // from the (never-reindexed) original daily note line, AND a
-    // freshly-indexed edge from Child.md's own already-organised content -
-    // and because that already-organised line already carries a date
-    // suffix, `formatOccurrenceDate` stamps a second one on top the second
-    // time around.
+    // Exactly one mention, not two and not zero: Child.md's own
+    // already-organised content is correctly excluded as own-body (the
+    // duplication/double-dating bug is gone), but the graph still holds one
+    // STALE edge from the original daily note line - 2025-03-20.md is
+    // deletion-only, so `handleApplied` never reindexes it (see the comment
+    // above this test), and its now-deleted-on-disk mention lingers in the
+    // graph until a real `vault.on("modify")` event catches up. That's a
+    // separate, already-understood staleness window, not a regression of
+    // this fix.
+    expect(childWrite2!.children).toEqual([])
     expect(childWrite2!.mentions.map(l => l.text)).toEqual([
       "[[Child]] some detail 2025-03-20",
-      "[[Child]] some detail 2025-03-20 2025-03-20",
     ])
 
-    // Deletions are equally unsafe to re-apply blindly: this now offers to
-    // delete the (already-gone) line from 2025-03-20.md a second time, and
-    // to delete the entry right back out of Child.md's own managed section
-    // that the first run just put there.
+    // Deletions: only the stale daily-note line is offered again (safe,
+    // if redundant, since it's already gone from disk) - nothing from
+    // Parent.md or Child.md's own managed sections is offered for deletion,
+    // since none of their content is treated as a fresh pull candidate.
     const delPaths = dels2.map(d => d.location.path).sort()
-    expect(delPaths).toEqual(["2025-03-20.md", "Child.md", "Parent.md"])
+    expect(delPaths).toEqual(["2025-03-20.md"])
 
     // Parent.md is still (harmlessly) offered [[Child]] as a child link -
     // that text exactly matches what's already inside Parent.md's own
     // `organise:children` section, so re-applying it through
-    // `upsertOrganiseSections` (tested in organise-sections.test.ts) would
-    // be a no-op dedup, unlike Child.md's mentions above.
+    // `upsertOrganiseSections` (tested in organise-sections.test.ts) is a
+    // no-op dedup.
     const parentWrite2 = writes2.find(w => w.home.path === "Parent.md")!
     expect(parentWrite2.children.map(l => l.text)).toEqual(["[[Child]]"])
   })
