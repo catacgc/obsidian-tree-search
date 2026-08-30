@@ -15,11 +15,11 @@ import {GlobalAtoms} from "./view/react-context/global";
 import {resetDefaultInjector} from "bunshi";
 import {RaycastServer} from "./view/raycast/raycast-server";
 import {HOVER_SOURCE_ID} from "./view/hover-preview";
-import {PullPreviewModal} from "./view/pull-children/PullPreviewModal";
+import {ORGANISE_VIEW, OrganiseView, type OrganiseViewState} from "./view/organise-notes/OrganiseView";
 
 // Extracts the graph key ([[page]] or page#header) for the first wikilink on
-// `line`, so "Pull into this note" can resolve a root node from wherever the
-// cursor happens to sit.
+// `line`, so "Pull and organise notes" can resolve a root node from
+// wherever the cursor happens to sit.
 function extractLinkKeyFromLine(line: string): string | null {
     const match = line.match(/\[\[([^\]|#]+)(?:#([^\]|]+))?/);
     if (!match) return null;
@@ -73,6 +73,14 @@ export default class TreeSearchPlugin extends Plugin {
             (leaf) => new FileContextView(leaf, this.globalStore)
         );
 
+        this.registerView(
+            ORGANISE_VIEW,
+            (leaf) => new OrganiseView(leaf, this.globalStore, async (path) => {
+                const file = this.app.vault.getFileByPath(path);
+                if (file) await this.index.refreshPage(file);
+            })
+        );
+
         this.addCommand({
             id: 'parse-tree',
             name: 'Search pane',
@@ -117,32 +125,30 @@ export default class TreeSearchPlugin extends Plugin {
         });
 
         this.addCommand({
-            id: 'pull-children',
-            name: 'Pull into this note',
+            id: 'organise-notes',
+            name: 'Pull and organise notes',
             editorCallback: async (editor) => {
                 const activeFile = this.app.workspace.getActiveFile()
 
                 if (!activeFile) {
-                    new Notice("Open a note before pulling children into it")
+                    new Notice("Open a note before organising it")
                     return
                 }
 
-                // A wikilink under the cursor takes precedence (lets you pull a
-                // different page's children into the current note); otherwise
+                // A wikilink under the cursor takes precedence (lets you organise
+                // a different page's children into the current note); otherwise
                 // fall back to the active note's own key, so running the command
-                // anywhere in Parent.md pulls [[parent]]'s children into itself.
+                // anywhere in Parent.md organises [[parent]]'s children.
                 const rootKey = extractLinkKeyFromLine(editor.getLine(editor.getCursor().line))
                     ?? `[[${activeFile.basename.toLowerCase()}]]`
 
-                // Reindex the destination note before building the preview, so a
-                // pull run shortly after a previous one (e.g. from a different
-                // parent) sees the lines that pull just wrote. Without this, the
-                // background debounced reindex may not have caught up yet, so
-                // findExistingOccurrence misses the merge target and re-inserts
-                // (and re-dates) content that's already there.
+                // Reindex the organising note before building the preview, so a
+                // run shortly after a previous one (e.g. from a different root)
+                // sees the sections that run just wrote - otherwise resolveHome
+                // and the preview's tree can miss content that's already there.
                 await this.index.refreshPage(activeFile)
 
-                new PullPreviewModal(this.app, this.globalStore.get(GlobalAtoms.graphAtom), rootKey, activeFile.path).open()
+                await this.openOrganiseView(rootKey, activeFile.path)
             }
         });
 
@@ -209,10 +215,10 @@ export default class TreeSearchPlugin extends Plugin {
             } else if (uri.raycastaction === "pullChildren") {
                 const destinationFile = this.app.workspace.getActiveFile()
                 if (!destinationFile) {
-                    new Notice("Open a note before pulling children into it")
+                    new Notice("Open a note before organising it")
                 } else {
                     await this.index.refreshPage(destinationFile)
-                    new PullPreviewModal(this.app, this.globalStore.get(GlobalAtoms.graphAtom), uri.filepath, destinationFile.path).open()
+                    await this.openOrganiseView(uri.filepath, destinationFile.path)
                 }
             } else {
                 await highlightLine(this.app, location)
@@ -222,6 +228,18 @@ export default class TreeSearchPlugin extends Plugin {
         await this.index.refresh()
 
         return true
+    }
+
+    async openOrganiseView(rootKey: string, notePath: string): Promise<void> {
+        const { workspace } = this.app;
+        const state: OrganiseViewState = { rootKey, notePath };
+
+        const leaves = workspace.getLeavesOfType(ORGANISE_VIEW);
+        const leaf = leaves.length > 0 ? leaves[0] : workspace.getRightLeaf(false);
+        if (!leaf) return;
+
+        await leaf.setViewState({ type: ORGANISE_VIEW, active: true, state });
+        workspace.revealLeaf(leaf);
     }
 
     async activateView(viewType = SEARCH_VIEW) {
