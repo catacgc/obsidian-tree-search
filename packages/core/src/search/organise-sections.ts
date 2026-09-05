@@ -15,6 +15,17 @@ function markerTags(marker: SectionMarker): { open: string; close: string } {
   return { open: `<!-- organise:${marker} -->`, close: `<!-- /organise:${marker} -->` }
 }
 
+/**
+ * Splits on any line ending and reports which one the note actually uses, so
+ * a CRLF note's frontmatter delimiter (`"---\r"` after a naive `split("\n")`)
+ * still compares equal to the plain `"---"` this module matches against -
+ * mismatching that check made `frontmatterEnd` blind to CRLF frontmatter,
+ * inserting the fresh section block at line 0, ahead of (and breaking) it.
+ */
+function splitLines(content: string): { lines: string[]; eol: string } {
+  return { lines: content.split(/\r\n|\r|\n/), eol: content.includes("\r\n") ? "\r\n" : "\n" }
+}
+
 /** End of a leading `---\n...\n---` frontmatter block, or 0 if there is none. */
 function frontmatterEnd(lines: string[]): number {
   if (lines[0] !== "---") return 0
@@ -55,13 +66,13 @@ function replaceSectionBody(lines: string[], marker: SectionMarker, newLines: st
  * that rare case; see the design doc's noted risk on hand-edited regions.
  */
 export function upsertOrganiseSections(content: string, childrenLines: string[], mentionsLines: string[]): string {
-  const original = content.split("\n")
+  const { lines: original, eol } = splitLines(content)
 
   const childrenReplaced = replaceSectionBody(original, "children", childrenLines)
   const mentionsReplaced = replaceSectionBody(original, "mentions", mentionsLines)
 
   if (childrenReplaced && mentionsReplaced) {
-    return replaceSectionBody(childrenReplaced, "mentions", mentionsLines)!.join("\n")
+    return replaceSectionBody(childrenReplaced, "mentions", mentionsLines)!.join(eol)
   }
 
   const insertAt = frontmatterEnd(original)
@@ -71,5 +82,5 @@ export function upsertOrganiseSections(content: string, childrenLines: string[],
     childrenOpen, ...childrenLines, childrenClose, "",
     mentionsOpen, ...mentionsLines, mentionsClose, "",
   ]
-  return [...original.slice(0, insertAt), ...block, ...original.slice(insertAt)].join("\n")
+  return [...original.slice(0, insertAt), ...block, ...original.slice(insertAt)].join(eol)
 }

@@ -39,6 +39,53 @@ describe("upsertOrganiseSections", () => {
     )
   })
 
+  it("inserts fresh sections after frontmatter when the note uses CRLF line endings", () => {
+    const content = "---\r\ntags: [x]\r\n---\r\n# My Note"
+    const result = upsertOrganiseSections(content, ["- [[Child]]"], [])
+
+    expect(result).toBe(
+      "---\r\n" +
+      "tags: [x]\r\n" +
+      "---\r\n" +
+      "<!-- organise:children -->\r\n" +
+      "- [[Child]]\r\n" +
+      "<!-- /organise:children -->\r\n" +
+      "\r\n" +
+      "<!-- organise:mentions -->\r\n" +
+      "<!-- /organise:mentions -->\r\n" +
+      "\r\n" +
+      "# My Note"
+    )
+  })
+
+  it("finds existing CRLF-note markers in place instead of duplicating them", () => {
+    const existing =
+      "---\r\n" +
+      "tags: [x]\r\n" +
+      "---\r\n" +
+      "<!-- organise:children -->\r\n" +
+      "- [[Child]]\r\n" +
+      "<!-- /organise:children -->\r\n" +
+      "\r\n" +
+      "<!-- organise:mentions -->\r\n" +
+      "<!-- /organise:mentions -->\r\n"
+
+    const result = upsertOrganiseSections(existing, ["- [[Child]]", "- [[Child2]]"], [])
+
+    expect(result).toBe(
+      "---\r\n" +
+      "tags: [x]\r\n" +
+      "---\r\n" +
+      "<!-- organise:children -->\r\n" +
+      "- [[Child]]\r\n" +
+      "- [[Child2]]\r\n" +
+      "<!-- /organise:children -->\r\n" +
+      "\r\n" +
+      "<!-- organise:mentions -->\r\n" +
+      "<!-- /organise:mentions -->\r\n"
+    )
+  })
+
   it("keeps empty markers rather than omitting them when a section has no lines", () => {
     const result = upsertOrganiseSections("body", [], [])
     expect(result).toContain("<!-- organise:children -->\n<!-- /organise:children -->")
