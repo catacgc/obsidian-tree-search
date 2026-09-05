@@ -551,19 +551,129 @@ describe("Organise -> reindex -> re-organise idempotency", () => {
       "[[Child]] some detail 2025-03-20",
     ])
 
-    // Deletions: only the stale daily-note line is offered again (safe,
-    // if redundant, since it's already gone from disk) - nothing from
-    // Parent.md or Child.md's own managed sections is offered for deletion,
-    // since none of their content is treated as a fresh pull candidate.
+    // Deletions: the stale daily-note line is offered again (safe, if
+    // redundant, since it's already gone from disk), and Parent.md's own
+    // `organise:children` line for [[Child]] is *also* offered - not a
+    // regression, but the direct consequence of the own-body exemption in
+    // `isSafeToDeleteSource` (../search/pull.ts): [[Child]] now has real
+    // content of its own (the mention living inside Child.md), and that
+    // content is exempt from the "every child checked" requirement (it's
+    // never lost by removing *this* reference bullet - it stays put in
+    // Child.md regardless). Without that exemption, a real page that has
+    // accumulated any content of its own could never have a bullet
+    // referencing it offered for deletion again - which is exactly what
+    // blocks reparenting: hand-nesting a link under another inside an
+    // already-written `organise:children` section only produces a
+    // deletable source line once the target has real content, and that's
+    // the normal case for "consolidate notes", not an edge case.
     const delPaths = dels2.map(d => d.location.path).sort()
-    expect(delPaths).toEqual(["2025-03-20.md"])
+    expect(delPaths).toEqual(["2025-03-20.md", "Parent.md"])
 
-    // Parent.md is still (harmlessly) offered [[Child]] as a child link -
-    // that text exactly matches what's already inside Parent.md's own
-    // `organise:children` section, so re-applying it through
-    // `upsertOrganiseSections` (tested in organise-sections.test.ts) is a
-    // no-op dedup.
+    // Parent.md is (harmlessly) offered [[Child]] as a child link - that
+    // text exactly matches what's already inside Parent.md's own
+    // `organise:children` section, so even though its old line is also
+    // offered for deletion above, re-applying the write through
+    // `upsertOrganiseSections` (tested in organise-sections.test.ts) puts
+    // it right back - a genuine no-op end to end, verified below.
     const parentWrite2 = writes2.find(w => w.home.path === "Parent.md")!
     expect(parentWrite2.children.map(l => l.text)).toEqual(["[[Child]]"])
+
+    // Verify that end-to-end: applying this second round to the same
+    // post-round-1 file contents leaves Parent.md byte-for-byte unchanged,
+    // does not duplicate anything in Child.md, and only removes the stale
+    // daily-note line.
+    const parentBefore = files.get("Parent.md")
+    applyPlanToFiles(files, writes2, dels2)
+    expect(files.get("Parent.md")).toBe(parentBefore)
+    expect(files.get("2025-03-20.md")).toBe("")
+    expect(files.get("Child.md")).toContain("[[Child]] some detail 2025-03-20")
+  })
+})
+
+// ── Reparenting via a hand-nested organise:children link ───────────────────────
+
+describe("Reparenting via a hand-nested organise:children link", () => {
+  it("deletes both a page bullet and its newly-nested child even once the child's target has its own real body content", () => {
+    // [[A]] already has real content of its own (e.g. from an earlier
+    // organise run, or just because it's a pre-existing note), and the
+    // user hand-nests "- [[B]]" under "- [[A]]" inside Root.md - no
+    // different, to the parser, than nesting a link anywhere else in the
+    // vault (list-scanner.ts doesn't special-case `organise:children`).
+    // Before the own-body exemption in `isSafeToDeleteSource`, [[A]]'s own
+    // "## Notes" header/body edges - never offered as pull candidates, so
+    // never in `checkedKeys` - permanently blocked deleting *any* bullet
+    // referencing [[A]], which is exactly what stood in the way of ever
+    // collapsing Root.md's now-redundant nested line.
+    const rootPage = parse("- [[A]]\n  - [[B]]", "Root.md")
+    const aPage = parse("## Notes\n- some existing detail", "A.md")
+    const g = buildGraph(rootPage, aPage)
+
+    const tree = buildPullTree(g, "[[root]]")!
+    const deletions = planDeletions(g, tree, checkAll)
+
+    expect(deletions.map(d => d.location.path)).toEqual(["Root.md", "Root.md"])
+    expect(deletions.map(d => d.key).sort()).toEqual(["[[a]]", "[[b]]"])
+  })
+
+  it("collapses the organising note and files the reparented child into its target's own home, end to end", () => {
+    // The concrete scenario from the feature request: Root.md was already
+    // organised once (a flat "- [[A]]" / "- [[B]]" inside its managed
+    // section), [[A]] has since accumulated real content of its own, and
+    // the user hand-nests "- [[B]]" under "- [[A]]" inside that same
+    // section. A single buildGraph (rather than the incremental-reindex
+    // harness above) is enough here - unlike the idempotency test, this
+    // isn't probing a multi-round graph-mutation bug, just the one-shot
+    // plan/apply outcome for an already-saved, already-reindexed file.
+    const rootContent =
+      "<!-- organise:children -->\n" +
+      "- [[A]]\n" +
+      "  - [[B]]\n" +
+      "<!-- /organise:children -->\n" +
+      "\n" +
+      "<!-- organise:mentions -->\n" +
+      "<!-- /organise:mentions -->"
+    const aContent = "## Notes\n- some existing detail"
+
+    const rootPage = parse(rootContent, "Root.md")
+    const aPage = parse(aContent, "A.md")
+    const g = buildGraph(rootPage, aPage)
+
+    const tree = buildPullTree(g, "[[root]]")!
+    const rootHome: OrganiseHome = { path: "Root.md", exists: true }
+    const resolveHome = (key: string): OrganiseHome =>
+      key === "[[a]]" ? { path: "A.md", exists: true } : rootHome
+
+    const writes = planOrganiseWrites(tree, rootHome, checkAll, resolveHome)
+    const deletions = planDeletions(g, tree, checkAll)
+
+    const files = new Map<string, string>([
+      ["Root.md", rootContent],
+      ["A.md", aContent],
+    ])
+    applyPlanToFiles(files, writes, deletions)
+
+    // [[B]] moved out: Root.md's own section collapses back to a flat
+    // "- [[A]]", with no leftover nested "[[B]]" anywhere in it.
+    expect(files.get("Root.md")).toBe(
+      "<!-- organise:children -->\n" +
+      "- [[A]]\n" +
+      "<!-- /organise:children -->\n" +
+      "\n" +
+      "<!-- organise:mentions -->\n" +
+      "<!-- /organise:mentions -->"
+    )
+
+    // ...and filed into [[A]]'s own home, alongside its pre-existing body.
+    expect(files.get("A.md")).toBe(
+      "<!-- organise:children -->\n" +
+      "- [[B]]\n" +
+      "<!-- /organise:children -->\n" +
+      "\n" +
+      "<!-- organise:mentions -->\n" +
+      "<!-- /organise:mentions -->\n" +
+      "\n" +
+      "## Notes\n" +
+      "- some existing detail"
+    )
   })
 })
