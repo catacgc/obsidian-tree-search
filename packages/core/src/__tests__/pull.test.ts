@@ -9,6 +9,7 @@ import {
   formatOccurrenceDate,
   planOrganiseWrites,
   planDeletions,
+  renderPullLine,
   type PullNode,
   type OrganiseHome,
   type PullDeletion,
@@ -395,6 +396,94 @@ describe("Pull children - end-to-end example", () => {
   })
 })
 
+// ── Nested plain-text children keep their indentation ───────────────────────────
+
+describe("planOrganiseWrites - nested text children", () => {
+  it("threads real nesting depth through a chain of plain-text sub-bullets", () => {
+    // A bullet mentioning two pages, with a plain (non-wikilink) sub-bullet
+    // nested under it - this used to flatten onto the same depth as its
+    // parent once written out, losing the source's nesting.
+    const note = parse(
+      "- [[A]] [[B]] notes\n  - [Titus Winters - Software Engineering Gaps](https://example.com) 2024-06-02",
+      "Source.md",
+    )
+    const g = buildGraph(note)
+
+    const tree = buildPullTree(g, "[[a]]")!
+    expect(tree.children).toHaveLength(1)
+    const parentLine = tree.children[0]
+    expect(parentLine.children).toHaveLength(1)
+
+    const rootHome: OrganiseHome = { path: "Organising.md", exists: true }
+    const writes = planOrganiseWrites(tree, rootHome, checkAll, () => rootHome)
+
+    const write = writes.find(w => w.home.path === "Organising.md")!
+    expect(write.mentions.map(l => l.depth)).toEqual([0, 1])
+    expect(write.mentions[0].text).toContain("notes")
+    expect(write.mentions[1].text).toContain("Titus Winters")
+
+    // Rendered output preserves the nested sub-bullet as an indented child,
+    // not a flattened sibling.
+    const rendered = write.mentions.map(renderPullLine)
+    expect(rendered[0]).toBe(`- ${write.mentions[0].text}`)
+    expect(rendered[1]).toBe(`  - ${write.mentions[1].text}`)
+  })
+
+  it("splices in extraLinesOf's lines right after a mention's own line, undated, without recursing into them", () => {
+    // extraLinesOf models what a vault-aware caller (collectUnindexedChildLines
+    // in obsidian-utils.ts) would return for plain-text sub-bullets the
+    // indexer skipped entirely - they never become PullNode children at all,
+    // so this is the only way they can reach the write plan.
+    const note = parse("- [[A]] notes", "Source.md")
+    const g = buildGraph(note)
+    const tree = buildPullTree(g, "[[a]]")!
+    const mentionNode = tree.children[0]
+
+    const rootHome: OrganiseHome = { path: "Organising.md", exists: true }
+    const extraLinesOf = (node: PullNode, depth: number): PullLine[] =>
+      node.key === mentionNode.key ? [{ depth: depth + 1, text: "test2" }, { depth: depth + 1, text: "test3" }] : []
+
+    const writes = planOrganiseWrites(tree, rootHome, checkAll, () => rootHome, extraLinesOf)
+
+    const write = writes.find(w => w.home.path === "Organising.md")!
+    expect(write.mentions).toEqual([
+      { depth: 0, text: "[[A]] notes" },
+      { depth: 1, text: "test2" },
+      { depth: 1, text: "test3" },
+    ])
+  })
+
+  it("splices in extraLinesOf's lines right after a bare-link page-child's own link, at depth relative to 0", () => {
+    // A bare `- [[A]]` bullet (nothing else on the line) collapses to a
+    // structural page->page edge, not a text mention - extraLinesOf must
+    // still be consulted for it, so plain-text sub-bullets nested under a
+    // bare link aren't silently dropped either.
+    const note = parse("- [[Root]]\n  - [[A]]\n    - some detail\n    - more detail", "Source.md")
+    const g = buildGraph(note)
+    const tree = buildPullTree(g, "[[root]]")!
+    const pageChild = tree.children[0]
+    expect(pageChild.key).toBe("[[a]]")
+    expect(pageChild.node.nodeType).toBe("page")
+    expect(pageChild.children).toEqual([]) // "some detail"/"more detail" never became graph nodes
+
+    const rootHome: OrganiseHome = { path: "Organising.md", exists: true }
+    const extraLinesOf = (node: PullNode, depth: number): PullLine[] =>
+      node.key === pageChild.key
+        ? [{ depth: depth + 1, text: "some detail" }, { depth: depth + 1, text: "more detail" }]
+        : []
+
+    const writes = planOrganiseWrites(tree, rootHome, checkAll, () => rootHome, extraLinesOf)
+
+    const write = writes.find(w => w.home.path === "Organising.md")!
+    expect(write.children).toEqual([
+      { depth: 0, text: "[[A]]" },
+      { depth: 1, text: "some detail" },
+      { depth: 1, text: "more detail" },
+    ])
+    expect(write.mentions).toEqual([])
+  })
+})
+
 // ── Organise -> reindex -> re-organise idempotency ──────────────────────────────
 
 /**
@@ -426,7 +515,7 @@ function applyPlanToFiles(files: Map<string, string>, writes: SectionWrite[], de
     }
     let content = lines.join("\n")
     if (write) {
-      content = upsertOrganiseSections(content, write.children.map(l => `- ${l.text}`), write.mentions.map(l => `- ${l.text}`))
+      content = upsertOrganiseSections(content, write.children.map(renderPullLine), write.mentions.map(renderPullLine))
     }
     files.set(path, content)
   }

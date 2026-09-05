@@ -1,5 +1,5 @@
 import {App, normalizePath, TFile, FuzzySuggestModal, TFolder, FuzzyMatch} from "obsidian";
-import {Location, PullDeletion, upsertOrganiseSections, type NotesGraph, type OrganiseHome, type SectionWrite} from "@mdtree/core";
+import {Location, PullDeletion, renderPullLine, upsertOrganiseSections, type NotesGraph, type OrganiseHome, type SectionWrite, type PullLine, type PullNode} from "@mdtree/core";
 
 // Reverse engineer the Canvas api
 interface CanvasNode {
@@ -309,6 +309,73 @@ export function resolveHome(app: App, graph: NotesGraph, pageKey: string, organi
     return { path: candidatePath, exists: app.vault.getFileByPath(candidatePath) != null }
 }
 
+function leadingWhitespaceLength(line: string): number {
+    return line.match(/^\s*/)?.[0].length ?? 0
+}
+
+/**
+ * Reads `node`'s source file and returns any line nested directly or
+ * transitively under it that the indexer skipped entirely - plain text with
+ * no wikilink, tag, or URL (`shouldSkip` in the core indexer never turns
+ * these into graph nodes at all, so `buildPullTree` can't see them; this is
+ * the only way they can reach an organise write). A line that IS already
+ * one of `node`'s own `PullNode` children is left alone here - it (and
+ * everything nested under it) is handled by that child's own call to this
+ * same function, not duplicated from the parent's scan.
+ *
+ * Depths in the returned lines are *relative to `node` itself* (the first
+ * unindexed line one level deeper than `node`'s own line comes back as
+ * `depth: 1`, a line nested one level deeper than that as `depth: 2`, and so
+ * on), not the final depth in the eventual write. This function is async
+ * (it reads the vault) while `planOrganiseWrites` and the `extraLinesOf`
+ * callback it takes are synchronous, so it can't be called from inside that
+ * walk - callers instead call this once per node ahead of time (e.g. while
+ * building the preview), then add each node's *actual* depth (the value
+ * `planOrganiseWrites` would pass into `extraLinesOf`) on top of these
+ * relative depths before handing them to `planOrganiseWrites`.
+ */
+export async function collectUnindexedChildLines(app: App, node: PullNode): Promise<PullLine[]> {
+    const file = app.vault.getFileByPath(node.node.location.path)
+    if (!file) return []
+
+    const lines = (await app.vault.read(file)).split("\n")
+    const headLine = node.node.location.position.start.line
+    const headIndent = leadingWhitespaceLength(lines[headLine] ?? "")
+    const directChildLines = new Set(node.children.map(c => c.node.location.position.start.line))
+
+    const result: PullLine[] = []
+    const indentStack: { indent: number; depth: number }[] = [{ indent: headIndent, depth: 0 }]
+
+    let i = headLine + 1
+    while (i < lines.length) {
+        const line = lines[i]
+        if (line.trim().length === 0) { i++; continue }
+
+        const indent = leadingWhitespaceLength(line)
+        if (indent <= headIndent) break
+
+        if (directChildLines.has(i)) {
+            // Already a real PullNode - skip its whole nested span (blank
+            // lines included) rather than re-emitting it or its own
+            // unindexed descendants; that child handles its own scan.
+            i++
+            while (i < lines.length && (lines[i].trim().length === 0 || leadingWhitespaceLength(lines[i]) > indent)) i++
+            continue
+        }
+
+        while (indentStack.length > 1 && indent <= indentStack[indentStack.length - 1].indent) indentStack.pop()
+        if (indent > indentStack[indentStack.length - 1].indent) {
+            indentStack.push({ indent, depth: indentStack[indentStack.length - 1].depth + 1 })
+        }
+
+        const text = line.trim().replace(/^[-*+]\s+/, "")
+        result.push({ depth: indentStack[indentStack.length - 1].depth, text })
+        i++
+    }
+
+    return result
+}
+
 /**
  * Applies an organise plan to the vault: for each `SectionWrite`, creates
  * its home file first if it doesn't exist yet, then upserts its two managed
@@ -357,8 +424,8 @@ export async function applyOrganisePlan(app: App, writes: SectionWrite[], deleti
         if (write) {
             content = upsertOrganiseSections(
                 content,
-                write.children.map(l => `- ${l.text}`),
-                write.mentions.map(l => `- ${l.text}`),
+                write.children.map(renderPullLine),
+                write.mentions.map(renderPullLine),
             )
         }
 

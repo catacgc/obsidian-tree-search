@@ -29,6 +29,7 @@ function isOrganiseViewState(state: unknown): state is OrganiseViewState {
 export class OrganiseView extends ItemView {
     root: Root | null = null;
     private viewState: OrganiseViewState | null = null;
+    private unsubscribeGraph: (() => void) | null = null;
 
     constructor(leaf: WorkspaceLeaf, private store: GlobalStore, private refreshFile: (path: string) => Promise<void>) {
         super(leaf);
@@ -61,9 +62,12 @@ export class OrganiseView extends ItemView {
 
     async onOpen(): Promise<void> {
         this.render();
+        this.unsubscribeGraph = this.store.sub(GlobalAtoms.graphAtom, () => this.render(true));
     }
 
     async onClose(): Promise<void> {
+        this.unsubscribeGraph?.();
+        this.unsubscribeGraph = null;
         this.root?.unmount();
         this.root = null;
     }
@@ -71,8 +75,11 @@ export class OrganiseView extends ItemView {
     /** Returns whether the tree was actually (re)built and rendered - false
      * means `viewState` points at a root that isn't in the index right now,
      * so the caller (`setState`) can revert to the previous target instead
-     * of leaving the tab title pointing at a root the pane isn't showing. */
-    private render(): boolean {
+     * of leaving the tab title pointing at a root the pane isn't showing.
+     * `silent` suppresses the "not found" notice for a background refresh
+     * (triggered by an unrelated vault edit elsewhere) - only an explicit
+     * open/retarget attempt should surface that warning. */
+    private render(silent = false): boolean {
         if (!this.viewState) return false;
         const { rootKey, notePath } = this.viewState;
         const graph = this.store.get(GlobalAtoms.graphAtom);
@@ -80,14 +87,14 @@ export class OrganiseView extends ItemView {
 
         const pullTree = buildPullTree(graph, rootKey, MAX_DEPTH);
         if (!pullTree) {
-            new Notice(`Tree Search: "${rootKey}" was not found in the index`);
+            if (!silent) new Notice(`Tree Search: "${rootKey}" was not found in the index`);
             return false;
         }
 
-        this.root?.unmount();
-        this.root = createRoot(this.contentEl);
+        if (!this.root) this.root = createRoot(this.contentEl);
         this.root.render(
             <PullTreeView
+                key={`${rootKey}::${notePath}`}
                 app={app}
                 graph={graph}
                 root={pullTree}

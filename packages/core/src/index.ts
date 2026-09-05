@@ -54,6 +54,7 @@ export {
   formatOccurrenceDate,
   planOrganiseWrites,
   planDeletions,
+  renderPullLine,
   type PullNode,
   type PullLine,
   type OrganiseHome,

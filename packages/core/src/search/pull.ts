@@ -108,9 +108,19 @@ export type PullLine = { depth: number; text: string }
 export type OrganiseHome = { path: string; exists: boolean }
 
 /** Everything to write into one home: its new direct-topic links (bare,
- * undated - `depth` is always 0, kept only so `PullLine` stays one shared
- * shape) and its new text mentions (verbatim line + date, as before). */
+ * undated, always starting at depth 0 since a page-link always starts a
+ * fresh anchor - though a link may be followed by further depth>0 lines,
+ * see `extraLinesOf` below) and its new text mentions (verbatim line +
+ * date, as before) - `depth` on a mention reflects its actual nesting under
+ * its parent bullet, relative to whichever anchor/home it was routed to. */
 export type SectionWrite = { home: OrganiseHome; children: PullLine[]; mentions: PullLine[] }
+
+/** Renders one `PullLine` as an indented markdown bullet, 2 spaces per depth
+ * level (list parsing only cares that a child's indent is strictly greater
+ * than its parent's, so any consistent step round-trips correctly). */
+export function renderPullLine(line: PullLine): string {
+  return `${"  ".repeat(line.depth)}- ${line.text}`
+}
 
 /**
  * Plans where every checked node in `root` ends up, organised by topic
@@ -136,6 +146,14 @@ export function planOrganiseWrites(
   rootHome: OrganiseHome,
   isChecked: (key: string) => boolean,
   resolveHome: (pageKey: string) => OrganiseHome,
+  // Verbatim, undated lines the indexer skipped entirely (plain text, no
+  // link/tag/URL) but that were still nested under a given node in the
+  // source file - carried along so organising doesn't silently drop detail
+  // the graph never knew about. Called for both branches below: once for a
+  // mention's own sub-lines (relative to the mention's current depth), and
+  // once for a bare-link page-child's own sub-lines (relative to 0, since
+  // the link itself always renders at depth 0).
+  extraLinesOf: (node: PullNode, depth: number) => PullLine[] = () => [],
 ): SectionWrite[] {
   const byHomePath = new Map<string, SectionWrite>()
 
@@ -147,27 +165,31 @@ export function planOrganiseWrites(
     return created
   }
 
-  function visit(node: PullNode, homeThunk: () => OrganiseHome): void {
+  function visit(node: PullNode, homeThunk: () => OrganiseHome, depth: number): void {
     for (const child of node.children) {
       if (!isChecked(child.key)) continue
 
       if (child.node.nodeType === "page") {
         const write = ensureWrite(homeThunk())
         write.children.push({ depth: 0, text: reverseMarkdownParsing(child.node) })
+        for (const extra of extraLinesOf(child, 0)) write.children.push(extra)
 
         let childHome: OrganiseHome | null = null
-        visit(child, () => childHome ?? (childHome = resolveHome(child.key)))
+        visit(child, () => childHome ?? (childHome = resolveHome(child.key)), 0)
       } else {
         const write = ensureWrite(homeThunk())
         const date = formatOccurrenceDate(child.node)
-        write.mentions.push({ depth: 0, text: reverseMarkdownParsing(child.node) + (date ? ` ${date}` : "") })
+        // Only the mention's own line gets a date; extra lines never do,
+        // since they were never a node the graph could date independently.
+        write.mentions.push({ depth, text: reverseMarkdownParsing(child.node) + (date ? ` ${date}` : "") })
+        for (const extra of extraLinesOf(child, depth)) write.mentions.push(extra)
 
-        visit(child, homeThunk)
+        visit(child, homeThunk, depth + 1)
       }
     }
   }
 
-  visit(root, () => rootHome)
+  visit(root, () => rootHome, 0)
   return Array.from(byHomePath.values())
 }
 
