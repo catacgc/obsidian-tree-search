@@ -18,8 +18,8 @@ import {HOVER_SOURCE_ID} from "./view/hover-preview";
 import {ORGANISE_VIEW, OrganiseView, type OrganiseViewState} from "./view/organise-notes/OrganiseView";
 
 // Extracts the graph key ([[page]] or page#header) for the first wikilink on
-// `line`, so "Pull and organise notes" can resolve a root node from
-// wherever the cursor happens to sit.
+// `line`, so "Consolidate notes" can resolve a root node from wherever the
+// cursor happens to sit.
 function extractLinkKeyFromLine(line: string): string | null {
     const match = line.match(/\[\[([^\]|#]+)(?:#([^\]|]+))?/);
     if (!match) return null;
@@ -126,7 +126,7 @@ export default class TreeSearchPlugin extends Plugin {
 
         this.addCommand({
             id: 'organise-notes',
-            name: 'Pull and organise notes',
+            name: 'Consolidate notes',
             editorCallback: async (editor) => {
                 const activeFile = this.app.workspace.getActiveFile()
 

@@ -18,8 +18,8 @@ function isOrganiseViewState(state: unknown): state is OrganiseViewState {
 }
 
 /**
- * Persistent pane for "Pull and organise notes", replacing the old
- * transient preview modal. A single instance is reused across invocations
+ * Persistent pane for "Consolidate notes", replacing the old transient
+ * preview modal. A single instance is reused across invocations
  * (see `openOrganiseView` in main.ts) and retargeted via `setState` rather
  * than re-instantiated - Obsidian calls `setState` on the existing view
  * when `WorkspaceLeaf.setViewState` targets a leaf that already hosts this
@@ -39,7 +39,7 @@ export class OrganiseView extends ItemView {
     }
 
     getDisplayText(): string {
-        return this.viewState ? `Organise: ${this.viewState.rootKey}` : "Pull and organise notes";
+        return this.viewState ? `Organise: ${this.viewState.rootKey}` : "Consolidate notes";
     }
 
     getIcon(): string {
