@@ -1,5 +1,5 @@
 import type { NotesGraph } from "../graph/graph.ts"
-import type { Location, ParsedNode } from "../graph/types.ts"
+import type { EdgeEntry, Location, ParsedNode } from "../graph/types.ts"
 import { isUndated } from "../graph/boost.ts"
 import { reverseMarkdownParsing } from "./copy.ts"
 
@@ -40,28 +40,20 @@ export function buildPullTree(graph: NotesGraph, rootKey: string, maxDepth = DEF
 
   const seen = new Set<string>([rootKey])
 
-  // Looks up the *canonical* stored node for `key`, not the edge-adjusted
-  // copy `walk` renders (which carries the location of the specific
-  // occurrence/edge it was reached through) - a page's own file is a
-  // property of the page itself, independent of which edge led here.
-  function ownBodyPath(key: string): string | null {
-    const attrs = graph.getNodeAttributes(key)
-    return attrs.nodeType === "page" && !attrs.isReference ? attrs.location.path : null
-  }
-
   function collectChildren(key: string, ownPath: string | null, depth: number, out: PullNode[]): void {
     for (const edge of graph.outboundEdgeEntries(key)) {
       if (edge.attributes.type === "folder") continue
       if (seen.has(edge.target)) continue
       const childNode = { ...graph.getNodeAttributes(edge.target), location: edge.attributes.location }
 
-      const isOwnBody = ownPath !== null
-        && (childNode.nodeType === "header" || childNode.nodeType === "text")
-        && edge.attributes.location.path === ownPath
-
       seen.add(edge.target)
 
-      if (isOwnBody) {
+      if (isOwnBodyEdge(graph, ownPath, edge)) {
+        // Own-body descendants are walked through transparently using the
+        // *same* ownPath - a header/text node has no real file of its own,
+        // so re-deriving ownPath from it (rather than threading the
+        // enclosing page's) would lose the exclusion for anything nested
+        // one level deeper (e.g. a text bullet under a header).
         collectChildren(edge.target, ownPath, depth, out)
       } else {
         out.push(walk(edge.target, childNode, depth + 1))
@@ -72,12 +64,45 @@ export function buildPullTree(graph: NotesGraph, rootKey: string, maxDepth = DEF
   function walk(key: string, node: ParsedNode, depth: number): PullNode {
     const children: PullNode[] = []
     if (depth < maxDepth) {
-      collectChildren(key, ownBodyPath(key), depth, children)
+      collectChildren(key, ownBodyPath(graph, key), depth, children)
     }
     return { key, node, children }
   }
 
   return walk(rootKey, graph.getNodeAttributes(rootKey), 0)
+}
+
+/**
+ * `key`'s own real file path if it's a real (non-reference) page, otherwise
+ * `null`. Looks up the *canonical* stored node for `key`, not an
+ * edge-adjusted copy carrying the location of a specific occurrence - a
+ * page's own file is a property of the page itself, independent of which
+ * edge led here.
+ */
+function ownBodyPath(graph: NotesGraph, key: string): string | null {
+  const attrs = graph.getNodeAttributes(key)
+  return attrs.nodeType === "page" && !attrs.isReference ? attrs.location.path : null
+}
+
+/**
+ * Whether `edge` represents a step into the enclosing real page's own
+ * document body (a header/text node physically living at `ownPath`) rather
+ * than a foreign mention/topic captured elsewhere. `ownPath` is that page's
+ * own file path (`ownBodyPath` above) - `null` means there is no real file
+ * to be "own body" of, so nothing qualifies. Shared by `buildPullTree`'s
+ * own-body walk-through above (which descends through such edges
+ * transparently rather than materializing them as pull candidates) and
+ * `isSafeToDeleteSource`'s deletion-safety check below (which must not
+ * require a node's own body content to be "checked" before a bullet merely
+ * referencing that node elsewhere can be deleted) - the two need to agree
+ * on exactly what counts as "already home", or a node's own content could
+ * silently block deleting a reference to it.
+ */
+function isOwnBodyEdge(graph: NotesGraph, ownPath: string | null, edge: EdgeEntry): boolean {
+  if (ownPath === null) return false
+  const targetAttrs = graph.getNodeAttributes(edge.target)
+  return (targetAttrs.nodeType === "header" || targetAttrs.nodeType === "text")
+    && edge.attributes.location.path === ownPath
 }
 
 // ── Date reconstruction ──────────────────────────────────────────────────────
@@ -215,11 +240,23 @@ export type PullDeletion = { key: string; location: Location }
  * elsewhere in the vault can block a deletion that would otherwise be safe
  * for this specific line), never less - consistent with "don't be
  * aggressive".
+ *
+ * Exception: a child edge into `key`'s *own document body* (`isOwnBodyEdge`
+ * above) is exempt from the "must be checked" requirement. That content is
+ * never offered as a pull candidate in the first place (see `buildPullTree`),
+ * so it could never be in `checkedKeys` - without this exemption, a real page
+ * that has accumulated any content of its own could never have a bullet
+ * referencing it deleted, anywhere, ever again (its own body edges would
+ * permanently fail the "every child checked" test). Own-body content isn't
+ * affected by removing *this* particular reference bullet regardless - it
+ * lives in the target's own file either way.
  */
 function isSafeToDeleteSource(graph: NotesGraph, key: string, checkedKeys: Set<string>): boolean {
+  const ownPath = ownBodyPath(graph, key)
   return graph
     .outboundEdgeEntries(key)
     .filter(e => e.attributes.type !== "folder")
+    .filter(e => !isOwnBodyEdge(graph, ownPath, e))
     .every(e => checkedKeys.has(e.target))
 }
 

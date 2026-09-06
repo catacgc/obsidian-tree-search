@@ -1,6 +1,6 @@
 // ── Marker-bounded section upsert ───────────────────────────────────────────────
 //
-// Every note "Pull and organise notes" writes into gets two fixed, hidden-
+// Every note "Consolidate notes" writes into gets two fixed, hidden-
 // marker-bounded regions at its top (after frontmatter if present): a flat
 // list of bare topic links, and a flat list of text mentions referencing
 // that note. Re-running the organise action must update these regions
