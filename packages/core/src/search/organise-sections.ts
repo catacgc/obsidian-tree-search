@@ -36,9 +36,44 @@ function frontmatterEnd(lines: string[]): number {
 }
 
 /**
- * Replaces one marker pair's body in place, deduping `newLines` against
- * whatever the section already contains (exact line match). Returns `null`
- * if the marker pair isn't found (caller falls back to creating it).
+ * Re-derives each line's nesting depth from its indentation *relative* to
+ * its neighbours (mirroring the indent-stack technique in
+ * `collectUnindexedChildLines`, obsidian-utils.ts) and re-renders it at a
+ * fixed 4-space-per-level step, regardless of how many spaces it actually
+ * had. This is what makes a managed section self-healing: a line written by
+ * an older version of `renderPullLine` (2 spaces/level), or hand-indented
+ * inconsistently, gets its indentation corrected every time the section is
+ * upserted - not just newly-added lines - because relative nesting order
+ * (deeper than its predecessor, same as it, or shallower) survives
+ * regardless of the absolute indent width originally used.
+ */
+function normalizeIndentation(lines: string[]): string[] {
+  const stack: { indent: number; depth: number }[] = [{ indent: -1, depth: -1 }]
+
+  return lines.map(line => {
+    const indent = line.match(/^ */)![0].length
+    const text = line.slice(indent)
+
+    while (stack.length > 1 && indent <= stack[stack.length - 1].indent) stack.pop()
+    if (indent > stack[stack.length - 1].indent) {
+      stack.push({ indent, depth: stack[stack.length - 1].depth + 1 })
+    }
+
+    return "    ".repeat(stack[stack.length - 1].depth) + text
+  })
+}
+
+/**
+ * Replaces one marker pair's body in place. `newLines` are deduped against
+ * whatever the section already contains by *trimmed* content, not exact
+ * line match - a line whose indentation is stale (written by an older
+ * indent scheme, or hand-edited) still counts as "already present" rather
+ * than being re-appended as a duplicate. The full merged body is then run
+ * through `normalizeIndentation` so every line - carried-over and freshly
+ * added alike - ends up with correct indentation, self-healing any stale
+ * entries on every run rather than only on the ones that happen to be
+ * rewritten. Returns `null` if the marker pair isn't found (caller falls
+ * back to creating it).
  */
 function replaceSectionBody(lines: string[], marker: SectionMarker, newLines: string[]): string[] | null {
   const { open, close } = markerTags(marker)
@@ -50,9 +85,9 @@ function replaceSectionBody(lines: string[], marker: SectionMarker, newLines: st
   const existing = lines.slice(openIdx + 1, closeIdx)
   const merged = [...existing]
   for (const line of newLines) {
-    if (!merged.includes(line)) merged.push(line)
+    if (!merged.some(l => l.trim() === line.trim())) merged.push(line)
   }
-  return [...lines.slice(0, openIdx + 1), ...merged, ...lines.slice(closeIdx)]
+  return [...lines.slice(0, openIdx + 1), ...normalizeIndentation(merged), ...lines.slice(closeIdx)]
 }
 
 /**

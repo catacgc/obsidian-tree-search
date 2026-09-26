@@ -35,6 +35,11 @@ function describeNode(node: PullNode): string {
     return reverseMarkdownParsing(node.node) + (date ? ` ${date}` : "");
 }
 
+function basename(path: string): string {
+    const i = path.lastIndexOf("/");
+    return i === -1 ? path : path.slice(i + 1);
+}
+
 type SubtreeState = "all" | "none" | "partial";
 
 function subtreeState(node: PullNode, checked: Set<string>): SubtreeState {
@@ -52,12 +57,24 @@ function subtreeState(node: PullNode, checked: Set<string>): SubtreeState {
 
 type HomeLookup = (pageKey: string) => OrganiseHome;
 
+// Whether `node` or anything beneath it still needs to move - i.e. whether
+// showing it (or recursing into it) could surface at least one row whose
+// bullet doesn't already sit at its resolved destination. Mirrors the same
+// isPage/childDestHome propagation `PullRow` uses below, so a node hidden
+// here is exactly the set of nodes `PullRow` itself would render nothing
+// for.
+function subtreeHasMove(node: PullNode, destHome: OrganiseHome, homeOf: HomeLookup): boolean {
+    if (node.node.location.path !== destHome.path) return true;
+    const childDestHome = node.node.nodeType === "page" ? homeOf(node.key) : destHome;
+    return node.children.some(child => subtreeHasMove(child, childDestHome, homeOf));
+}
+
 type Props = {
     app: App;
     graph: NotesGraph;
     root: PullNode;
     notePath: string;
-    onApplied: (touchedPaths: string[]) => void;
+    onApplied: () => void;
 };
 
 export function PullTreeView({ app, graph, root, notePath, onApplied }: Props) {
@@ -66,6 +83,11 @@ export function PullTreeView({ app, graph, root, notePath, onApplied }: Props) {
         collectDescendantKeys(root, all);
         return all;
     });
+
+    // The anchor every root-level row's own line is filed under - the note
+    // this pane was opened for, which always exists (mirrors `rootHome` in
+    // `onConfirm` below and `planOrganiseWrites`'s root call).
+    const rootHome: OrganiseHome = useMemo(() => ({ path: notePath, exists: true }), [notePath]);
 
     const homeOf: HomeLookup = useMemo(() => {
         const cache = new Map<string, OrganiseHome>();
@@ -134,7 +156,7 @@ export function PullTreeView({ app, graph, root, notePath, onApplied }: Props) {
             `Organised ${lineCount} line${lineCount === 1 ? "" : "s"} into ${homeCount} note${homeCount === 1 ? "" : "s"}, ` +
             `removed ${deletions.length} source line${deletions.length === 1 ? "" : "s"}`
         );
-        onApplied(writes.map(w => w.home.path));
+        onApplied();
     }
 
     return (
@@ -155,7 +177,7 @@ export function PullTreeView({ app, graph, root, notePath, onApplied }: Props) {
                 <button onClick={resetSelection}>Select all</button>
                 <button className="mod-cta" onClick={onConfirm}>Organise selected</button>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "var(--size-4-3)", padding: "var(--size-4-2)" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--size-4-1)", padding: "var(--size-4-1)" }}>
                 <div className="setting-item-description">
                     Select what to organise. Each topic&apos;s own detail lines are filed into that topic&apos;s own note.
                 </div>
@@ -163,8 +185,11 @@ export function PullTreeView({ app, graph, root, notePath, onApplied }: Props) {
                     {root.children.length === 0 && (
                         <div className="setting-item-description">Nothing to organise - this node has no children.</div>
                     )}
+                    {root.children.length > 0 && !root.children.some(child => subtreeHasMove(child, rootHome, homeOf)) && (
+                        <div className="setting-item-description">Nothing to organise - everything is already in its own note.</div>
+                    )}
                     {root.children.map(child => (
-                        <PullRow key={child.key} app={app} node={child} depth={0} checked={checked} onToggle={toggle} homeOf={homeOf} extraLines={extraLines} />
+                        <PullRow key={child.key} app={app} node={child} depth={0} checked={checked} onToggle={toggle} homeOf={homeOf} extraLines={extraLines} destHome={rootHome} />
                     ))}
                 </div>
             </div>
@@ -188,7 +213,7 @@ function MarkdownLine({ app, text, sourcePath }: { app: App; text: string; sourc
     return <span ref={ref} style={{ display: "inline" }} />;
 }
 
-function PullRow({ app, node, depth, checked, onToggle, homeOf, extraLines }: {
+function PullRow({ app, node, depth, checked, onToggle, homeOf, extraLines, destHome }: {
     app: App;
     node: PullNode;
     depth: number;
@@ -196,65 +221,86 @@ function PullRow({ app, node, depth, checked, onToggle, homeOf, extraLines }: {
     onToggle: (node: PullNode, value: boolean) => void;
     homeOf: HomeLookup;
     extraLines: Map<string, PullLine[]>;
+    // Where THIS node's own line lands, matching `planOrganiseWrites`'s
+    // `homeThunk()` at the point this node is visited - the nearest page
+    // ancestor's resolved home, or `rootHome` if there is none. A page
+    // node's own children get a *different* anchor (that page's own
+    // resolved home, `homeOf(node.key)`) below, since a page's content
+    // moves into its own note even though the page-link bullet itself
+    // stays with its parent's anchor.
+    destHome: OrganiseHome;
 }) {
     const ref = useRef<HTMLInputElement>(null);
     const isChecked = checked.has(node.key);
     const state = subtreeState(node, checked);
-    const home = node.node.nodeType === "page" ? homeOf(node.key) : null;
+    const isPage = node.node.nodeType === "page";
+    const childDestHome = isPage ? homeOf(node.key) : destHome;
+    const sourcePath = node.node.location.path;
+    const moves = sourcePath !== destHome.path;
     const ownExtraLines = extraLines.get(node.key) ?? [];
 
     useEffect(() => {
         if (ref.current) ref.current.indeterminate = state === "partial";
     }, [state]);
 
+    // A node whose own bullet already sits at its resolved destination is
+    // already organised - it (and its own extra lines, which by definition
+    // sit right alongside it in the same already-correct file) is hidden
+    // entirely rather than shown as a no-op row. Its children are still
+    // walked below, since a descendant can still need to move even when
+    // this node itself doesn't.
+    const visibleChildren = node.children.filter(child => subtreeHasMove(child, childDestHome, homeOf));
+
     return (
         <div>
-            <label
-                style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "var(--size-4-2)",
-                    paddingTop: "var(--size-2-1)",
-                    paddingBottom: "var(--size-2-1)",
-                    paddingLeft: depth * 20,
-                }}
-            >
-                <input
-                    ref={ref}
-                    type="checkbox"
-                    checked={isChecked}
-                    onChange={e => onToggle(node, e.target.checked)}
-                />
-                <MarkdownLine app={app} text={describeNode(node)} sourcePath={node.node.location.path} />
-                <button
-                    type="button"
-                    onClick={() => highlightLine(app, node.node.location)}
+            {moves && (
+                <label
                     style={{
-                        background: "transparent",
-                        border: "none",
-                        padding: 0,
-                        textDecoration: "underline",
-                        color: "var(--text-muted)",
-                        fontSize: "var(--font-ui-smaller)",
-                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "var(--size-4-1)",
+                        paddingTop: "1px",
+                        paddingBottom: "1px",
+                        paddingLeft: depth * 16,
                     }}
                 >
-                    reveal source
-                </button>
-                {home && (
+                    <input
+                        ref={ref}
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={e => onToggle(node, e.target.checked)}
+                    />
+                    <MarkdownLine app={app} text={describeNode(node)} sourcePath={node.node.location.path} />
+                    <button
+                        type="button"
+                        onClick={() => highlightLine(app, node.node.location)}
+                        title={`Reveal source: ${sourcePath}`}
+                        style={{
+                            background: "transparent",
+                            border: "none",
+                            padding: 0,
+                            textDecoration: "underline",
+                            color: "var(--text-muted)",
+                            fontSize: "var(--font-ui-smaller)",
+                            cursor: "pointer",
+                        }}
+                    >
+                        source
+                    </button>
                     <span
                         className="setting-item-description"
-                        style={{ fontStyle: "italic", color: "var(--text-accent)" }}
+                        style={{ fontStyle: "italic", color: "var(--text-accent)", fontSize: "var(--font-ui-smaller)" }}
+                        title={`${sourcePath} → ${destHome.exists ? "" : "(new) "}${destHome.path}`}
                     >
-                        → {home.exists ? "" : "(new) "}{home.path}
+                        {basename(sourcePath)} → {destHome.exists ? "" : "(new) "}{basename(destHome.path)}
                     </span>
-                )}
-            </label>
-            {ownExtraLines.map((line, i) => (
+                </label>
+            )}
+            {moves && ownExtraLines.map((line, i) => (
                 <div
                     key={i}
                     style={{
-                        paddingLeft: (depth + line.depth) * 20,
+                        paddingLeft: (depth + line.depth) * 16,
                         color: "var(--text-faint)",
                         fontSize: "var(--font-ui-smaller)",
                     }}
@@ -262,8 +308,8 @@ function PullRow({ app, node, depth, checked, onToggle, homeOf, extraLines }: {
                     {line.text}
                 </div>
             ))}
-            {node.children.map(child => (
-                <PullRow key={child.key} app={app} node={child} depth={depth + 1} checked={checked} onToggle={onToggle} homeOf={homeOf} extraLines={extraLines} />
+            {visibleChildren.map(child => (
+                <PullRow key={child.key} app={app} node={child} depth={depth + 1} checked={checked} onToggle={onToggle} homeOf={homeOf} extraLines={extraLines} destHome={childDestHome} />
             ))}
         </div>
     );

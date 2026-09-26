@@ -75,10 +75,7 @@ export default class TreeSearchPlugin extends Plugin {
 
         this.registerView(
             ORGANISE_VIEW,
-            (leaf) => new OrganiseView(leaf, this.globalStore, async (path) => {
-                const file = this.app.vault.getFileByPath(path);
-                if (file) await this.index.refreshPage(file);
-            })
+            (leaf) => new OrganiseView(leaf, this.globalStore, () => this.index.refresh())
         );
 
         this.addCommand({

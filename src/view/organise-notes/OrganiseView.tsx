@@ -31,7 +31,7 @@ export class OrganiseView extends ItemView {
     private viewState: OrganiseViewState | null = null;
     private unsubscribeGraph: (() => void) | null = null;
 
-    constructor(leaf: WorkspaceLeaf, private store: GlobalStore, private refreshFile: (path: string) => Promise<void>) {
+    constructor(leaf: WorkspaceLeaf, private store: GlobalStore, private reindex: () => Promise<void>) {
         super(leaf);
     }
 
@@ -99,16 +99,22 @@ export class OrganiseView extends ItemView {
                 graph={graph}
                 root={pullTree}
                 notePath={notePath}
-                onApplied={paths => this.handleApplied(paths)}
+                onApplied={() => this.handleApplied()}
             />
         );
         return true;
     }
 
-    private async handleApplied(touchedPaths: string[]): Promise<void> {
-        for (const path of touchedPaths) {
-            await this.refreshFile(path);
-        }
+    // A full reindex, not a per-write-home refresh: an organise apply also
+    // deletes lines from files that are sources only (never a SectionWrite
+    // home), and a partial refresh left those out - the graph's cached line
+    // numbers for them went stale until an unrelated debounced vault-modify
+    // event happened to catch up, which could land after this pane (or a
+    // subsequent organise run) already read the stale positions. That drift
+    // is what let a later deletion land on the wrong line and, occasionally,
+    // eat a target file's frontmatter delimiter.
+    private async handleApplied(): Promise<void> {
+        await this.reindex();
         this.render();
     }
 }

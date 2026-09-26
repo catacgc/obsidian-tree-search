@@ -140,11 +140,14 @@ export type OrganiseHome = { path: string; exists: boolean }
  * its parent bullet, relative to whichever anchor/home it was routed to. */
 export type SectionWrite = { home: OrganiseHome; children: PullLine[]; mentions: PullLine[] }
 
-/** Renders one `PullLine` as an indented markdown bullet, 2 spaces per depth
- * level (list parsing only cares that a child's indent is strictly greater
- * than its parent's, so any consistent step round-trips correctly). */
+/** Renders one `PullLine` as an indented markdown bullet, 4 spaces per depth
+ * level. Obsidian's own list renderer (unlike this plugin's own lenient
+ * list-scanner, which accepts any consistent indent step when building
+ * graph edges) only recognises a bullet as a *nested* list item once it's
+ * indented a full tab-stop (4 spaces) past its parent - a 2-space step
+ * renders as literal paragraph text (dash and all) instead of a sub-bullet. */
 export function renderPullLine(line: PullLine): string {
-  return `${"  ".repeat(line.depth)}- ${line.text}`
+  return `${"    ".repeat(line.depth)}- ${line.text}`
 }
 
 /**

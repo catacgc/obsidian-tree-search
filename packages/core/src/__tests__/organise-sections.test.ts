@@ -135,4 +135,40 @@ describe("upsertOrganiseSections", () => {
     const childrenBody = result.split("<!-- organise:children -->\n")[1].split("\n<!-- /organise:children -->")[0]
     expect(childrenBody).toBe("- [[Child]]")
   })
+
+  it("re-indents an existing nested line written with a stale narrower indent step to the current 4-space step", () => {
+    // "  - [[B]]" (2 spaces) is what an older renderPullLine (or a hand
+    // edit) could have left behind - Obsidian doesn't recognise that as a
+    // nested bullet (it renders as literal paragraph text, dash and all),
+    // so a re-run must correct it in place rather than leaving it broken.
+    const existing =
+      "<!-- organise:children -->\n" +
+      "- [[A]]\n" +
+      "  - [[B]]\n" +
+      "<!-- /organise:children -->\n" +
+      "\n" +
+      "<!-- organise:mentions -->\n" +
+      "<!-- /organise:mentions -->\n"
+
+    const result = upsertOrganiseSections(existing, ["- [[A]]"], [])
+    const childrenBody = result.split("<!-- organise:children -->\n")[1].split("\n<!-- /organise:children -->")[0]
+    expect(childrenBody).toBe("- [[A]]\n    - [[B]]")
+  })
+
+  it("does not duplicate a line whose only difference from an existing one is indentation", () => {
+    const existing =
+      "<!-- organise:children -->\n" +
+      "- [[A]]\n" +
+      "  - [[B]]\n" +
+      "<!-- /organise:children -->\n" +
+      "\n" +
+      "<!-- organise:mentions -->\n" +
+      "<!-- /organise:mentions -->\n"
+
+    // Freshly rendered at the current (4-space) step - same content as the
+    // stale 2-space line already in the section.
+    const result = upsertOrganiseSections(existing, ["- [[A]]", "    - [[B]]"], [])
+    const childrenBody = result.split("<!-- organise:children -->\n")[1].split("\n<!-- /organise:children -->")[0]
+    expect(childrenBody).toBe("- [[A]]\n    - [[B]]")
+  })
 })

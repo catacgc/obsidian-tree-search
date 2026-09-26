@@ -426,7 +426,7 @@ describe("planOrganiseWrites - nested text children", () => {
     // not a flattened sibling.
     const rendered = write.mentions.map(renderPullLine)
     expect(rendered[0]).toBe(`- ${write.mentions[0].text}`)
-    expect(rendered[1]).toBe(`  - ${write.mentions[1].text}`)
+    expect(rendered[1]).toBe(`    - ${write.mentions[1].text}`)
   })
 
   it("splices in extraLinesOf's lines right after a mention's own line, undated, without recursing into them", () => {
@@ -524,21 +524,24 @@ function applyPlanToFiles(files: Map<string, string>, writes: SectionWrite[], de
 describe("Organise -> reindex -> re-organise idempotency", () => {
   // Parent.md has an ad hoc `- [[Child]]` bullet, and a daily note mentions
   // [[Child]] once. This test proves true idempotency through the REAL
-  // incremental-reindex mechanism production actually uses, rather than an
+  // incremental-reindex primitive (`reindexFileInGraph`), rather than an
   // idealized from-scratch `buildGraph` rebuild:
-  //  - `OrganiseView.handleApplied` (src/view/organise-notes/OrganiseView.tsx)
-  //    refreshes exactly `writes.map(w => w.home.path)` - the SectionWrite
-  //    homes, sequentially, in that order - via `reindexFileInGraph`
-  //    (../graph/builder.ts), which mutates the SAME long-lived graph
-  //    object in place (`removeByPath` + re-add for one file at a time). A
-  //    deletion-only source file (the daily note here) is never in that
-  //    list, so its removal from disk is not reflected in the graph by this
-  //    code path (a separate `vault.on("modify")` listener in src/main.ts
-  //    handles that asynchronously in production; out of scope to model
-  //    here) - this is why one stale mention legitimately survives below.
-  //    That's a distinct, already-understood staleness window (the graph
-  //    catches up on the next real vault-modify event), not a duplication
-  //    bug - see the comment where it's asserted, further down.
+  //  - Only `writes.map(w => w.home.path)` - the SectionWrite homes,
+  //    sequentially, in that order - are incrementally reindexed below, via
+  //    `reindexFileInGraph` (../graph/builder.ts), which mutates the SAME
+  //    long-lived graph object in place (`removeByPath` + re-add for one
+  //    file at a time). A deletion-only source file (the daily note here)
+  //    is deliberately left out of that list, so its removal from disk is
+  //    not reflected in the graph by this path - this is why one stale
+  //    mention legitimately survives below. `OrganiseView.handleApplied`
+  //    (src/view/organise-notes/OrganiseView.tsx) no longer mirrors this
+  //    partial refresh in production - it runs a full reindex instead,
+  //    specifically to close this staleness window (a partial refresh let a
+  //    later deletion's stale line number land on the wrong line, sometimes
+  //    the frontmatter delimiter, in a deletion-only file) - but the
+  //    staleness this test captures remains true of the underlying
+  //    incremental primitive, and is worth pinning here regardless of what
+  //    calls it - see the comment where it's asserted, further down.
   //  - An earlier version of this test built a fresh `buildGraph` for the
   //    "post-organise" state and hand-picked an indexing order that made
   //    everything look idempotent. That was a false-confidence test: a
