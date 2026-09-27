@@ -1,5 +1,5 @@
 import {TreeNode} from '../search/SearchViewFlatten'
-import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, matchQuery, nodeMatchesQuery, pruneResultTree, type QueryExpr, partitionArchived, extractArchiveReveal, suggestAt, type Suggestion} from '@mdtree/core'
+import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, matchQuery, nodeMatchesQuery, pruneResultTree, type QueryExpr, partitionArchived, extractArchiveReveal, suggestAt, type Suggestion, buildTimeline, parseDuration} from '@mdtree/core'
 import {atom, useAtomValue} from 'jotai'
 import {ParsedNode, ParsedTextToken, TextNode, Location} from '@mdtree/core'
 
@@ -50,8 +50,12 @@ export const SearchViewScope = createScope({
     name: "default",
     isQuickLink: false,
     showSearch: true,
-    isModal: true
+    isModal: true,
+    allowTimeline: false
 })
+
+export type TimelineWindow = "all" | "7d" | "30d" | "1y"
+export const TIMELINE_WINDOWS: TimelineWindow[] = ["all", "7d", "30d", "1y"]
 
 export const GlobalAppMolecule = molecule((_, scope) => {
 
@@ -245,7 +249,53 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         return get(treeNodesAtom)[sel]
     })
 
+    const timelineActiveAtom = atom(get => scp.allowTimeline === true && get(GlobalAtoms.searchViewModeAtom) === "timeline")
+    const toggleViewModeAtom = atom(null, (get, set) =>
+        set(GlobalAtoms.searchViewModeAtom, get(GlobalAtoms.searchViewModeAtom) === "timeline" ? "tree" : "timeline"))
+    // View-local recency filter; narrows the timeline without touching the query.
+    const timelineWindowAtom = atom<TimelineWindow>("all")
+    // Raw results of the last search, kept so mode/window changes can re-project
+    // without re-running the search.
+    const lastResultsAtom = atom<{ results: ResultNode[]; archivedCount: number }>({ results: [], archivedCount: 0 })
+
     const updateSearchResultsAtom = atom(null, (get, set, result: ResultNode[], archivedCount: number = 0) => {
+        set(lastResultsAtom, { results: result, archivedCount })
+
+        if (get(timelineActiveAtom)) {
+            const w = get(timelineWindowAtom)
+            // Undated items take the ctime of the file their line lives in
+            // (timeline-only; the index itself deliberately ignores fs times).
+            // Age counts local calendar days so the row's rebuilt date is exact.
+            const app = get(GlobalAtoms.appAtom)
+            const today = new Date()
+            today.setHours(0, 0, 0, 0)
+            const fileAgeDays = (n: ParsedNode) => {
+                const file = app?.vault.getFileByPath(n.location.path)
+                if (!file) return null
+                const created = new Date(file.stat.ctime)
+                created.setHours(0, 0, 0, 0)
+                // round: DST days are 23/25h long
+                return Math.max(0, Math.round((today.getTime() - created.getTime()) / 86_400_000))
+            }
+            const items = buildTimeline(result, get(matchExprsAtom), w === "all" ? null : parseDuration(w), fileAgeDays)
+            const nodes: TreeNode[] = items.map((item, i) => ({
+                node: item.node,
+                indent: 0,
+                hasChildren: false,
+                visible: true,
+                selected: false,
+                index: i,
+                matched: true,
+                archived: item.archived,
+                timeline: { breadcrumb: item.breadcrumb, pinned: item.pinned, ageDays: item.ageDays }
+            }))
+            set(treeNodesAtom, nodes)
+            set(selectedLineAtom, get(searchVisibleAtom) ? 0 : -1)
+            set(hoveredLineAtom, -1)
+            set(pagesAtom, 1)
+            return
+        }
+
         // Calculate dynamic expand level first
         const dynamicExpand = get(searchQueryAtom).query
             ? Math.round(Math.max(0, 10 - result.length / 20))
@@ -307,6 +357,11 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         set(selectedLineAtom, searchVisible ? 0 : -1)
         set(hoveredLineAtom, -1)
         set(pagesAtom, 1)
+    })
+
+    const rebuildResultsAtom = atom(null, (get, set) => {
+        const { results, archivedCount } = get(lastResultsAtom)
+        set(updateSearchResultsAtom, results, archivedCount)
     })
 
     const arrowDownAtom = atom(null, (get, set) => {
@@ -487,7 +542,9 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             matchExprsAtom,
             cursorPosAtom, suggestionsAtom, suggestionIndexAtom, dismissSuggestionsAtom, resetSuggestionsAtom,
             repositionSuggestionsAtom,
-            focusSearchInputAtom, appendQueryTokenAtom
+            focusSearchInputAtom, appendQueryTokenAtom,
+            timelineActiveAtom, toggleViewModeAtom, timelineWindowAtom, rebuildResultsAtom,
+            allowTimeline: scp.allowTimeline
     }
 })
 

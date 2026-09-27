@@ -6,7 +6,8 @@ import {SearchTreeNode} from "../SearchTreeNode";
 import {SearchBar} from "./SearchBar";
 import {SearchActions} from "./SearchActions";
 import {SearchHelp} from "./SearchHelp";
-import React from "react";
+import {TimelineFilterBar, TimelineRow} from "./SearchTimeline";
+import React, {useEffect} from "react";
 
 export type TreeNode = {
     node: ParsedNode,
@@ -17,17 +18,27 @@ export type TreeNode = {
     index: number
     matched: boolean
     archived?: boolean
+    timeline?: { breadcrumb: ParsedNode[]; pinned: boolean; ageDays: number }
 }
 
 export const SearchViewFlatten = () => {
-    const {searchViewStateAtom, incrementPagesAtom} = useMolecule(SearchViewMolecule)
+    const {searchViewStateAtom, incrementPagesAtom, timelineActiveAtom, timelineWindowAtom, rebuildResultsAtom, actualQueryAtom} = useMolecule(SearchViewMolecule)
 
     const viewState = useAtomValue(searchViewStateAtom)
     const incrementPages = useSetAtom(incrementPagesAtom)
+    const timelineActive = useAtomValue(timelineActiveAtom)
+    const timelineWindow = useAtomValue(timelineWindowAtom)
+    const actualQuery = useAtomValue(actualQueryAtom)
+    const rebuild = useSetAtom(rebuildResultsAtom)
+
+    // Re-project the stored results when the mode (possibly flipped from another
+    // open view) or the recency window changes; idempotent on mount.
+    useEffect(() => { rebuild() }, [timelineActive, timelineWindow])
 
     return <>
         {(viewState.showSearch) && <div className="tw-reset bg-obs-base-0 rounded-sm border border-gray-200">
                 <SearchBar isQuickLink={viewState.isQuickLink}/>
+                {timelineActive && <TimelineFilterBar/>}
 
                 <div className="sticky top-0 z-10">
                     <SearchActions />
@@ -39,14 +50,17 @@ export const SearchViewFlatten = () => {
             {viewState.isLoading ? (
                 <LoadingDots />
             ) : viewState.searchResults.renderableNodes.length === 0 ? (
-                // Only the main search modal shows the syntax cheat sheet; auxiliary
-                // panes (file context, parents, tasks, inline results) stay blank.
-                viewState.isModal ? <SearchHelp /> : null
+                timelineActive && actualQuery.trim().length >= 3
+                    ? <div className="ts-timeline-empty">No dated matches{timelineWindow !== "all" ? ` in the last ${timelineWindow}` : ""}</div>
+                    // Only the main search modal shows the syntax cheat sheet; auxiliary
+                    // panes (file context, parents, tasks, inline results) stay blank.
+                    : viewState.isModal ? <SearchHelp /> : null
             ) : (
                 <>
-                    {viewState.searchResults.renderableNodes.map((tree, index) => {
-                        return <SearchTreeNode node={tree} key={`${index}`} />
-                    })}
+                    {viewState.searchResults.renderableNodes.map((tree, index) => timelineActive
+                        ? <TimelineRow node={tree} key={`${index}`} />
+                        : <SearchTreeNode node={tree} key={`${index}`} />
+                    )}
                     {viewState.searchResults.hasMore && (
                         <div className="flex justify-center items-center py-4">
                             <button

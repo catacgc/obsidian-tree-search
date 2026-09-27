@@ -1,0 +1,13 @@
+.ts-timeline-row { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 4px; }
+.ts-timeline-body { flex: 1; min-width: 0; }
+.ts-timeline-line { display: flex; align-items: baseline; gap: 8px; }
+/* .tree-node sets nowrap; wrap here so long lines never run under the date. */
+.ts-timeline-text { flex: 1; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.ts-timeline-date { flex-shrink: 0; white-space: nowrap; font-size: var(--font-ui-smaller); color: var(--text-muted); }
+.ts-timeline-breadcrumb { font-size: var(--font-ui-smaller); color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ts-timeline-thumb { flex-shrink: 0; width: 40px; height: 40px; object-fit: cover; border-radius: 4px; }
+.ts-timeline-filters { display: flex; gap: 6px; padding: 4px 8px; }
+.ts-timeline-chip { padding: 2px 10px; border-radius: 999px; border: 1px solid var(--background-modifier-border); font-size: var(--font-ui-smaller); color: var(--text-muted); cursor: pointer; user-select: none; }
+.ts-timeline-chip:hover { color: var(--text-accent); }
+.ts-timeline-chip.is-active { background-color: var(--interactive-accent); border-color: var(--interactive-accent); color: var(--text-on-accent); }
+.ts-timeline-empty { padding: 16px; font-size: var(--font-ui-small); color: var(--text-muted); }

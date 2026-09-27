@@ -7,7 +7,7 @@ import {KeyComboWrapper} from "./KeyComboWrapper";
 
 export const SearchModalContainer = ({ isQuickLink = false }: { isQuickLink?: boolean }) => {
 
-    return <ScopeProvider scope={SearchViewScope} value={{name: "modal", isQuickLink, showSearch: true, isModal: true}}>
+    return <ScopeProvider scope={SearchViewScope} value={{name: "modal", isQuickLink, showSearch: true, isModal: true, allowTimeline: !isQuickLink}}>
         <KeyComboWrapper>
             <_SearchModalContainer isQuickLink={isQuickLink}/>
         </KeyComboWrapper>

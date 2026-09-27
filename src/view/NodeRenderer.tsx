@@ -6,7 +6,7 @@ import {GlobalAppMolecule, SearchViewMolecule} from "./react-context/state";
 import {useAtomValue} from "jotai";
 import React from "react";
 
-function highlightText(text: string, terms: string[]): React.ReactNode {
+export function highlightText(text: string, terms: string[]): React.ReactNode {
     if (terms.length === 0) return text
     const escaped = terms.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
     const regex = new RegExp(`(${escaped.join('|')})`, 'gi')
@@ -42,7 +42,7 @@ export const NodeRenderer = (
 }
 
 
-const BaseNodeRender = (
+export const BaseNodeRender = (
     props: { node: ParsedNode; matchTerms: string[] }
 ) => {
     const {appAtom} = useMolecule(GlobalAppMolecule)

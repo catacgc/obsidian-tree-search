@@ -4,8 +4,10 @@
 	cursor: pointer !important;
 }
 
+/* Subtle grey wash on hover; the keyboard/click selection gets a faint accent
+   tint so the two stay distinct. Shared by tree and timeline rows. */
 .tree-node:hover {
-	background-color: var(--color-base-30);
+	background-color: var(--background-modifier-hover);
 }
 
 .tree-search-page .ts-formatting-list-ul {
@@ -13,7 +15,8 @@
 }
 
 .highlight {
-	background-color: var(--color-base-30);
+	/* hsla over color-mix: the CSS bundler flattens color-mix(var(), …) to the solid var. */
+	background-color: hsla(var(--interactive-accent-hsl), 0.1);
 }
 
 .obsidian-link {
@@ -144,6 +147,8 @@
 
 .suggestion-highlight {
     background-color: transparent;
+    /* Underline only: keep the surrounding text's color (UA `mark` forces black). */
+    color: inherit;
     font-weight: inherit;
     text-decoration: underline;
     text-decoration-color: rgb(var(--text-highlight-bg-rgb));

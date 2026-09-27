@@ -13,10 +13,11 @@ type SearchPageProps = {
     showSearch?: boolean
     maxExpand?: number
     searchFn?: (q: string) => ResultNode[]
+    allowTimeline?: boolean
     children?: React.ReactNode
 }
 const SearchPage = (props: SearchPageProps) => {
-    return <ScopeProvider scope={SearchViewScope} value={{showSearch: props.showSearch || false, isQuickLink: false, name: props.sectionName, isModal: false}}>
+    return <ScopeProvider scope={SearchViewScope} value={{showSearch: props.showSearch || false, isQuickLink: false, name: props.sectionName, isModal: false, allowTimeline: props.allowTimeline ?? false}}>
         <_SearchPage {...props}/>
     </ScopeProvider>
 }

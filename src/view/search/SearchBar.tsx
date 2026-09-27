@@ -1,5 +1,5 @@
 import React, {useEffect, useRef} from "react";
-import {SEARCH_ICON, REFRESH_ICON} from "../icons";
+import {SEARCH_ICON, REFRESH_ICON, TREE_ICON, TIMELINE_ICON} from "../icons";
 import {useUrlOpener} from "./useUrlOpener";
 import {useAtom, useAtomValue, useSetAtom} from "jotai";
 import {useMolecule} from "bunshi/react";
@@ -18,11 +18,14 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
         decExpandAtom, incExpandAtom, resetCollapseAtom, searchQueryAtom, selectedNodeAtom, getExpandLevel,
         searchPlaceholderAtom, suggestionsAtom, suggestionIndexAtom, cursorPosAtom, dismissSuggestionsAtom,
         resetSuggestionsAtom, repositionSuggestionsAtom, focusSearchInputAtom,
+        allowTimeline, timelineActiveAtom, toggleViewModeAtom,
     } = useMolecule(SearchViewMolecule)
 
     const decExpand = useSetAtom(decExpandAtom)
     const incExpand = useSetAtom(incExpandAtom)
     const resetCollapse = useSetAtom(resetCollapseAtom)
+    const timelineActive = useAtomValue(timelineActiveAtom)
+    const toggleViewMode = useSetAtom(toggleViewModeAtom)
     const setLoading = useSetAtom(isGraphLoadingAtom)
 
     const handleRefresh = () => setLoading(true)
@@ -139,9 +142,14 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
                 </div>
 
                 <div className="ml-2 flex items-center space-x-1">
-                    <button className="bg-transparent border-none p-1 text-obs-base-40 hover:text-obs-accent focus:outline-none clickable-icon" aria-label="Collapse results" onClick={decExpand}>-</button>
-                    <button className="bg-transparent border-none p-1 text-obs-base-40 hover:text-obs-accent focus:outline-none clickable-icon" aria-label="Collapse to zero" onClick={resetCollapse}> {expandLevel} </button>
-                    <button className="bg-transparent border-none p-1 text-obs-base-40 hover:text-obs-accent focus:outline-none clickable-icon" aria-label="Expand results" onClick={incExpand}>+</button>
+                    {!timelineActive && <>
+                        <button className="bg-transparent border-none p-1 text-obs-base-40 hover:text-obs-accent focus:outline-none clickable-icon" aria-label="Collapse results" onClick={decExpand}>-</button>
+                        <button className="bg-transparent border-none p-1 text-obs-base-40 hover:text-obs-accent focus:outline-none clickable-icon" aria-label="Collapse to zero" onClick={resetCollapse}> {expandLevel} </button>
+                        <button className="bg-transparent border-none p-1 text-obs-base-40 hover:text-obs-accent focus:outline-none clickable-icon" aria-label="Expand results" onClick={incExpand}>+</button>
+                    </>}
+                    {allowTimeline && <button className="bg-transparent border-none p-1 text-obs-base-40 hover:text-obs-accent focus:outline-none clickable-icon" aria-label={timelineActive ? "Show tree" : "Show timeline"} onClick={toggleViewMode}>
+                        {timelineActive ? <TREE_ICON /> : <TIMELINE_ICON />}
+                    </button>}
                     <button className="bg-transparent border-none p-1 text-obs-base-40 hover:text-obs-accent focus:outline-none clickable-icon" aria-label="Refresh Tree" onClick={handleRefresh}>
                         <REFRESH_ICON />
                     </button>

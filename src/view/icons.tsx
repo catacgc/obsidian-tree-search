@@ -36,6 +36,46 @@ export const REFRESH_ICON = () => (
 	</svg>
 );
 
+export const TREE_ICON = () => (
+	<svg
+		xmlns="http://www.w3.org/2000/svg"
+		width="16"
+		height="16"
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		strokeWidth="2"
+		strokeLinecap="round"
+		strokeLinejoin="round"
+		className="lucide lucide-list-tree"
+	>
+		<path d="M21 12h-8" />
+		<path d="M21 6H8" />
+		<path d="M21 18h-8" />
+		<path d="M3 6v4c0 1.1.9 2 2 2h3" />
+		<path d="M3 10v6c0 1.1.9 2 2 2h3" />
+	</svg>
+);
+
+export const TIMELINE_ICON = () => (
+	<svg
+		xmlns="http://www.w3.org/2000/svg"
+		width="16"
+		height="16"
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		strokeWidth="2"
+		strokeLinecap="round"
+		strokeLinejoin="round"
+		className="lucide lucide-history"
+	>
+		<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+		<path d="M3 3v5h5" />
+		<path d="M12 7v5l4 2" />
+	</svg>
+);
+
 export const SETTINGS_ICON = () => (
 	<svg
 		xmlns="http://www.w3.org/2000/svg"
