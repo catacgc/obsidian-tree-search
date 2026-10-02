@@ -1,5 +1,5 @@
 import {TreeNode} from '../search/SearchViewFlatten'
-import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, matchQuery, nodeMatchesQuery, pruneResultTree, type QueryExpr, partitionArchived, extractArchiveReveal, suggestAt, type Suggestion, buildTimeline, parseDuration} from '@mdtree/core'
+import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, matchQuery, nodeMatchesQuery, pruneResultTree, type QueryExpr, partitionArchived, extractArchiveReveal, suggestAt, type Suggestion, buildTimeline, fileParent, parseDuration} from '@mdtree/core'
 import {atom, useAtomValue} from 'jotai'
 import {ParsedNode, ParsedTextToken, TextNode, Location} from '@mdtree/core'
 
@@ -278,17 +278,23 @@ export const SearchViewMolecule = molecule((mol, scope) => {
                 return Math.max(0, Math.round((today.getTime() - created.getTime()) / 86_400_000))
             }
             const items = buildTimeline(result, get(matchExprsAtom), w === "all" ? null : parseDuration(w), fileAgeDays)
-            const nodes: TreeNode[] = items.map((item, i) => ({
-                node: item.node,
-                indent: 0,
-                hasChildren: false,
-                visible: true,
-                selected: false,
-                index: i,
-                matched: true,
-                archived: item.archived,
-                timeline: { breadcrumb: item.breadcrumb, pinned: item.pinned, ageDays: item.ageDays }
-            }))
+            const graph = get(GlobalAtoms.graphAtom)
+            const nodes: TreeNode[] = items.map((item, i) => {
+                // Results start at the matched node, so a hit with no matched
+                // ancestor shows its in-note parent (e.g. the enclosing header).
+                const parent = item.breadcrumb.length === 0 ? fileParent(graph, item.node) : null
+                return {
+                    node: item.node,
+                    indent: 0,
+                    hasChildren: false,
+                    visible: true,
+                    selected: false,
+                    index: i,
+                    matched: true,
+                    archived: item.archived,
+                    timeline: { breadcrumb: parent ? [parent] : item.breadcrumb, pinned: item.pinned, ageDays: item.ageDays }
+                }
+            })
             set(treeNodesAtom, nodes)
             set(selectedLineAtom, get(searchVisibleAtom) ? 0 : -1)
             set(hoveredLineAtom, -1)

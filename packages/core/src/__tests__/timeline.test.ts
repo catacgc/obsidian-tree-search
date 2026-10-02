@@ -3,7 +3,10 @@ import type { ParsedNode, TextNode, PageNode } from "../graph/types.ts"
 import type { ResultNode } from "../search/search.ts"
 import { UNDATED_AGE } from "../graph/boost.ts"
 import { parseQuery } from "../search/query.ts"
-import { buildTimeline } from "../search/timeline.ts"
+import { buildTimeline, fileParent } from "../search/timeline.ts"
+import { NotesGraph, getKey } from "../graph/graph.ts"
+import { indexSinglePage, DEFAULT_SETTINGS } from "../graph/indexer.ts"
+import { parseVaultFile } from "../parser/vault-file.ts"
 
 // ── Test helpers ──────────────────────────────────────────────────────────────
 
@@ -107,5 +110,39 @@ describe("buildTimeline", () => {
     expect(keys(items)).toEqual(["spark child", "spark parent"])
     expect(items[0].node).toBe(child)
     expect(items[0].breadcrumb).toEqual([parent])
+  })
+})
+
+describe("fileParent", () => {
+  const g = new NotesGraph()
+  // Plain lines without a link/tag/URL are not indexed, hence the URLs.
+  indexSinglePage(parseVaultFile([
+    "- intro https://example.com/a",
+    "# Tasks and Ideas List",
+    "- [ ] advertise on Reddit https://example.com/b",
+    "\t- [ ] follow-up https://example.com/c",
+    "- [ ] ship [[Release]] notes",
+  ].join("\n"), "Plugin.md", 1_700_000_000_000), g, DEFAULT_SETTINGS)
+  const find = (prefix: string) =>
+    g.getNodeAttributes(g.filterNodes((_k, n) => n.nodeType === "text" && n.searchKey.startsWith(prefix))[0])
+  const parentKey = (prefix: string) => {
+    const p = fileParent(g, find(prefix))
+    return p ? getKey(p) : null
+  }
+
+  it("returns the enclosing header of a top-level bullet", () => {
+    expect(parentKey("advertise")).toBe("plugin#tasks and ideas list")
+  })
+
+  it("returns the parent bullet of a nested bullet", () => {
+    expect(parentKey("follow-up")).toBe(getKey(find("advertise")))
+  })
+
+  it("ignores pages the line links to", () => {
+    expect(parentKey("ship")).toBe("plugin#tasks and ideas list")
+  })
+
+  it("returns the note for a bullet outside any header", () => {
+    expect(parentKey("intro")).toBe("[[plugin]]")
   })
 })

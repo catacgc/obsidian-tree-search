@@ -1,6 +1,6 @@
 import type { ParsedNode } from "../graph/types.ts"
 import type { ResultNode } from "./search.ts"
-import { getKey } from "../graph/graph.ts"
+import { getKey, type NotesGraph } from "../graph/graph.ts"
 import { containsEmoji, isUndated, UNDATED_AGE } from "../graph/boost.ts"
 import { matchQuery, nodeMatchesQuery, type QueryExpr } from "./query.ts"
 
@@ -63,4 +63,24 @@ export function buildTimeline(
     a.ageDays - b.ageDays ||
     b.node.boost - a.node.boost,
   )
+}
+
+// Structural parent of a text line or header inside its own note: the
+// enclosing header, the parent bullet, or the note itself. Search results
+// start at the matched node, so this is the context shown when no matched
+// ancestor exists. Lines also get "parent" edges (same location) from every
+// page/header they link to; those refs are skipped.
+export function fileParent(graph: NotesGraph, node: ParsedNode): ParsedNode | null {
+  if (node.nodeType !== "text" && node.nodeType !== "header") return null
+  const refs = node.nodeType === "text"
+    ? new Set(graph.getObsidianLinkReferences(node.parsedTokens).map(r =>
+        (r.headerName ? `${r.pageTarget}#${r.headerName}` : `[[${r.pageTarget.replace(/\.canvas$/i, "")}]]`).toLowerCase()))
+    : undefined
+  for (const e of graph.inboundEdgeEntries(getKey(node))) {
+    if (e.attributes.type !== "parent" || e.attributes.location.path !== node.location.path) continue
+    if (refs?.has(e.source)) continue
+    const parent = graph.getNodeAttributes(e.source)
+    if (parent.nodeType !== "pointer") return parent
+  }
+  return null
 }

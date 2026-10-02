@@ -37,7 +37,8 @@ export const TimelineFilterBar = () => {
 }
 
 // Flat timeline row: matched line + date, with a faint breadcrumb of matched
-// ancestors (or the source note) below and an optional image thumbnail.
+// ancestors (else its in-note parent, else the source note) below and an
+// optional image thumbnail.
 // Interaction mirrors SearchTreeNode (click selects, click again opens).
 export const TimelineRow = ({node}: { node: TreeNode }) => {
     const {selectedLineAtom, updateHoveredLineAtom, matchTermsAtom} = useMolecule(SearchViewMolecule)
