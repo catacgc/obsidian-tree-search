@@ -22,12 +22,12 @@ function markerTags(marker: SectionMarker): { open: string; close: string } {
  * mismatching that check made `frontmatterEnd` blind to CRLF frontmatter,
  * inserting the fresh section block at line 0, ahead of (and breaking) it.
  */
-function splitLines(content: string): { lines: string[]; eol: string } {
+export function splitLines(content: string): { lines: string[]; eol: string } {
   return { lines: content.split(/\r\n|\r|\n/), eol: content.includes("\r\n") ? "\r\n" : "\n" }
 }
 
 /** End of a leading `---\n...\n---` frontmatter block, or 0 if there is none. */
-function frontmatterEnd(lines: string[]): number {
+export function frontmatterEnd(lines: string[]): number {
   if (lines[0] !== "---") return 0
   for (let i = 1; i < lines.length; i++) {
     if (lines[i] === "---") return i + 1

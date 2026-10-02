@@ -1,6 +1,7 @@
 import type { NotesGraph } from "../graph/graph.ts"
 import type { ParsedNode } from "../graph/types.ts"
 import { firstPassInclude, matchQuery, parseQuery, extractArchiveReveal, queryTargetsFolders, type QueryExpr } from "./query.ts"
+import { partitionArchived } from "./archive.ts"
 
 export type ResultNode = {
   node: ParsedNode
@@ -144,6 +145,20 @@ export function searchIndex(
   return filterDown(Array.from(roots.values()), expressions.slice(1)).sort(
     (a, b) => b.children.length - a.children.length,
   )
+}
+
+/**
+ * Link targets for Insert Link and the editor's autocomplete: only page and
+ * header nodes whose own key matches every query term (ANDed across stages,
+ * regardless of hierarchy boundaries), with archived rows hidden.
+ */
+export function linkTargetTree(graph: NotesGraph, query: string, separator: string): ResultNode[] {
+  const expr: QueryExpr = { type: "and", exprs: parseQuery(query, separator) }
+  const pruned = pruneResultTree(
+    searchIndex(graph, query, separator),
+    n => (n.nodeType === "page" || n.nodeType === "header") && matchQuery(n, expr),
+  )
+  return partitionArchived(pruned, false).visible
 }
 
 export function advancedSearch(

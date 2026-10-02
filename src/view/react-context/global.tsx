@@ -1,6 +1,7 @@
 import {NotesGraph} from "@mdtree/core";
 import {App, Modal, TFile} from "obsidian";
 import {getDefaultStore, atom} from "jotai";
+import type {IndexedTree} from "../../indexing/indexed-tree";
 
 const appAtom = atom<App>(null as any as App)
 const graphAtom = atom<NotesGraph>(new NotesGraph())
@@ -21,4 +22,7 @@ export const GlobalAtoms = {
     pinAtom,
     parserTypeAtom,
     activeFileAtom: atom<TFile | undefined>(undefined),
+    indexAtom: atom<IndexedTree | null>(null),
+    /** Set by the "Open editor" command; the Search modal consumes it by opening a blank editor. */
+    editorRequestAtom: atom(false),
 }

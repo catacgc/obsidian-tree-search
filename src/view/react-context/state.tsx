@@ -1,5 +1,5 @@
 import {TreeNode} from '../search/SearchViewFlatten'
-import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, matchQuery, nodeMatchesQuery, pruneResultTree, type QueryExpr, partitionArchived, extractArchiveReveal, suggestAt, type Suggestion, buildTimeline, fileParent, parseDuration} from '@mdtree/core'
+import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, nodeMatchesQuery, linkTargetTree, type QueryExpr, partitionArchived, extractArchiveReveal, suggestAt, type Suggestion, buildTimeline, fileParent, parseDuration} from '@mdtree/core'
 import {atom, useAtomValue} from 'jotai'
 import {ParsedNode, ParsedTextToken, TextNode, Location} from '@mdtree/core'
 
@@ -51,11 +51,14 @@ export const SearchViewScope = createScope({
     isQuickLink: false,
     showSearch: true,
     isModal: true,
-    allowTimeline: false
+    allowTimeline: false,
+    allowEditing: false
 })
 
 export type TimelineWindow = "all" | "7d" | "30d" | "1y"
 export const TIMELINE_WINDOWS: TimelineWindow[] = ["all", "7d", "30d", "1y"]
+/** The action panel's list: the main actions, or the Move under… page list. */
+export type ActionPanelPage = "main" | "moveUnder"
 
 export const GlobalAppMolecule = molecule((_, scope) => {
 
@@ -139,23 +142,19 @@ export const SearchModalMolecule = molecule((mol, scope) => {
         const graph = get(GlobalAtoms.graphAtom)
         const separator = get(separatorAtom)
 
-        const searchResults = searchIndex(graph, searchQuery, separator)
+        if (isQuickLink) {
+            // Insert Link offers only link targets: notes and headers whose own
+            // name/alias/heading matches the query, archived rows hidden.
+            set(searchMol.updateSearchResultsAtom, linkTargetTree(graph, searchQuery, separator), 0)
+            return
+        }
 
-        // In insert (quick-link) mode, restrict the tree to notes and headers whose own
-        // name/alias/heading matches the query, so only link targets are offered.
-        const scoped = isQuickLink
-            ? pruneResultTree(searchResults, (() => {
-                // AND all stages together so a node's own key must match every term
-                // across the whole query, regardless of hierarchy stage boundaries.
-                const expr: QueryExpr = { type: "and", exprs: parseQuery(searchQuery, separator) }
-                return (n: ParsedNode) => (n.nodeType === "page" || n.nodeType === "header") && matchQuery(n, expr)
-            })())
-            : searchResults
+        const searchResults = searchIndex(graph, searchQuery, separator)
 
         // `is:archived` reveals (rather than hides) archived rows; its presence
         // in the query flips partitioning from drop-with-count to keep-and-grey.
         const { reveal } = extractArchiveReveal(parseQuery(searchQuery, separator))
-        const { visible, archivedCount } = partitionArchived(scoped, reveal)
+        const { visible, archivedCount } = partitionArchived(searchResults, reveal)
         set(searchMol.updateSearchResultsAtom, visible, archivedCount)
     })
 
@@ -356,7 +355,8 @@ export const SearchViewMolecule = molecule((mol, scope) => {
                 visible: true,
                 selected: false,
                 index: nodesWithVisibility.length,
-                matched: true
+                matched: true,
+                archiveRow: true
             } as any
             nodesWithVisibility.push(archiveNode)
         }
@@ -525,6 +525,21 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         set(focusSearchInputAtom, get(focusSearchInputAtom) + 1)
     })
 
+    // Action panel (footer "Actions", ⌘K, mobile long-press). Bound to the row selected when it
+    // opened, so selecting another row closes it without an effect racing the open.
+    const actionPanelStateAtom = atom<{page: ActionPanelPage; line: number} | null>(null)
+    const actionPanelAtom = atom<ActionPanelPage | null>(get => {
+        const panel = get(actionPanelStateAtom)
+        return panel && panel.line === get(selectedLineAtom) ? panel.page : null
+    })
+    const openActionPanelAtom = atom(null, (get, set, page: ActionPanelPage = "main") =>
+        set(actionPanelStateAtom, {page, line: get(selectedLineAtom)}))
+    const closeActionPanelAtom = atom(null, (_get, set) => set(actionPanelStateAtom, null))
+    const toggleActionPanelAtom = atom(null, (get, set) => {
+        if (get(actionPanelAtom)) set(actionPanelStateAtom, null)
+        else set(openActionPanelAtom)
+    })
+
     return {
             scopeName: {name: scp.name, instance: instance},
             actualQueryAtom,
@@ -542,7 +557,6 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             incExpandAtom,
             resetCollapseAtom,
             selectedNodeAtom,
-            getExpandLevel,
             searchPlaceholderAtom,
             setDefaultExpandLevelAtom,
             expandNodeAtom, selectedLineAtom, updateHoveredLineAtom, hoveredLineAtom,
@@ -552,13 +566,15 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             repositionSuggestionsAtom,
             focusSearchInputAtom, appendQueryTokenAtom,
             timelineActiveAtom, toggleViewModeAtom, timelineWindowAtom, rebuildResultsAtom,
-            allowTimeline: scp.allowTimeline
+            actionPanelAtom, openActionPanelAtom, closeActionPanelAtom, toggleActionPanelAtom,
+            allowTimeline: scp.allowTimeline,
+            allowEditing: scp.allowEditing
     }
 })
 
 
 
-function extractTerms(expr: QueryExpr): string[] {
+export function extractTerms(expr: QueryExpr): string[] {
     switch (expr.type) {
         case "contains":   return [expr.value]
         case "equals":     return [expr.value]

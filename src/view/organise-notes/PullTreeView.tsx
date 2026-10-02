@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight } from "lucide-react";
-import { App, Component, MarkdownRenderer, Notice } from "obsidian";
+import { App, Notice } from "obsidian";
 import {
     NotesGraph,
     PullNode,
@@ -13,6 +13,7 @@ import {
     type PullLine,
 } from "@mdtree/core";
 import { applyOrganisePlan, collectUnindexedChildLines, highlightLine, resolveHome } from "../../obsidian-utils";
+import { MarkdownLine } from "../editor/MarkdownLine";
 
 function collectDescendantKeys(node: PullNode, out: Set<string>): void {
     for (const child of node.children) {
@@ -300,22 +301,6 @@ export function PullTreeView({ app, graph, root, notePath, onApplied }: Props) {
             </div>
         </div>
     );
-}
-
-function MarkdownLine({ app, text, sourcePath }: { app: App; text: string; sourcePath: string }) {
-    const ref = useRef<HTMLSpanElement>(null);
-
-    useEffect(() => {
-        const el = ref.current;
-        if (!el) return;
-        const component = new Component();
-        component.load();
-        el.empty();
-        MarkdownRenderer.render(app, text, el, sourcePath, component).catch(() => { /* best-effort render */ });
-        return () => component.unload();
-    }, [app, text, sourcePath]);
-
-    return <span ref={ref} className="ts-pull-line" />;
 }
 
 const linkButtonStyle: React.CSSProperties = {

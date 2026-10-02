@@ -42,7 +42,7 @@ export { parseCanvasData, type CanvasData, type NodeTextLine } from "./parser/ca
 export { buildNodesFromTextLines } from "./parser/text-lines.ts"
 
 // Search
-export { searchIndex, advancedSearch, searchParents, flattenTasks, pruneResultTree, type ResultNode } from "./search/search.ts"
+export { searchIndex, advancedSearch, searchParents, flattenTasks, pruneResultTree, linkTargetTree, type ResultNode } from "./search/search.ts"
 export { parseQuery, parseDuration, matchQuery, firstPassInclude, nodeMatchesQuery, collectModifiers, extractArchiveReveal, containsEmoji as queryContainsEmoji, type QueryExpr, type QueryModifierField } from "./search/query.ts"
 export { suggestAt, spliceSuggestion, type Suggestion } from "./search/suggest.ts"
 export { describeQuerySyntax, type QuerySyntaxEntry, type QuerySyntaxGroup } from "./search/syntax.ts"
@@ -64,3 +64,40 @@ export {
   type PullDeletion,
 } from "./search/pull.ts"
 export { upsertOrganiseSections } from "./search/organise-sections.ts"
+
+// Edit
+export { LIST_ITEM_RE, HEADER_RE } from "./parser/list-scanner.ts"
+export { splitLines } from "./search/organise-sections.ts"
+export {
+  parseOutline,
+  renderOutline,
+  findOutlineEnd,
+  findSubtreeEnd,
+  findLinkBullet,
+  appendUnderLinkBullet,
+  appendOutline,
+  linkOnlyTarget,
+  appendContent,
+  splitEditableLine,
+  lineHasIdentity,
+  replaceLineText,
+  cutSubtree,
+  pasteUnderLinkBullet,
+  pasteAtOutlineEnd,
+  StaleLineError,
+  type OutlineLine,
+  type OutlineIssue,
+} from "./edit/outline-edit.ts"
+export {
+  slugify,
+  attachmentKind,
+  attachmentExt,
+  attachmentName,
+  resolveAttachmentEmbeds,
+  OUTLINE_KEY,
+  INVALID_NAME_RE,
+  type AttachmentKind,
+  type SessionAttachment,
+  type AttachmentPlan,
+} from "./edit/attachments.ts"
+export { editorHints, appendOutlineEmpty, type EditorHint } from "./edit/editor-hints.ts"

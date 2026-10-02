@@ -42,6 +42,12 @@ export interface InsertLink extends BaseAction {
     text: string
 }
 
+/** The `raycastaction` of an obsidian://tree-search-uri browse action, else null (link actions may hold any URL text). */
+export const raycastActionOf = (action: RaycastAction): string | null =>
+    action.type === "browse" && action.url.startsWith("obsidian://tree-search-uri?")
+        ? new URL(action.url).searchParams.get("raycastaction")
+        : null
+
 /** Icon.* values in the Raycast API */
 const Icons = {
     pencil: "pencil-16",
@@ -67,7 +73,7 @@ export function getTreeNodeActions(app: App, treeNode: TreeNode, isQuickLink = f
 
     const reordered = prioritizeWebLinks(actions)
 
-    const defaults = getDefaultActions(treeNode, vault)
+    const defaults = getDefaultActions(app, treeNode, vault)
     let allActions = [...reordered, ...defaults]
 
     if (isQuickLink) {
@@ -124,11 +130,18 @@ export function prioritizeWebLinks(actions: RaycastAction[]): RaycastAction[] {
     return reordered
 }
 
-function getDefaultActions(result: TreeNode, vault: string): RaycastAction[] {
-    const isFolder = result.node.nodeType == "folder"
-    const isFile = result.node.nodeType == "page"
-    const isText = result.node.nodeType == "text"
+/** The page's own note, resolved as the link it is: a page shown as a child carries the location of
+ *  the line relating it (e.g. `- [[Child]]` in its parent's note), not its own file. Null without a note. */
+function pageNoteLocation(app: App, node: TreeNode["node"]): Location | null {
+    if (node.nodeType !== "page") return null
+    const file = app.metadataCache.getFirstLinkpathDest(node.page, node.location.path)
+    return file ? {path: file.path, position: {start: {line: 0, ch: 0}, end: {line: 0, ch: 0}}} : null
+}
 
+function getDefaultActions(app: App, result: TreeNode, vault: string): RaycastAction[] {
+    const isFolder = result.node.nodeType == "folder"
+    const isText = result.node.nodeType == "text"
+    const pageLoc = pageNoteLocation(app, result.node)
     if (isFolder) {
         return [
             {
@@ -141,9 +154,9 @@ function getDefaultActions(result: TreeNode, vault: string): RaycastAction[] {
         ]
     }
 
-    const moveFolderAction: RaycastAction[] = (isFolder || isFile) ? [{
+    const moveFolderAction: RaycastAction[] = pageLoc ? [{
         type: "browse",
-        url: moveToFolder(result.node.location.path, vault),
+        url: moveToFolder(pageLoc.path, vault),
         title: `Move To`,
         icon: Icons.pencil,
         shortcut: { modifiers: ["ctrl"], key: "m" }
@@ -165,25 +178,25 @@ function getDefaultActions(result: TreeNode, vault: string): RaycastAction[] {
             keepOpen: true,
             location: result.node.location
         }
-    ] : isFile ? [
+    ] : pageLoc ? [
         isArchived(result.node) ? {
             type: "browse",
-            url: unarchivePageUrl(result.node.location.path, vault),
+            url: unarchivePageUrl(pageLoc.path, vault),
             title: `Unarchive`,
             icon: Icons.bookmark,
             keepOpen: true,
-            location: result.node.location
+            location: pageLoc
         } : {
             type: "browse",
-            url: archivePageUrl(result.node.location.path, vault),
+            url: archivePageUrl(pageLoc.path, vault),
             title: `Archive`,
             icon: Icons.bookmark,
             keepOpen: true,
-            location: result.node.location
+            location: pageLoc
         }
     ] : []
 
-    const pullChildrenAction: RaycastAction[] = (isFile && result.node.nodeType === "page") ? [{
+    const pullChildrenAction: RaycastAction[] = result.node.nodeType === "page" ? [{
         type: "browse",
         url: pullChildrenUrl(result.node.page, vault),
         title: `Consolidate notes`,

@@ -1,0 +1,188 @@
+/* Editor mode (EDITOR.md): append dot, edit hint, drop target, inline editor, link suggest. */
+
+.ts-append-dot {
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    transform: translate(-50%, 50%);
+    width: 8px;
+    height: 8px;
+    border: 1.5px solid var(--interactive-accent);
+    border-radius: 50%;
+    background: transparent;
+    z-index: 5;
+    cursor: pointer;
+    box-sizing: border-box;
+}
+
+.ts-append-dot.is-hover {
+    width: 16px;
+    height: 16px;
+    border: none;
+    color: var(--interactive-accent);
+    background: var(--background-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ts-edit-hint {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    opacity: .6;
+    pointer-events: none;
+}
+
+.ts-drop-target {
+    outline: 1px solid var(--interactive-accent);
+}
+
+/* Matches the search block (bg-obs-base-0, rounded-sm, 1px border) and search input (rounded-lg, hover border, no ring). */
+.ts-inline-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px 8px;
+    margin-bottom: 4px;
+    background: var(--color-base-00);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--radius-s);
+    white-space: normal;
+}
+
+.ts-editor-field {
+    position: relative;
+}
+
+.ts-inline-editor textarea {
+    width: 100%;
+    resize: none;
+    overflow-y: auto;
+    font-family: var(--font-text);
+    font-size: var(--font-ui-small);
+    background: var(--color-base-00);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 0.5rem;
+    padding: 6px 10px;
+    box-shadow: none;
+    outline: none;
+    transition: border-color 150ms;
+}
+
+.ts-inline-editor textarea:hover,
+.ts-inline-editor textarea:focus,
+.ts-inline-editor textarea:focus-visible {
+    border-color: var(--background-modifier-border-hover);
+    box-shadow: none;
+    outline: none;
+}
+
+.ts-editor-header,
+.ts-editor-footer,
+.ts-editor-content-header {
+    font-size: var(--font-ui-smaller);
+    color: var(--text-muted);
+}
+
+.ts-editor-content-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.ts-editor-chip {
+    padding: 0 4px;
+    border-radius: var(--radius-s);
+    background: var(--background-modifier-hover);
+    cursor: pointer;
+}
+
+.ts-editor-chip.is-active {
+    color: var(--text-accent);
+}
+
+.ts-editor-close {
+    margin-left: auto;
+    padding: 0 4px;
+}
+
+.ts-editor-preview {
+    max-height: calc(6 * 1.5em);
+    overflow: hidden;
+    font-size: var(--font-ui-small);
+    color: var(--text-muted);
+}
+
+.ts-editor-footer {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.ts-editor-buttons {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+/* Scoped under .ts-inline-editor to outrank Obsidian's `button:not(.clickable-icon)` styles. */
+.ts-inline-editor .ts-editor-button {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 2px 6px;
+    font-size: var(--font-ui-smaller);
+    color: var(--color-base-40);
+    cursor: pointer;
+}
+
+.ts-inline-editor .ts-editor-button:hover:not(:disabled),
+.ts-inline-editor .ts-editor-save:not(:disabled) {
+    background: transparent;
+    color: var(--color-accent);
+}
+
+.ts-inline-editor .ts-editor-button:disabled {
+    opacity: .4;
+    cursor: default;
+}
+
+.ts-editor-hint.is-blocking {
+    color: var(--text-error);
+}
+
+.ts-link-suggest {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: calc(8 * 22px);
+    overflow-y: auto;
+    /* Above the search bar (sticky, z-30) that follows the editor. */
+    z-index: 40;
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+}
+
+.ts-link-suggest-row {
+    height: 22px;
+    font-size: var(--font-ui-small);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.ts-link-suggest-row.is-selected {
+    background: var(--background-modifier-hover);
+}
+
+.ts-link-suggest-row.is-muted,
+.ts-link-suggest .is-muted {
+    color: var(--text-muted);
+}

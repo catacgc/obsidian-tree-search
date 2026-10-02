@@ -1,9 +1,10 @@
 import { describe, it, expect } from "bun:test"
 import { loadFixture, search, searchKeys } from "./helpers.ts"
 import { partitionArchived } from "../../search/archive.ts"
-import { pruneResultTree, type ResultNode } from "../../search/search.ts"
-import { matchQuery, parseQuery, type QueryExpr } from "../../search/query.ts"
-import { DEFAULT_SETTINGS } from "../../graph/indexer.ts"
+import { linkTargetTree, type ResultNode } from "../../search/search.ts"
+import { DEFAULT_SETTINGS, indexSinglePage } from "../../graph/indexer.ts"
+import { NotesGraph, getKey } from "../../graph/graph.ts"
+import { parseVaultFile } from "../../parser/vault-file.ts"
 import type { ParsedNode } from "../../graph/types.ts"
 
 function collectKeysFromResults(nodes: ResultNode[]): string[] {
@@ -218,12 +219,8 @@ describe("archive", () => {
 describe("insert-mode", () => {
   const g = loadFixture("insert-mode")
 
-  // Mirrors the filter used by the Insert Link modal (searchResultsComputeAtom).
   function insertResults(query: string): ResultNode[] {
-    const expr: QueryExpr = { type: "and", exprs: parseQuery(query, DEFAULT_SETTINGS.searchSeparator) }
-    const keep = (n: ParsedNode) =>
-      (n.nodeType === "page" || n.nodeType === "header") && matchQuery(n, expr)
-    return pruneResultTree(search(g, query), keep)
+    return linkTargetTree(g, query, DEFAULT_SETTINGS.searchSeparator)
   }
 
   function collectNodes(nodes: ResultNode[]): ParsedNode[] {
@@ -253,6 +250,26 @@ describe("insert-mode", () => {
     // name/headings do not contain "meeting", so it must not appear.
     const keys = collectKeysFromResults(insertResults("meeting"))
     expect(keys.some(k => k.includes("standup"))).toBe(false)
+  })
+
+  it("returns nothing below 3 characters", () => {
+    expect(linkTargetTree(g, "me", ".")).toEqual([])
+  })
+
+  it("hides archived link targets", () => {
+    const g2 = new NotesGraph()
+    const files: Record<string, string> = {
+      "Old plan.md": "---\ntags: [archive]\n---\n# Kickoff\n",
+      "New plan.md": "# Kickoff\n",
+    }
+    for (const [path, content] of Object.entries(files)) {
+      indexSinglePage(parseVaultFile(content, path, 1_700_000_000_000), g2, DEFAULT_SETTINGS)
+    }
+    const keys: string[] = []
+    const walk = (ns: ResultNode[]) => ns.forEach(n => { keys.push(getKey(n.node)); walk(n.children) })
+    walk(linkTargetTree(g2, "plan", "."))
+    expect(keys).toContain("[[new plan]]")
+    expect(keys).not.toContain("[[old plan]]")
   })
 })
 

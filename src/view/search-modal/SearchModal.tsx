@@ -29,6 +29,8 @@ export class SearchModal extends Modal {
         );
 
         setTimeout(() => {
+            // The "Open editor" command already focused the inline editor.
+            if (this.containerEl.querySelector(".ts-inline-editor")) return;
             const inputEl = this.containerEl.querySelector('input');
             inputEl?.click();
             inputEl?.select();

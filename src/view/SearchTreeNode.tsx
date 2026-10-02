@@ -1,5 +1,7 @@
 import {useEffect, useRef} from "react";
 import {ParsedNode} from "@mdtree/core";
+import {Platform} from "obsidian";
+import {Pencil} from "lucide-react";
 import {NodeRenderer} from "./NodeRenderer";
 import {TreeNode} from "./search/SearchViewFlatten";
 import {useAtomValue, useSetAtom} from "jotai";
@@ -7,16 +9,34 @@ import {useMolecule} from "bunshi/react";
 import {GlobalAppMolecule, SearchViewMolecule} from "./react-context/state";
 import {ActionsMolecule} from "./react-context/actions";
 import {triggerLocationPreview} from "./hover-preview";
+import {EditorMolecule} from "./editor/EditorMolecule";
+import {AppendDot} from "./editor/AppendDot";
+import {dragInfo, isValidDropTarget, type AppendTarget} from "./editor/row-editing";
+import {useRowGestures} from "./search/row-gestures";
 
 type SearchTreeNodePropsFlatten = {
     node: TreeNode;
+    /** Position among the rendered rows. */
+    pos: number;
+    editable?: boolean;
+    appendDot?: AppendTarget;
+    editHint?: boolean;
 };
 
 export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
 
-    const {expandNodeAtom, selectedLineAtom, updateHoveredLineAtom, matchTermsAtom} = useMolecule(SearchViewMolecule)
+    const {expandNodeAtom, selectedLineAtom, updateHoveredLineAtom, matchTermsAtom, allowEditing, renderableTreeNodesAtom} = useMolecule(SearchViewMolecule)
     const {appAtom} = useMolecule(GlobalAppMolecule)
     const {selectHoveredLineAtom} = useMolecule(ActionsMolecule)
+    const {dragIndexAtom, dropTargetAtom, reparentAtom, clearDragAtom} = useMolecule(EditorMolecule)
+    const editGestures = useRowGestures(props.node, props.editable ?? false)
+    const rows = useAtomValue(renderableTreeNodesAtom)
+    const dragIndex = useAtomValue(dragIndexAtom)
+    const dropTarget = useAtomValue(dropTargetAtom)
+    const setDragIndex = useSetAtom(dragIndexAtom)
+    const setDropTarget = useSetAtom(dropTargetAtom)
+    const reparent = useSetAtom(reparentAtom)
+    const clearDrag = useSetAtom(clearDragAtom)
 
     const nodeRef = useRef<HTMLDivElement>(null);
     const selectedLine = useAtomValue(selectedLineAtom);
@@ -82,16 +102,46 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
         expandNode(props.node.index);
         ev.preventDefault();
     }
+    // Drag-to-reparent: Tree rows only, desktop only (HTML5 DnD doesn't work with touch).
+    const dragEnabled = allowEditing && !Platform.isMobile
+    const drag = dragEnabled ? dragInfo(rows, props.pos) : {draggable: false, refusal: undefined}
+    const dragHandlers: React.HTMLAttributes<HTMLDivElement> = dragEnabled ? {
+        onDragStart: ev => {
+            ev.dataTransfer.setData("text/plain", "")
+            ev.dataTransfer.effectAllowed = "move"
+            setDragIndex(props.pos)
+        },
+        onDragEnd: () => clearDrag(),
+        onDragOver: ev => {
+            if (dragIndex !== null && isValidDropTarget(rows, dragIndex, props.pos)) {
+                ev.preventDefault()
+                ev.dataTransfer.dropEffect = "move"
+                if (dropTarget !== props.pos) setDropTarget(props.pos)
+            } else {
+                ev.dataTransfer.dropEffect = "none"
+            }
+        },
+        onDragLeave: () => { if (dropTarget === props.pos) setDropTarget(null) },
+        onDrop: ev => {
+            ev.preventDefault()
+            const from = dragIndex
+            clearDrag()
+            if (from !== null && isValidDropTarget(rows, from, props.pos)) void reparent(from, props.pos)
+        },
+    } : {}
 
     return (
         <div className="tree-node"
                 onMouseMove={(ev) => handleMouseMove(ev)}
                 onMouseOver={handleMouseOver}
                 onClick={handleTreeNodeClick}
+                draggable={drag.draggable || undefined}
+                {...dragHandlers}
+                {...editGestures}
         >
             <div
                 ref={nodeRef}
-                className={`ts-list-line ${highlighted} ${expandableClass} ${dimClass} ${archivedClass}`}
+                className={`ts-list-line ${highlighted} ${expandableClass} ${dimClass} ${archivedClass} ${dropTarget === props.pos ? "ts-drop-target" : ""}`}
                 dir="ltr"
                 style={{ '--indent-level': indentLevel } as React.CSSProperties}
             >
@@ -103,7 +153,7 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
                     />
                 </div>
                 <div className="ts-list-content flex flex-row justify-between"
-                     area-label={props.node.node.location.path} title={props.node.node.location.path}>
+                     area-label={props.node.node.location.path} title={drag.refusal ?? props.node.node.location.path}>
                     <div>
                     <NodeRenderer node={props.node.node} matchTerms={matchTerms}/>
                     </div>
@@ -114,6 +164,8 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
                     {/*</div>*/}
                 </div>
             </div>
+            {props.appendDot && <AppendDot target={props.appendDot}/>}
+            {props.editHint && <Pencil size={12} className="ts-edit-hint"/>}
         </div>
     );
 };

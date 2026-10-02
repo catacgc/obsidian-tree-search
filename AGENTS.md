@@ -1,5 +1,100 @@
 # Agent Instructions
 
+Tree Search is an Obsidian plugin plus the standalone `mdtree` CLI. Both share a pure-TypeScript parser, graph and search core. (Moved here from the former `CLAUDE.md`; `CLAUDE.md` is now a symlink to this file.)
+
+## Design docs
+
+- `EDITOR.md`: the editor mode spec (Append ⊕, Alt-Edit, drag-to-reparent in Tree/Timeline results; outline + content sections, Insert Link tree autocomplete, pasted attachments renamed by alias). Read it before changing result rows, the inline editor, Insert Link result logic, or any code that writes to the vault.
+- `docs/superpowers/specs/` and `docs/superpowers/plans/`: dated design specs and implementation plans (e.g. Consolidate notes, query language, archive).
+- `openspec/changes/`: older OpenSpec proposals/design/tasks (e.g. `mdtree-standalone/`). Some are marked SUPERSEDED on their first line.
+
+## Repo layout
+
+| Path | Purpose |
+|------|---------|
+| `src/` | Obsidian plugin (React + Jotai + bunshi molecules, built with esbuild) |
+| `packages/core/` | `@mdtree/core`: pure TS parser, graph and search, zero I/O |
+| `packages/cli/` | `@mdtree/cli`: Bun CLI (`index`, `watch`, `serve`, `query`, `plugin`) |
+| `plugins/` | mdtree CLI plugins (e.g. `arc`: indexes Arc Browser spaces) |
+| `test-support/obsidian-mock.ts` | Virtual `obsidian` module preloaded by `bun test` (`bunfig.toml`) |
+| `dist/` | Build output, gitignored: plugin bundle and the `dist/mdtree` binary |
+
+## Commands
+
+```bash
+bun test                       # all tests (root; preloads the obsidian mock)
+bun run build                  # tsc type-check + esbuild → dist/ (main.js, styles.css, manifest.json)
+bun run dev                    # plugin watch build
+bun run mdtree:build           # → dist/mdtree (self-contained Bun binary)
+bun run mdtree:dev <command>   # run the CLI without building
+bun run mdtree:test            # core tests only (packages/core/src/__tests__)
+bun test packages/core/src/__tests__/graph.test.ts   # single file
+bun test packages/cli/src/__tests__                  # CLI tests
+```
+
+CLI examples (the global `--dir` option can be repeated for multi-vault use):
+
+```bash
+dist/mdtree --dir ~/Documents/my-vault index
+dist/mdtree --dir ~/Documents/my-vault watch
+dist/mdtree --dir ~/vault-a --dir ~/vault-b serve            # one Unix socket per vault
+dist/mdtree --dir ~/Documents/my-vault serve --port 28888    # TCP instead of a Unix socket
+dist/mdtree --dir ~/Documents/my-vault serve --fresh         # ignore cached index
+dist/mdtree --dir ~/Documents/my-vault query "work.tasks" --limit 20
+dist/mdtree --dir ~/vault1 --dir ~/vault2 query "work.tasks" --json
+curl --unix-socket "/tmp/mdtree-Obsidian Vault.sock" "http://localhost/?query=work&limit=20"
+```
+
+| Default | Value |
+|---------|-------|
+| CLI SQLite store | `~/.config/mdtree/<vault-name>.db` |
+| CLI Unix socket | `/tmp/mdtree-<vault-name>.sock` |
+| CLI parse cache | `<vault>/.mdtree/cache.json` |
+| Plugin parse cache | `<vault>/.obsidian/plugins/tree-search/parse-cache.json` |
+
+## Architecture
+
+### `@mdtree/core` must stay I/O-free
+
+`packages/core/` is imported by both the plugin (bundled by esbuild) and the CLI (Bun). It must never use `bun:*`, `node:fs` or other I/O. File access is injected through `VaultScanner` (`packages/core/src/graph/scanner.ts`). The CLI implements it as `NodeVaultScanner` (`packages/cli/src/vault/node-scanner.ts`), and the plugin as `ObsidianVaultScanner` (`src/indexing/obsidian-vault-scanner.ts`).
+
+### Data flow
+
+```
+VaultScanner.walkVault() / readFile(path)
+parser/vault-file.ts      → DvPage (frontmatter + list tree)
+  parser/frontmatter.ts   → YAML via js-yaml
+  parser/list-scanner.ts  → headings + bullets; only the leading outline's bullets are indexed
+graph/indexer.ts          → DvPage → NotesGraph (nodes keyed by getKey; edges carry the Location where a relation was written)
+graph/builder.ts          → full build (reads in batches of 64, yields to the event loop between batches) + reindexFileInGraph
+search/query.ts, search.ts, timeline.ts → query parsing, tree results, timeline rows
+```
+
+### Plugin state and writes
+
+- **Global atoms** (`src/view/react-context/global.tsx`): `appAtom`, `graphAtom`, `graphVersionAtom`, `isGraphLoadingAtom`. **Per-view state** lives in bunshi molecules (`src/view/react-context/state.tsx`: `SearchViewScope`, `SearchViewMolecule`).
+- **Graph lifecycle:** `IndexedTree` (`src/indexing/indexed-tree.ts`) owns it: a full `refresh()` on load, and `refreshPage(file)` from one shared 200 ms debounce on `vault.on('modify')`. There are no create/rename/delete handlers. Code that writes files must call `refreshPage` for each file it touches.
+- **Vault writes:** all Obsidian-side writes live in `src/obsidian-utils.ts`. Pure planners live in core (`search/pull.ts`, `search/organise-sections.ts`). Keep that split.
+
+### CLI persistence
+
+The CLI stores the graph in SQLite (`bun:sqlite`, `packages/cli/src/store/sqlite.ts`). `serve` keeps the graph in memory and writes changes incrementally. File events are serialized through `AsyncQueue` (`packages/cli/src/util/async-queue.ts`).
+
+### Key types
+
+- `VaultScanner`: the only seam between core and I/O.
+- `NotesGraph` (`packages/core/src/graph/graph.ts`): Map-backed graph. Nodes and edges are indexed by source path for `removeByPath`.
+- `IndexSettings` (`packages/core/src/graph/indexer.ts`): `parentRelation | archiveTag | searchSeparator | periodicDate?`.
+
+## Testing
+
+All tests use Bun (`bun:test`).
+
+- **Unit tests** for pure functions: `packages/*/src/__tests__/*.test.ts`. Build inputs inline with small local helpers (`parse()` = `parseVaultFile(content, path, fixedMtime)`, `buildGraph()` via `indexSinglePage(..., DEFAULT_SETTINGS)`). Use one `describe` per function or concept and one `it` per behaviour.
+- **Integration tests:** `packages/core/src/__tests__/integration/integration.test.ts`. Each scenario is a folder of `.md` files under `integration/fixtures/<scenario>/`, loaded with `loadFixture` and queried with `search`/`searchKeys` from `integration/helpers.ts`.
+- **Plugin appliers:** `src/__tests__/` test Obsidian-side functions against a Map-backed fake vault passed as `app` (see `apply-organise-plan.test.ts`, `vault-edits.test.ts`). The obsidian mock only exports `App`, `TFile`, `TFolder`, `FuzzySuggestModal`, `normalizePath`, `Platform`, `Scope`, `moment` and `Notice`. Add any other `obsidian` value import to `test-support/obsidian-mock.ts` before testing a module that uses it.
+- **UI and plugin-runtime changes** also need the live check below.
+
 ## Live Obsidian Testing
 
 For UI or plugin-runtime changes, use the real Obsidian app as a smoke test in addition to the automated tests and build. Test the changed user flow, not just that the plugin loaded.

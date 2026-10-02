@@ -2,12 +2,16 @@ import React, {useEffect, useMemo, useRef} from "react";
 import {useAtom, useAtomValue, useSetAtom} from "jotai";
 import {useMolecule} from "bunshi/react";
 import {isUndated} from "@mdtree/core";
+import {Pencil} from "lucide-react";
 import {GlobalAppMolecule, SearchViewMolecule, TIMELINE_WINDOWS} from "../react-context/state";
 import {ActionsMolecule} from "../react-context/actions";
 import {triggerLocationPreview} from "../hover-preview";
 import {BaseNodeRender, highlightText} from "../NodeRenderer";
 import {TreeNode} from "./SearchViewFlatten";
 import {formatTimelineDate, nodeLabel, resolveThumbnail, sourceNoteLabel, stripDateAnnotations, textSourceDate} from "./timeline-utils";
+import {AppendDot} from "../editor/AppendDot";
+import type {AppendTarget} from "../editor/row-editing";
+import {useRowGestures} from "./row-gestures";
 
 // Recency chips (All / 7d / 30d / 1y). Filters the timeline locally with `in:`
 // semantics without touching the query. Divs, not <button>s: Obsidian's button
@@ -40,10 +44,20 @@ export const TimelineFilterBar = () => {
 // ancestors (else its in-note parent, else the source note) below and an
 // optional image thumbnail.
 // Interaction mirrors SearchTreeNode (click selects, click again opens).
-export const TimelineRow = ({node}: { node: TreeNode }) => {
+type TimelineRowProps = {
+    node: TreeNode
+    /** Position among the rendered rows. */
+    pos: number
+    editable?: boolean
+    appendDot?: AppendTarget
+    editHint?: boolean
+}
+
+export const TimelineRow = ({node, editable, appendDot, editHint}: TimelineRowProps) => {
     const {selectedLineAtom, updateHoveredLineAtom, matchTermsAtom} = useMolecule(SearchViewMolecule)
     const {appAtom} = useMolecule(GlobalAppMolecule)
     const {selectHoveredLineAtom} = useMolecule(ActionsMolecule)
+    const editGestures = useRowGestures(node, editable ?? false)
 
     const nodeRef = useRef<HTMLDivElement>(null)
     const selectedLine = useAtomValue(selectedLineAtom)
@@ -87,7 +101,7 @@ export const TimelineRow = ({node}: { node: TreeNode }) => {
     const thumb = useMemo(() => app ? resolveThumbnail(app, node.node) : null, [app, node.node])
     const highlighted = selectedLine === node.index ? "highlight" : ""
 
-    return <div className="tree-node" onMouseMove={handleMouseMove} onMouseOver={handleMouseOver} onClick={handleClick}>
+    return <div className="tree-node" onMouseMove={handleMouseMove} onMouseOver={handleMouseOver} onClick={handleClick} {...editGestures}>
         <div ref={nodeRef}
              className={`ts-timeline-row ${highlighted} ${node.archived ? "ts-node-archived" : ""}`}
              title={node.node.location.path}>
@@ -102,5 +116,7 @@ export const TimelineRow = ({node}: { node: TreeNode }) => {
             </div>
             {thumb && <img className="ts-timeline-thumb" src={thumb} alt="" loading="lazy"/>}
         </div>
+        {appendDot && <AppendDot target={appendDot}/>}
+        {editHint && <Pencil size={12} className="ts-edit-hint"/>}
     </div>
 }

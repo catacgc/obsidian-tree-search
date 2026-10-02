@@ -23,6 +23,35 @@
 	width: 100%;
 }
 
+.tree-search-modal-body {
+	height: calc(100vh * 0.75);
+}
+
+/* Mobile: the modal is a full-height sheet ending at the on-screen keyboard, and its body fills
+   the space left by the modal header and padding, so only the results list scrolls and the search
+   box and action dock stay on screen. (A fixed 100vh body overflowed the modal and pushed the dock
+   below the screen.) */
+.is-mobile .tree-search-modal {
+	align-self: flex-start;
+	margin-top: var(--safe-area-inset-top);
+	height: calc(100vh - var(--safe-area-inset-top) - var(--keyboard-height));
+	max-height: none;
+	overflow: hidden;
+}
+
+.is-mobile .tree-search-modal .modal-content,
+.is-mobile .tree-search-modal-container,
+.is-mobile .tree-search-modal-container > .workspace-leaf-content,
+.is-mobile .tree-search-modal .ts-search-view,
+.is-mobile .tree-search-modal-body {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+	height: auto;
+	overflow: hidden;
+}
+
 .tw-reset {
 	@import "./preflight.css";
 	
@@ -50,4 +79,6 @@
 @import "./markdown-code-block/styles.css";
 @import "./SearchTreeNode.css";
 @import "./search/SearchTimeline.css";
+@import "./search/ActionPanel.css";
 @import "./organise-notes/PullTreeView.css";
+@import "./editor/editor.css";

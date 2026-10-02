@@ -168,7 +168,12 @@ describe("archive/unarchive actions", () => {
 })
 
 describe("archive/unarchive actions for pages", () => {
-    const mockApp = { vault: { getName: () => "TestVault", getFileByPath: () => null } } as any
+    // Resolves a link by basename to `<name>.md` in the vault root, like Obsidian's shortest-path links.
+    const notes = new Set(["Page Name.md", "Child.md"])
+    const mockApp = {
+        vault: { getName: () => "TestVault", getFileByPath: () => null },
+        metadataCache: { getFirstLinkpathDest: (name: string) => notes.has(`${name}.md`) ? { path: `${name}.md` } : null },
+    } as any
 
     function createPageTreeNode(archived: boolean): any {
         return {
@@ -238,10 +243,43 @@ describe("archive/unarchive actions for pages", () => {
             expect(unarchiveAction.url).toContain("filepath=Page")
         }
     })
+
+    // A page shown as a child carries the location of the link that relates it, here a line
+    // in its parent's note; page actions must still act on the page's own note.
+    function childPageTreeNode(page: string, archived = false): any {
+        const node = createPageTreeNode(archived)
+        node.node = { ...node.node, page, searchKey: `${page.toLowerCase()}|`,
+            location: { path: "Folder/Parent.md", position: { start: { line: 3, ch: 0 }, end: { line: 3, ch: 11 } } } }
+        node.indent = 1
+        return node
+    }
+
+    it("archives and moves a child page's own note, not the parent note holding its link", () => {
+        const actions = getTreeNodeActions(mockApp, childPageTreeNode("Child"))
+        const archive = actions.find(a => a.title === "Archive")
+        const move = actions.find(a => a.title === "Move To")
+        expect(archive?.type === "browse" && new URL(archive.url).searchParams.get("filepath")).toBe("Child.md")
+        expect(archive?.type === "browse" && archive.location?.path).toBe("Child.md")
+        expect(move?.type === "browse" && new URL(move.url).searchParams.get("filepath")).toBe("Child.md")
+    })
+
+    it("unarchives a child page's own note", () => {
+        const unarchive = getTreeNodeActions(mockApp, childPageTreeNode("Child", true)).find(a => a.title === "Unarchive")
+        expect(unarchive?.type === "browse" && unarchive.location?.path).toBe("Child.md")
+    })
+
+    it("offers no Archive or Move To for a page without a note", () => {
+        const titles = getTreeNodeActions(mockApp, childPageTreeNode("Missing")).map(a => a.title)
+        expect(titles).not.toContain("Archive")
+        expect(titles).not.toContain("Move To")
+    })
 })
 
 describe("insert-link (quick-link) actions", () => {
-    const mockApp = { vault: { getName: () => "TestVault", getFileByPath: () => null } } as any
+    const mockApp = {
+        vault: { getName: () => "TestVault", getFileByPath: () => null },
+        metadataCache: { getFirstLinkpathDest: (name: string) => ({ path: `${name}.md` }) },
+    } as any
 
     const location = {
         path: "test.md",

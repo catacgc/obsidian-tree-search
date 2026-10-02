@@ -1,0 +1,240 @@
+import { describe, it, expect } from "bun:test"
+import type { ParsedNode, ParsedTextToken } from "@mdtree/core"
+import type { TreeNode } from "../view/search/SearchViewFlatten"
+import {
+    appendTargetAt, classifyReparent, dragInfo, groupEnd, isEditableRow, isValidDropTarget,
+    treeParentPos, type OwnPath,
+} from "../view/editor/row-editing"
+import {
+    normalizePastedOutline, outlineIndent, linkQueryAt, acceptLink, linkAt, insertAttachmentBullets, outlineBaseNote,
+    outlineBackspace, replaceOutlineParent,
+} from "../view/editor/textarea-ops"
+
+// ── Fixtures ─────────────────────────────────────────────────────────────────
+
+const loc = (path: string, line: number) => ({ path, position: { start: { line, ch: 0 }, end: { line, ch: 0 } } })
+const base = (path: string, line: number) => ({ searchKey: "", location: loc(path, line), boost: 0, ageDays: 0 })
+
+function page(name: string, path: string, line = 0): ParsedNode {
+    return { ...base(path, line), nodeType: "page", isReference: false, page: name, aliases: [], tags: [] }
+}
+function header(pageName: string, name: string, path: string, line: number): ParsedNode {
+    return { ...base(path, line), nodeType: "header", page: pageName, header: name, indent: 1 }
+}
+function text(key: string, path: string, line: number, tokens: ParsedTextToken[] = []): ParsedNode {
+    return { ...base(path, line), searchKey: key, nodeType: "text", parsedTokens: tokens, tags: [], isTask: false, isCompleted: false }
+}
+const link = (pageTarget: string, headerName?: string): ParsedTextToken =>
+    ({ tokenType: "obsidian_link", source: `[[${pageTarget}]]`, pageTarget, headerName })
+
+function row(node: ParsedNode, indent: number, extra: Partial<TreeNode> = {}): TreeNode {
+    return { node, indent, hasChildren: false, visible: true, selected: false, index: 0, matched: true, ...extra }
+}
+function rowsOf(...rs: TreeNode[]): TreeNode[] {
+    return rs.map((r, i) => ({ ...r, index: i }))
+}
+
+// Own file of every page in the fixture vault; headers map to their page.
+const OWN: Record<string, string> = { "project x": "Project X.md", "meeting": "Meeting.md", "old": "Old.md", "new": "New.md", "child": "Child.md" }
+const ownPath: OwnPath = n => (n.nodeType === "page" || n.nodeType === "header") ? OWN[n.page.toLowerCase()] ?? null : null
+
+// Tree:
+// 0 Project X                     (indent 0)
+// 1   [[Meeting]] link bullet in the daily note   (indent 1)
+// 2     kickoff                   (indent 2)
+// 3       notes                   (indent 3)
+// 4   loose text                  (indent 1)
+// 5 New                           (indent 0)
+const tree = rowsOf(
+    row(page("Project X", "Project X.md", 0), 0),
+    row(page("Meeting", "2026-09-30.md", 3), 1),
+    row(text("kickoff", "2026-09-30.md", 4), 2),
+    row(text("notes", "2026-09-30.md", 5), 3),
+    row(text("loose", "Project X.md", 7), 1),
+    row(page("New", "New.md", 0), 0),
+)
+
+// ── row-editing ──────────────────────────────────────────────────────────────
+
+describe("groups", () => {
+    it("treeParentPos and groupEnd follow indentation", () => {
+        expect(treeParentPos(tree, 3)).toBe(2)
+        expect(treeParentPos(tree, 4)).toBe(0)
+        expect(treeParentPos(tree, 0)).toBeNull()
+        expect(groupEnd(tree, 0)).toBe(4)
+        expect(groupEnd(tree, 1)).toBe(3)
+        expect(groupEnd(tree, 3)).toBe(3)
+    })
+})
+
+describe("appendTargetAt", () => {
+    it("Tree: the innermost page group owns the dot, placed at its group end", () => {
+        expect(appendTargetAt(tree, 3, false)).toMatchObject({ dotPos: 3, parentName: "Meeting", target: tree[1] })
+        expect(appendTargetAt(tree, 1, false)).toMatchObject({ dotPos: 3, parentName: "Meeting" })
+        expect(appendTargetAt(tree, 4, false)).toMatchObject({ dotPos: 4, parentName: "Project X", target: tree[0] })
+        expect(appendTargetAt(tree, 0, false)).toMatchObject({ dotPos: 4, parentName: "Project X" })
+    })
+
+    it("returns null for the Archive row and rows without a page", () => {
+        const rows = rowsOf(row(text("x", "a.md", 0), 0), row(page("Archive", ""), 0, { archiveRow: true }))
+        expect(appendTargetAt(rows, 0, false)).toBeNull()
+        expect(appendTargetAt(rows, 1, false)).toBeNull()
+        expect(appendTargetAt(rows, 1, true)).toBeNull()
+    })
+
+    it("Timeline: row page, then last breadcrumb page, then file basename", () => {
+        const breadcrumb = [page("Area", "Area.md", 0), header("Proj", "H", "Proj.md", 2), page("Proj", "Proj.md", 0), header("Proj", "H2", "Proj.md", 5)]
+        const rows = rowsOf(
+            row(page("Meeting", "Notes/2026-09-30.md", 2), 0, { timeline: { breadcrumb, pinned: false, ageDays: 0 } }),
+            row(text("t", "Notes/2026-09-30.md", 3), 0, { timeline: { breadcrumb, pinned: false, ageDays: 0 } }),
+            row(text("t2", "Notes/2026-09-30.md", 4), 0, { timeline: { breadcrumb: [header("Proj", "H", "Proj.md", 2)], pinned: false, ageDays: 0 } }),
+        )
+        expect(appendTargetAt(rows, 0, true)).toMatchObject({ dotPos: 0, parentName: "Meeting" })
+        expect(appendTargetAt(rows, 1, true)).toMatchObject({ dotPos: 1, parentName: "Proj" })
+        expect(appendTargetAt(rows, 2, true)).toMatchObject({ dotPos: 2, parentName: "2026-09-30" })
+    })
+})
+
+describe("isEditableRow", () => {
+    it("edits text/headers and link-line pages, never own-file pages or the Archive row", () => {
+        expect(isEditableRow(tree[2], ownPath, false)).toBe(true)
+        expect(isEditableRow(tree[1], ownPath, false)).toBe(true)
+        expect(isEditableRow(tree[0], ownPath, false)).toBe(false)
+        expect(isEditableRow(tree[0], ownPath, true)).toBe(false)
+        const fmChild = row(page("Child", "Child.md", 0), 1)
+        expect(isEditableRow(fmChild, ownPath, false)).toBe(false)
+        expect(isEditableRow(row(page("Archive", ""), 0, { archiveRow: true }), ownPath, true)).toBe(false)
+    })
+})
+
+describe("drag", () => {
+    it("isValidDropTarget rejects self, the parent, descendants and non-pages", () => {
+        expect(isValidDropTarget(tree, 1, 1)).toBe(false) // self
+        expect(isValidDropTarget(tree, 1, 0)).toBe(false) // parent
+        expect(isValidDropTarget(tree, 1, 3)).toBe(false) // descendant
+        expect(isValidDropTarget(tree, 2, 1)).toBe(false) // parent page
+        expect(isValidDropTarget(tree, 2, 4)).toBe(false) // text row
+        expect(isValidDropTarget(tree, 1, 5)).toBe(true)
+        expect(isValidDropTarget(tree, 2, 0)).toBe(true)
+    })
+
+    it("rejects another row of the same page as the dragged or parent row", () => {
+        const rows = rowsOf(...tree, row(page("Meeting", "Other.md", 1), 0))
+        expect(isValidDropTarget(rows, 1, 6)).toBe(false) // same page as dragged
+        expect(isValidDropTarget(rows, 2, 6)).toBe(false) // same page as parent
+    })
+
+    it("dragInfo refuses a row that links its parent inline", () => {
+        const rows = rowsOf(
+            row(page("Project X", "Project X.md", 0), 0),
+            row(text("a", "d.md", 1, [link("project x")]), 1),
+            row(header("Project X", "Plan", "Project X.md", 3), 1),
+            row(text("b", "d.md", 2, [link("Project X", "plan")]), 2),
+            row(text("c", "d.md", 3, [link("Other")]), 2),
+        )
+        expect(dragInfo(rows, 1)).toEqual({ draggable: false, refusal: "Linked inline — edit the text to change its parent" })
+        expect(dragInfo(rows, 3)).toEqual({ draggable: false, refusal: "Linked inline — edit the text to change its parent" })
+        expect(dragInfo(rows, 4)).toEqual({ draggable: true })
+        expect(dragInfo(rows, 0)).toEqual({ draggable: false }) // root
+        expect(dragInfo(rows, 2)).toEqual({ draggable: false }) // header
+    })
+
+    it("dragInfo refuses Timeline and Archive rows", () => {
+        const tl = rowsOf(row(page("P", "P.md", 0), 0), row(text("x", "d.md", 1), 1, { timeline: { breadcrumb: [], pinned: false, ageDays: 0 } }))
+        expect(dragInfo(tl, 1).draggable).toBe(false)
+        const ar = rowsOf(row(page("Archive", ""), 0, { archiveRow: true }), row(page("Old", "Old.md", 0), 1))
+        expect(dragInfo(ar, 1).draggable).toBe(false)
+    })
+})
+
+describe("classifyReparent", () => {
+    it("frontmatter: a page child whose own file holds the relation at line 0", () => {
+        const rows = rowsOf(row(page("Old", "Old.md", 0), 0), row(page("Child", "Child.md", 0), 1), row(page("New", "New.md", 0), 0))
+        expect(classifyReparent(rows, 1, 2, ownPath, "parent")).toEqual({
+            kind: "frontmatter", childPath: "Child.md", oldName: "Old", newName: "New", relation: "parent",
+        })
+    })
+
+    it("cross-file: a bullet written in the old parent's own file", () => {
+        expect(classifyReparent(tree, 4, 5, ownPath, "parent")).toEqual({
+            kind: "cross-file", sourcePath: "Project X.md", line: 7, head: "", newName: "New",
+        })
+    })
+
+    it("same-file: a bullet under a link bullet in another file", () => {
+        expect(classifyReparent(tree, 2, 5, ownPath, "parent")).toEqual({
+            kind: "same-file", sourcePath: "2026-09-30.md", line: 4, head: "", newName: "New",
+        })
+        // a page link line under a link bullet is also a bullet move
+        expect(classifyReparent(tree, 1, 5, ownPath, "parent")).toMatchObject({ kind: "same-file", line: 3 })
+    })
+})
+
+// ── textarea-ops ─────────────────────────────────────────────────────────────
+
+describe("outlineIndent", () => {
+    it("clamps to [0, previous indent + 4] and keeps the first line at 0", () => {
+        const t = "- a\n- b"
+        expect(outlineIndent(t, 7, 1)).toEqual({ text: "- a\n    - b", caret: 11 })
+        expect(outlineIndent("- a\n    - b", 11, 1)).toEqual({ text: "- a\n    - b", caret: 11 })
+        expect(outlineIndent("- a\n    - b", 11, -1)).toEqual({ text: "- a\n- b", caret: 7 })
+        expect(outlineIndent(t, 7, -1)).toEqual({ text: t, caret: 7 })
+        expect(outlineIndent(t, 2, 1)).toEqual({ text: t, caret: 2 })
+    })
+})
+
+describe("outlineBackspace", () => {
+    it("removes a bare-bullet line and joins to the end of the previous line", () => {
+        expect(outlineBackspace("- [[P]]\n    - ", 14)).toEqual({ text: "- [[P]]", caret: 7 })
+    })
+
+    it("leaves the first line and lines with text to the default Backspace", () => {
+        expect(outlineBackspace("- ", 2)).toBeNull()
+        expect(outlineBackspace("- [[P]]\n    - x", 15)).toBeNull()
+    })
+})
+
+describe("replaceOutlineParent", () => {
+    it("swaps a link-only first line and keeps the rest", () => {
+        expect(replaceOutlineParent("- [[A]]\n    - x", "B")).toBe("- [[B]]\n    - x")
+    })
+
+    it("prefills a blank outline", () => {
+        expect(replaceOutlineParent("- ", "B")).toBe("- [[B]]\n    - ")
+    })
+
+    it("prepends the parent, nesting a root-level outline under it", () => {
+        expect(replaceOutlineParent("- x\n- y", "B")).toBe("- [[B]]\n    - x\n    - y")
+        expect(replaceOutlineParent("    - x", "B")).toBe("- [[B]]\n    - x")
+    })
+})
+
+describe("normalizePastedOutline", () => {
+    it("prefixes plain lines, keeps bullets, expands tabs and drops blanks", () => {
+        expect(normalizePastedOutline("- a\r\n\tplain\r\n\r\n1. num\n  text")).toBe("- a\n    - plain\n1. num\n  - text")
+    })
+})
+
+describe("links and attachments", () => {
+    it("linkQueryAt / acceptLink / linkAt", () => {
+        expect(linkQueryAt("- see [[Proj", 12)).toEqual({ start: 6, query: "Proj" })
+        expect(linkQueryAt("- ![[img", 8)).toBeNull()
+        expect(linkQueryAt("- [[a]] b", 9)).toBeNull()
+        expect(acceptLink("x [[Pro]] y", 2, 7, "[[Project X]]")).toEqual({ text: "x [[Project X]] y", caret: 15 })
+        expect(linkAt("a [[B#h|c]] ![[e.png]]", 5)).toBe("B")
+        expect(linkAt("a [[B#h|c]] ![[e.png]]", 16)).toBeNull()
+        expect(linkAt("a [[B]]", 1)).toBeNull()
+    })
+
+    it("insertAttachmentBullets fills an empty bullet then adds children", () => {
+        expect(insertAttachmentBullets("- ", 2, ["a.png", "b.png"])).toEqual({
+            text: "- ![[a.png]]\n    - ![[b.png]]", caret: 29,
+        })
+    })
+
+    it("outlineBaseNote walks up to the nearest ancestor with a link", () => {
+        const t = "- [[A]]\n    - plain\n        - deeper"
+        expect(outlineBaseNote(t, t.length, "P")).toBe("A")
+        expect(outlineBaseNote("- x", 3, "P")).toBe("P")
+    })
+})

@@ -11,16 +11,19 @@ export type SearchAutocompleteProps = {
 export const SearchAutocomplete = ({ suggestions, highlightedIndex, onHover, onAccept }: SearchAutocompleteProps) => {
     if (suggestions.length === 0) return null
 
+    // Styled as the ⌘K action panel: same surface, item rows and selection highlight (ActionPanel.css).
     return (
-        <div className="tw-reset absolute left-0 right-1 top-full mt-1 z-20 rounded-lg border bg-obs-base-0 shadow-lg overflow-hidden">
+        <div className="ts-query-suggest" role="listbox">
             {suggestions.map((s, i) => (
                 <div
                     key={s.label}
-                    className={`px-3 py-2 cursor-pointer text-sm font-mono ${i === highlightedIndex ? "bg-obs-hover" : ""}`}
+                    role="option"
+                    aria-selected={i === highlightedIndex}
+                    className={`ts-action-panel-item ${i === highlightedIndex ? "is-selected" : ""}`}
                     onMouseEnter={() => onHover(i)}
                     onMouseDown={ev => { ev.preventDefault(); onAccept(s) }}
                 >
-                    {s.label}
+                    <span className="ts-action-panel-label">{s.label}</span>
                 </div>
             ))}
         </div>

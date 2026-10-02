@@ -1,10 +1,10 @@
 import type { DvList, HeadingCache } from "../graph/types.ts"
 import type { Frontmatter } from "./frontmatter.ts"
 
-const LIST_ITEM_RE = /^(\s*)(?:[-*+]|\d+\.)\s+(.*)/
-const HEADER_RE = /^(#{1,6})\s+(.*)/
+export const LIST_ITEM_RE = /^(\s*)(?:[-*+]|\d+\.)\s+(.*)/
+export const HEADER_RE = /^(#{1,6})\s+(.*)/
 // Any list marker, including an empty bullet ("-" alone); used only for outline-break detection
-const LIST_MARKER_RE = /^\s*(?:[-*+]|\d+\.)(?:\s|$)/
+export const LIST_MARKER_RE = /^\s*(?:[-*+]|\d+\.)(?:\s|$)/
 const TASK_RE = /^\[([ xX])\]\s+(.*)/
 const INLINE_TAG_RE = /#([\w/]+)/g
 const META_ACTION_RE = /\(meta-action-[\w-]+::[^)]*\)/g
@@ -21,6 +21,13 @@ function shouldSkip(text: string, archiveTag: string): boolean {
     !text.includes("http") &&
     !text.includes("- [")
   )
+}
+
+/** For a trimmed line, undefined if it is not a comment line; otherwise the closer still pending after it ("-->" | "%%"), or null when it closes on the same line. */
+export function commentLineClose(trimmed: string): "-->" | "%%" | null | undefined {
+  if (trimmed.startsWith("<!--")) return trimmed.indexOf("-->", 4) === -1 ? "-->" : null
+  if (trimmed.startsWith("%%")) return trimmed.indexOf("%%", 2) === -1 ? "%%" : null
+  return undefined
 }
 
 /**
@@ -87,12 +94,9 @@ export function scanMarkdown(
 
     // ── Comment line (<!-- … -->, %% … %%) ──────────────────────────────────
     const trimmed = line.trim()
-    if (trimmed.startsWith("<!--")) {
-      if (trimmed.indexOf("-->", 4) === -1) commentClose = "-->"
-      continue
-    }
-    if (trimmed.startsWith("%%")) {
-      if (trimmed.indexOf("%%", 2) === -1) commentClose = "%%"
+    const close = commentLineClose(trimmed)
+    if (close !== undefined) {
+      commentClose = close
       continue
     }
 

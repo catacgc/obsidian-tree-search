@@ -39,7 +39,7 @@ export class SearchViewPanel extends ItemView {
                     const separator = this.store.get(separatorAtom);
                     const { reveal } = extractArchiveReveal(parseQuery(q, separator));
                     return partitionArchived(searchIndex(graph, q, separator), reveal).visible;
-                }} sectionName="Search" allowTimeline={true}/>
+                }} sectionName="Search" allowTimeline={true} allowEditing={true}/>
             </GraphContextProvider>
         );
     }

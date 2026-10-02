@@ -14,6 +14,8 @@ const momentParse: MomentParse = (input, format) => {
     return m.isValid() ? m.valueOf() : null
 }
 
+export type DailyNoteConfig = { folder: string; format: string; template: string }
+
 export class IndexedTree {
     private graph: NotesGraph
     private isLoading = false
@@ -21,6 +23,8 @@ export class IndexedTree {
     private parseCache = new Map<string, ParseCacheEntry>()
     // Resolves a vault path to a daily/weekly-note date; refreshed on full reindex.
     private periodicDate: (path: string) => number | null = () => null
+    // Core "Daily Notes" plugin settings, read alongside the resolver; used by editor-mode appends.
+    private dailyNoteConfig: DailyNoteConfig = { folder: "", format: "YYYY-MM-DD", template: "" }
 
     constructor(private store: GlobalStore, private cacheDir: string) {
         this.graph = new NotesGraph()
@@ -62,10 +66,15 @@ export class IndexedTree {
         const configs: PeriodicNoteConfig[] = []
         try {
             const daily = JSON.parse(await this.vault.adapter.read(`${this.vault.configDir}/daily-notes.json`))
-            configs.push({ folder: daily.folder ?? "", format: daily.format || "YYYY-MM-DD" })
+            this.dailyNoteConfig = { folder: daily.folder ?? "", format: daily.format || "YYYY-MM-DD", template: daily.template ?? "" }
+            configs.push({ folder: this.dailyNoteConfig.folder, format: this.dailyNoteConfig.format })
         } catch { /* no daily-notes config → nothing is a periodic note */ }
 
         this.periodicDate = makePeriodicDateResolver(configs, momentParse)
+    }
+
+    getDailyNoteConfig(): DailyNoteConfig {
+        return this.dailyNoteConfig
     }
 
     private indexSettings(): IndexSettings {

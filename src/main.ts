@@ -43,6 +43,7 @@ export default class TreeSearchPlugin extends Plugin {
         this.globalStore.set(GlobalAtoms.appAtom, this.app)
 
         this.index = new IndexedTree(this.globalStore, this.manifest.dir ?? "");
+        this.globalStore.set(GlobalAtoms.indexAtom, this.index);
 
         this.registerView(
             SEARCH_VIEW,
@@ -98,6 +99,15 @@ export default class TreeSearchPlugin extends Plugin {
             name: "Search",
             callback: () => {
                 searchModal.open();
+            },
+        });
+
+        this.addCommand({
+            id: "open-editor",
+            name: "Open editor",
+            callback: () => {
+                searchModal.open();
+                this.globalStore.set(GlobalAtoms.editorRequestAtom, true);
             },
         });
 

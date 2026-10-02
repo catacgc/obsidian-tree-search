@@ -51,11 +51,27 @@ function normalizePath(path: string): string {
 
 class App {}
 
+const Platform = { isMobile: false, isTablet: false, isMacOS: true }
+
+class Scope {
+    constructor(_parent?: unknown) {}
+    register() {
+        return {}
+    }
+    unregister() {}
+}
+
+const moment = () => ({ format: (f: string) => f })
+
+class Notice {
+    constructor(_message: string) {}
+}
+
 plugin({
     name: "obsidian-mock",
     setup(builder) {
         builder.module("obsidian", () => ({
-            exports: { App, TFile, TFolder, FuzzySuggestModal, normalizePath },
+            exports: { App, TFile, TFolder, FuzzySuggestModal, normalizePath, Platform, Scope, moment, Notice },
             loader: "object",
         }))
     },

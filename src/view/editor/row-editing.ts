@@ -1,0 +1,119 @@
+// Pure row predicates and planning for editor mode (Append dot, Alt-Edit, drag-to-reparent).
+// No obsidian imports: callers resolve file paths and line contents.
+
+import {getKey, type ParsedNode} from "@mdtree/core"
+import type {TreeNode} from "../search/SearchViewFlatten"
+import type {ReparentPlan} from "../../editing/vault-edits"
+
+/** The file a node's page lives in (headers map to their page), or null for references / non-pages. */
+export type OwnPath = (node: ParsedNode) => string | null
+
+export type AppendTarget = { dotPos: number; parentName: string; target: TreeNode }
+
+export const INLINE_LINK_REFUSAL = "Linked inline — edit the text to change its parent"
+
+/** Rows whose line can be Alt-edited: text and headers, and pages written as a link line in another file. */
+export function isEditableRow(row: TreeNode, ownPath: OwnPath, timeline: boolean): boolean {
+    if (row.archiveRow) return false
+    const node = row.node
+    switch (node.nodeType) {
+        case "text":
+        case "header":
+            return true
+        case "page":
+            return (row.indent > 0 || timeline) && node.location.path !== ownPath(node)
+        default:
+            return false
+    }
+}
+
+/** Nearest earlier row with a smaller indent. */
+export function treeParentPos(rows: TreeNode[], pos: number): number | null {
+    const indent = rows[pos].indent
+    for (let i = pos - 1; i >= 0; i--) if (rows[i].indent < indent) return i
+    return null
+}
+
+/** Last position of the group headed by `pos` (itself when it has no deeper rows after it). */
+export function groupEnd(rows: TreeNode[], pos: number): number {
+    const indent = rows[pos].indent
+    let end = pos
+    while (end + 1 < rows.length && rows[end + 1].indent > indent) end++
+    return end
+}
+
+export function appendTargetAt(rows: TreeNode[], pos: number, timeline: boolean): AppendTarget | null {
+    const row = rows[pos]
+    if (!row || row.archiveRow) return null
+    if (timeline) {
+        const node = row.node
+        let parentName: string | undefined
+        if (node.nodeType === "page") parentName = node.page
+        else {
+            const crumb = [...(row.timeline?.breadcrumb ?? [])].reverse().find(n => n.nodeType === "page")
+            if (crumb?.nodeType === "page") parentName = crumb.page
+            else if (node.location.path) parentName = node.location.path.split("/").pop()!.replace(/\.md$/, "")
+        }
+        return parentName ? {dotPos: pos, parentName, target: row} : null
+    }
+    let minIndent = Infinity
+    for (let i = pos; i >= 0; i--) {
+        const r = rows[i]
+        if (r.indent >= minIndent) continue
+        minIndent = r.indent
+        if (r.node.nodeType === "page" && !r.archiveRow) {
+            return {dotPos: groupEnd(rows, i), parentName: r.node.page, target: r}
+        }
+    }
+    return null
+}
+
+export function dragInfo(rows: TreeNode[], pos: number): { draggable: boolean; refusal?: string } {
+    const row = rows[pos]
+    if (!row || row.timeline || row.archiveRow || row.indent === 0) return {draggable: false}
+    const node = row.node
+    if (node.nodeType !== "text" && node.nodeType !== "page") return {draggable: false}
+    const parentPos = treeParentPos(rows, pos)
+    if (parentPos === null || rows[parentPos].archiveRow) return {draggable: false}
+    if (node.nodeType === "text") {
+        const parent = rows[parentPos].node
+        const linksParent = node.parsedTokens.some(t => {
+            if (t.tokenType !== "obsidian_link") return false
+            const target = t.pageTarget.toLowerCase()
+            if (parent.nodeType === "page") return target === parent.page.toLowerCase()
+            if (parent.nodeType === "header") {
+                return target === parent.page.toLowerCase() && t.headerName?.toLowerCase() === parent.header.toLowerCase()
+            }
+            return false
+        })
+        if (linksParent) return {draggable: false, refusal: INLINE_LINK_REFUSAL}
+    }
+    return {draggable: true}
+}
+
+export function isValidDropTarget(rows: TreeNode[], dragPos: number, targetPos: number): boolean {
+    const target = rows[targetPos]
+    if (!target || target.archiveRow || target.node.nodeType !== "page") return false
+    if (targetPos >= dragPos && targetPos <= groupEnd(rows, dragPos)) return false
+    const key = getKey(target.node)
+    if (key === getKey(rows[dragPos].node)) return false
+    const parentPos = treeParentPos(rows, dragPos)
+    return parentPos === null || key !== getKey(rows[parentPos].node)
+}
+
+/** How to move the dragged row under the target page. Bullet plans carry `head: ""`; the caller reads it from the file. */
+export function classifyReparent(rows: TreeNode[], dragPos: number, targetPos: number, ownPath: OwnPath, relation: string): ReparentPlan {
+    const child = rows[dragPos].node
+    const parentPos = treeParentPos(rows, dragPos)
+    const target = rows[targetPos].node
+    if (parentPos === null) throw new Error("Dragged row has no parent")
+    if (target.nodeType !== "page") throw new Error("Drop target is not a page")
+    const old = rows[parentPos].node
+    const file = child.location.path
+    const line = child.location.position.start.line
+    if (child.nodeType === "page" && old.nodeType === "page" && ownPath(child) === file && line === 0) {
+        return {kind: "frontmatter", childPath: file, oldName: old.page, newName: target.page, relation}
+    }
+    const kind = ownPath(old) === file ? "cross-file" : "same-file"
+    return {kind, sourcePath: file, line, head: "", newName: target.page}
+}

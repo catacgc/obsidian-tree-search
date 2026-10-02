@@ -1,0 +1,266 @@
+/* Action footer and action panel (ActionFooter.tsx / ActionPanel.tsx). Styled like the search
+   block: base-00 background, 1px modifier border, muted text, accent on hover. Not under
+   .tw-reset, so plain class selectors carry the look. */
+
+/* Sticky: in the Search pane the whole leaf scrolls, so the footer pins to the visible bottom;
+   in the modal the results scroll on their own and this is a no-op. */
+.ts-action-dock {
+	position: sticky;
+	bottom: 0;
+	z-index: 30;
+	flex-shrink: 0;
+	container-type: inline-size;
+}
+
+/* The pane's scroller pads its bottom, which a sticky footer would float above. */
+.workspace-leaf-content[data-type="tree-search"] > .view-content {
+	padding-bottom: 0;
+}
+
+.ts-action-footer {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 32px;
+	padding: 0 8px;
+	padding-bottom: env(safe-area-inset-bottom);
+	background: var(--color-base-00);
+	border-top: 1px solid var(--background-modifier-border);
+	font-size: var(--font-ui-small);
+	color: var(--color-base-40);
+	user-select: none;
+}
+
+.ts-action-footer.is-phone {
+	min-height: 44px;
+}
+
+.ts-action-footer-title {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	color: var(--text-muted);
+}
+
+.ts-action-footer-item {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	padding: 2px 4px;
+	border-radius: var(--radius-s);
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.ts-action-footer.is-phone .ts-action-footer-item {
+	min-height: 36px;
+	padding: 0 8px;
+}
+
+.ts-action-footer-main {
+	color: var(--text-normal);
+	max-width: 50%;
+}
+
+.ts-action-footer-label {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.ts-action-footer-item:hover,
+.ts-action-footer-item.is-active {
+	color: var(--color-accent);
+}
+
+.ts-action-footer-divider {
+	width: 1px;
+	height: 14px;
+	background: var(--background-modifier-border);
+	flex-shrink: 0;
+}
+
+.ts-keycaps {
+	display: inline-flex;
+	gap: 2px;
+	flex-shrink: 0;
+}
+
+.ts-keycap {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 18px;
+	height: 18px;
+	padding: 0 4px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	background: transparent;
+	box-shadow: none;
+	font-family: var(--font-interface);
+	font-size: var(--font-ui-smaller);
+	line-height: 1;
+	color: var(--color-base-40);
+}
+
+.ts-action-panel {
+	position: absolute;
+	bottom: calc(100% + 4px);
+	right: 8px;
+	z-index: 40;
+	display: flex;
+	flex-direction: column;
+	width: min(360px, calc(100% - 16px));
+	max-height: min(60vh, 480px);
+	background: var(--color-base-00);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-s);
+	font-size: var(--font-ui-small);
+	overflow: hidden;
+}
+
+.ts-action-panel.is-phone {
+	left: 4px;
+	right: 4px;
+	width: auto;
+}
+
+@container (max-width: 400px) {
+	.ts-action-panel {
+		left: 4px;
+		right: 4px;
+		width: auto;
+	}
+}
+
+.ts-action-panel-title {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 8px 12px 4px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.ts-action-panel-back {
+	display: flex;
+	cursor: pointer;
+}
+
+.ts-action-panel-back:hover {
+	color: var(--color-accent);
+}
+
+.ts-action-panel-list {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	padding: 4px;
+}
+
+.ts-action-panel-section {
+	padding: 6px 8px 2px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+}
+
+.ts-action-panel-divider {
+	height: 1px;
+	margin: 4px 8px;
+	background: var(--background-modifier-border);
+}
+
+.ts-action-panel-item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: 32px;
+	padding: 0 8px;
+	border-radius: var(--radius-s);
+	color: var(--text-normal);
+	cursor: pointer;
+}
+
+.ts-action-panel.is-phone .ts-action-panel-item {
+	height: 44px;
+}
+
+.ts-action-panel-item.is-selected {
+	background: var(--background-modifier-hover);
+}
+
+.ts-action-panel-icon {
+	flex-shrink: 0;
+	color: var(--text-muted);
+}
+
+.ts-action-panel-label {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.ts-action-panel-empty {
+	padding: 8px;
+	color: var(--text-faint);
+}
+
+/* The search box's is:/in:/has: autocomplete (SearchAutocomplete.tsx) reuses the panel's item rows;
+   this is the panel surface, dropped below the input instead of above the footer. */
+.ts-query-suggest {
+	position: absolute;
+	top: 100%;
+	left: 0;
+	right: 4px;
+	z-index: 40;
+	max-height: min(60vh, 480px);
+	overflow-y: auto;
+	padding: 4px;
+	background: var(--color-base-00);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-s);
+	font-size: var(--font-ui-small);
+}
+
+.is-phone .ts-query-suggest .ts-action-panel-item {
+	height: 44px;
+}
+
+/* Scoped to the panel to outrank Obsidian's input[type=text] chrome. */
+.ts-action-panel input.ts-action-panel-filter {
+	flex-shrink: 0;
+	width: 100%;
+	height: 36px;
+	margin: 0;
+	padding: 0 12px;
+	border: none;
+	border-top: 1px solid var(--background-modifier-border);
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	outline: none;
+	font-size: var(--font-ui-small);
+}
+
+.ts-action-panel input.ts-action-panel-filter:focus,
+.ts-action-panel input.ts-action-panel-filter:focus-visible {
+	box-shadow: none;
+	outline: none;
+	border-top-color: var(--background-modifier-border);
+}
+
+/* Touch: the long-press opens the action panel, not the system menu, link preview or text selection. */
+.is-mobile .tree-node {
+	-webkit-touch-callout: none;
+	-webkit-user-select: none;
+	user-select: none;
+}
