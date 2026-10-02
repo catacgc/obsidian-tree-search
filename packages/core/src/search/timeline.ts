@@ -12,11 +12,11 @@ export type TimelineItem = {
   ageDays: number            // node.ageDays, or the fallback's age when undated
 }
 
-// Flat, date-ordered projection of a search result tree. Items are nodes
-// matching the last query stage plus everything below them — the same set the
-// tree shows for that stage, since `filterDown` keeps a matched node's whole
-// subtree. Ancestors kept only for earlier stages are not items (tree
-// membership alone does not imply a match). Emoji-bearing nodes are pinned
+// Flat, date-ordered projection of a search result tree. Items are the nodes
+// that themselves match the last query stage — the rows the tree highlights
+// for that stage. Context the tree keeps but dims (a hit's non-matching
+// subtree, ancestors kept only for earlier stages) is not an item; matched
+// ancestors become the breadcrumb. Emoji-bearing nodes are pinned
 // and, mirroring `in:`, bypass the recency window. `fallbackAgeDays` dates
 // undated nodes (the host supplies e.g. the containing file's ctime; core stays
 // filesystem-agnostic); nodes it cannot date are dropped unless pinned.
@@ -30,9 +30,9 @@ export function buildTimeline(
   const items = new Map<string, TimelineItem>()
   const ancestors: ParsedNode[] = []
 
-  const visit = (r: ResultNode, underHit: boolean): void => {
+  const visit = (r: ResultNode): void => {
     const node = r.node
-    const hit = underHit || target === undefined || matchQuery(node, target)
+    const hit = target === undefined || matchQuery(node, target)
     if (hit && node.nodeType !== "pointer") {
       const pinned = containsEmoji(node.searchKey)
       const ageDays = isUndated(node.ageDays) ? (fallbackAgeDays?.(node) ?? UNDATED_AGE) : node.ageDays
@@ -52,11 +52,11 @@ export function buildTimeline(
     }
     if (r.children.length === 0) return
     ancestors.push(node)
-    for (const child of r.children) visit(child, hit)
+    for (const child of r.children) visit(child)
     ancestors.pop()
   }
 
-  for (const r of results) visit(r, false)
+  for (const r of results) visit(r)
 
   return [...items.values()].sort((a, b) =>
     (a.pinned === b.pinned ? 0 : a.pinned ? -1 : 1) ||

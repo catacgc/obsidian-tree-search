@@ -47,21 +47,27 @@ const keys = (items: { node: ParsedNode }[]) => items.map(i => i.node.searchKey)
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe("buildTimeline", () => {
-  it("emits last-stage hits and their descendants, newest first, with matched-ancestor breadcrumbs", () => {
+  it("emits only last-stage hits, newest first, with matched-ancestor breadcrumbs", () => {
     const ibm = pageNode("IBM")
     const spark = textNode("Spark", 10)
     const arch = textNode("Spark architecture", 2)
-    // A sub-item of a hit that does not itself match (e.g. `[[Azure to AWS
-    // migration]]` under `CAN2 migration` for query `can2`) is shown, like the tree.
+    // A non-matching sub-item of a hit is tree context (dimmed there), not a timeline item.
     const sub = textNode("unrelated", 1)
     const tree = [rn(ibm, [rn(spark, [rn(arch), rn(sub)])]), rn(textNode("elsewhere", 0))]
 
     const items = buildTimeline(tree, parseQuery("ibm . spark", "."))
 
-    expect(keys(items)).toEqual(["unrelated", "Spark architecture", "Spark"])
+    expect(keys(items)).toEqual(["Spark architecture", "Spark"])
     expect(items[0].breadcrumb).toEqual([ibm, spark])
-    expect(items[1].breadcrumb).toEqual([ibm, spark])
-    expect(items[2].breadcrumb).toEqual([ibm])
+    expect(items[1].breadcrumb).toEqual([ibm])
+  })
+
+  it("applies the target stage's type filter to every item, not just the subtree root", () => {
+    const page = pageNode("Data governance", 3)
+    const childPage = pageNode("Data governance archive", 1)
+    const tree = [rn(page, [rn(textNode("governance review", 2)), rn(childPage), rn(pageNode("Unrelated", 0))])]
+
+    expect(keys(buildTimeline(tree, parseQuery("governa :page", ".")))).toEqual(["Data governance archive", "Data governance"])
   })
 
   it("pins emoji hits on top and lets them bypass the recency window", () => {
