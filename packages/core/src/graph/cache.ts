@@ -1,7 +1,7 @@
 import type { ParseCacheEntry } from "./builder.ts"
 
 type SerializedCache = {
-  version: 1
+  version: 2
   entries: Record<string, ParseCacheEntry>
 }
 
@@ -10,13 +10,13 @@ export function serializeCache(cache: Map<string, ParseCacheEntry>): string {
   for (const [path, entry] of cache) {
     entries[path] = entry
   }
-  return JSON.stringify({ version: 1, entries } satisfies SerializedCache)
+  return JSON.stringify({ version: 2, entries } satisfies SerializedCache)
 }
 
 export function deserializeCache(json: string): Map<string, ParseCacheEntry> {
   try {
     const parsed = JSON.parse(json) as SerializedCache
-    if (!parsed || parsed.version !== 1 || typeof parsed.entries !== "object") {
+    if (!parsed || parsed.version !== 2 || typeof parsed.entries !== "object") {
       return new Map()
     }
     return new Map(Object.entries(parsed.entries))

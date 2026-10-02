@@ -89,20 +89,28 @@ function ownBodyPath(graph: NotesGraph, key: string): string | null {
  * document body (a header/text node physically living at `ownPath`) rather
  * than a foreign mention/topic captured elsewhere. `ownPath` is that page's
  * own file path (`ownBodyPath` above) - `null` means there is no real file
- * to be "own body" of, so nothing qualifies. Shared by `buildPullTree`'s
- * own-body walk-through above (which descends through such edges
- * transparently rather than materializing them as pull candidates) and
- * `isSafeToDeleteSource`'s deletion-safety check below (which must not
- * require a node's own body content to be "checked" before a bullet merely
- * referencing that node elsewhere can be deleted) - the two need to agree
- * on exactly what counts as "already home", or a node's own content could
- * silently block deleting a reference to it.
+ * to be "own body" of, so nothing qualifies. `buildPullTree` descends
+ * through such edges transparently rather than materializing them as pull
+ * candidates.
  */
 function isOwnBodyEdge(graph: NotesGraph, ownPath: string | null, edge: EdgeEntry): boolean {
   if (ownPath === null) return false
   const targetAttrs = graph.getNodeAttributes(edge.target)
   return (targetAttrs.nodeType === "header" || targetAttrs.nodeType === "text")
     && edge.attributes.location.path === ownPath
+}
+
+/**
+ * Whether `node`'s link to its pull-tree parent is declared in the node's
+ * own frontmatter (`parent: "[[Root]]"`) rather than written as a bullet
+ * somewhere. The indexer records that edge at the page's own location -
+ * line 0 of its file, the opening `---` delimiter - so there is no source
+ * line to delete and nothing to relocate: the hierarchy is already declared
+ * in the child's own note. A real page is otherwise never located inside
+ * its own file, so the path comparison identifies exactly these edges.
+ */
+export function isFrontmatterRelation(graph: NotesGraph, node: PullNode): boolean {
+  return ownBodyPath(graph, node.key) === node.node.location.path
 }
 
 // ── Date reconstruction ──────────────────────────────────────────────────────
@@ -170,6 +178,7 @@ export function renderPullLine(line: PullLine): string {
  * for content it wouldn't actually receive.
  */
 export function planOrganiseWrites(
+  graph: NotesGraph,
   root: PullNode,
   rootHome: OrganiseHome,
   isChecked: (key: string) => boolean,
@@ -193,18 +202,24 @@ export function planOrganiseWrites(
     return created
   }
 
+  // Selection is per row: an unchecked node writes nothing itself, but its
+  // descendants are still visited so a checked line beneath an unchecked
+  // topic (the pane leaves sub-topic rows unchecked by default) is filed.
   function visit(node: PullNode, homeThunk: () => OrganiseHome, depth: number): void {
     for (const child of node.children) {
-      if (!isChecked(child.key)) continue
+      const checked = isChecked(child.key)
 
       if (child.node.nodeType === "page") {
-        const write = ensureWrite(homeThunk())
-        write.children.push({ depth: 0, text: reverseMarkdownParsing(child.node) })
-        for (const extra of extraLinesOf(child, 0)) write.children.push(extra)
-
+        // A frontmatter-declared child already records its parent; only its
+        // own descendants (routed into its own home below) need filing.
+        if (checked && !isFrontmatterRelation(graph, child)) {
+          const write = ensureWrite(homeThunk())
+          write.children.push({ depth: 0, text: reverseMarkdownParsing(child.node) })
+          for (const extra of extraLinesOf(child, 0)) write.children.push(extra)
+        }
         let childHome: OrganiseHome | null = null
         visit(child, () => childHome ?? (childHome = resolveHome(child.key)), 0)
-      } else {
+      } else if (checked) {
         const write = ensureWrite(homeThunk())
         const date = formatOccurrenceDate(child.node)
         // Only the mention's own line gets a date; extra lines never do,
@@ -213,6 +228,10 @@ export function planOrganiseWrites(
         for (const extra of extraLinesOf(child, depth)) write.mentions.push(extra)
 
         visit(child, homeThunk, depth + 1)
+      } else {
+        // The mention's own line stays behind, so its checked sub-lines take
+        // its place in the nesting rather than hanging one level too deep.
+        visit(child, homeThunk, depth)
       }
     }
   }
@@ -225,67 +244,58 @@ export function planOrganiseWrites(
 
 export type PullDeletion = { key: string; location: Location }
 
-/**
- * A source line is safe to delete only if every one of its (non-folder)
- * graph children is itself checked somewhere in this pull - `checkedKeys` is
- * gathered across the *whole* tree (not just this node's immediate pulled
- * children), so a node deduplicated away from this position (because it was
- * already placed elsewhere in the subtree) still counts as accounted for.
- * A child that exists in the graph but was never surfaced at all - because
- * the depth-5 cap truncated it - is, by construction, never in `checkedKeys`,
- * so a line with a real, un-offered descendant is correctly never deleted.
- *
- * Note: for a node whose identity is shared across multiple physical
- * occurrences in the vault (a bare-wikilink reference, merged by content),
- * this check is global rather than per-occurrence - the graph does not
- * record which specific occurrence produced a given edge. In practice this
- * only makes the check *more* conservative (an unrelated occurrence
- * elsewhere in the vault can block a deletion that would otherwise be safe
- * for this specific line), never less - consistent with "don't be
- * aggressive".
- *
- * Exception: a child edge into `key`'s *own document body* (`isOwnBodyEdge`
- * above) is exempt from the "must be checked" requirement. That content is
- * never offered as a pull candidate in the first place (see `buildPullTree`),
- * so it could never be in `checkedKeys` - without this exemption, a real page
- * that has accumulated any content of its own could never have a bullet
- * referencing it deleted, anywhere, ever again (its own body edges would
- * permanently fail the "every child checked" test). Own-body content isn't
- * affected by removing *this* particular reference bullet regardless - it
- * lives in the target's own file either way.
- */
-function isSafeToDeleteSource(graph: NotesGraph, key: string, checkedKeys: Set<string>): boolean {
-  const ownPath = ownBodyPath(graph, key)
-  return graph
-    .outboundEdgeEntries(key)
-    .filter(e => e.attributes.type !== "folder")
-    .filter(e => !isOwnBodyEdge(graph, ownPath, e))
-    .every(e => checkedKeys.has(e.target))
-}
+const lineKey = (location: Location): string => `${location.path}:${location.position.start.line}`
 
 /**
  * Source lines to delete after a pull is applied. `root` itself is never a
- * candidate - only pulled descendants are ever removed from their source.
+ * candidate - only checked descendants are ever removed from their source,
+ * and never a frontmatter-declared relation (its "line" is the `---`
+ * delimiter). Unchecked nodes are never deleted, but their descendants are
+ * still considered, mirroring `planOrganiseWrites`.
+ *
+ * A candidate line is only deleted if every line that can be physically
+ * nested under it is deleted too - otherwise the survivors would be
+ * silently re-parented under whatever bullet precedes them. Those are the
+ * line's graph children recorded in the *same file, below it*; each must
+ * itself be a surviving candidate *at that exact location*. Location, not
+ * node key, is what matters: a key deduplicated to a different position in
+ * the pull tree (e.g. placed at its frontmatter relation) is not deleted
+ * here, so it can't vouch for this occurrence. A child the depth cap never
+ * surfaced is never a candidate, so it blocks too. Children recorded in
+ * other files - mentions elsewhere, a page's own body, a child's frontmatter
+ * relation - are not nested under this line and are unaffected by removing
+ * it. The pruning repeats until stable, since dropping one candidate can
+ * block its parent. Conservative in one direction only: a later same-file
+ * line from another occurrence of the same key is treated as nested.
  */
 export function planDeletions(graph: NotesGraph, root: PullNode, isChecked: (key: string) => boolean): PullDeletion[] {
-  const checkedKeys = new Set<string>()
+  const candidates = new Map<string, { node: PullNode; nested: string[] }>()
   ;(function collect(node: PullNode): void {
     for (const child of node.children) {
-      if (isChecked(child.key)) checkedKeys.add(child.key)
+      if (isChecked(child.key) && !isFrontmatterRelation(graph, child)) {
+        const at = child.node.location
+        const nested = graph
+          .outboundEdgeEntries(child.key)
+          .filter(e => e.attributes.type !== "folder"
+            && e.attributes.location.path === at.path
+            && e.attributes.location.position.start.line > at.position.start.line)
+          .map(e => lineKey(e.attributes.location))
+        candidates.set(lineKey(at), { node: child, nested })
+      }
       collect(child)
     }
   })(root)
 
-  const deletions: PullDeletion[] = []
-  ;(function visit(node: PullNode): void {
-    for (const child of node.children) {
-      if (!isChecked(child.key)) continue
-      if (isSafeToDeleteSource(graph, child.key, checkedKeys)) {
-        deletions.push({ key: child.key, location: child.node.location })
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const [key, candidate] of candidates) {
+      if (candidate.nested.some(k => !candidates.has(k))) {
+        candidates.delete(key)
+        changed = true
       }
-      visit(child)
     }
-  })(root)
+  }
 
-  return deletions
+  return Array.from(candidates.values(), ({ node }) => ({ key: node.key, location: node.node.location }))
 }

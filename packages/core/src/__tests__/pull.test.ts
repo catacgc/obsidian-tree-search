@@ -211,7 +211,7 @@ describe("Pull children - end-to-end example", () => {
     const rootHome: OrganiseHome = { path: "Organising.md", exists: true }
     const resolveHome = (key: string): OrganiseHome => ({ path: `home-for-${key}`, exists: false })
 
-    const writes = planOrganiseWrites(tree, rootHome, checkAll, resolveHome)
+    const writes = planOrganiseWrites(g, tree, rootHome, checkAll, resolveHome)
 
     const rootWrite = writes.find(w => w.home.path === "Organising.md")!
     expect(rootWrite.children).toEqual([{ depth: 0, text: "[[Child]]" }])
@@ -229,22 +229,21 @@ describe("Pull children - end-to-end example", () => {
     expect(deletions.some(d => d.key === "[[parent]]")).toBe(false)
   })
 
-  it("does not delete a line whose child was left unchecked", () => {
+  it("leaves an unchecked line in place without blocking lines it isn't nested under", () => {
     const g = freshGraph()
     const tree = buildPullTree(g, "[[parent]]")!
     const childKey = tree.children[0].key // "[[child]]"
     const urlLineKey = tree.children[0].children[0].key
 
-    // Leave the URL mention line unchecked.
+    // Leave the URL mention line (in 2025-03-22.md) unchecked.
     const isChecked = (key: string) => key !== urlLineKey
     const deletions = planDeletions(g, tree, isChecked)
 
-    // [[Child]]'s daily-note-1 anchor line now has an un-pulled child -> not deletable.
-    expect(deletions.some(d => d.key === childKey)).toBe(false)
-    // The unchecked line itself was never a delete candidate either.
+    // The unchecked line itself is never deleted.
     expect(deletions.some(d => d.key === urlLineKey)).toBe(false)
-    // The other (checked, childless) mention line is still safe to delete.
-    expect(deletions).toHaveLength(1)
+    // [[Child]]'s bullet in 2025-03-20.md has nothing nested under it there,
+    // and the other checked mention is childless: both are removed.
+    expect(deletions.map(d => d.key).sort()).toEqual([childKey, tree.children[0].children[1].key].sort())
   })
 
   it("routes a page-child's own text-mentions into that child's resolved home, not the root's", () => {
@@ -254,7 +253,7 @@ describe("Pull children - end-to-end example", () => {
     const resolveHome = (key: string): OrganiseHome =>
       key === "[[child]]" ? { path: "Child.md", exists: false } : { path: "Organising.md", exists: true }
 
-    const writes = planOrganiseWrites(tree, rootHome, checkAll, resolveHome)
+    const writes = planOrganiseWrites(g, tree, rootHome, checkAll, resolveHome)
 
     const childWrite = writes.find(w => w.home.path === "Child.md")!
     expect(childWrite.children).toEqual([])
@@ -279,7 +278,7 @@ describe("Pull children - end-to-end example", () => {
     // Only [[Child]] itself is checked - none of its own mention children are.
     const isChecked = (key: string) => key === childKey
 
-    const writes = planOrganiseWrites(tree, { path: "Organising.md", exists: true }, isChecked, resolveHome)
+    const writes = planOrganiseWrites(g, tree, { path: "Organising.md", exists: true }, isChecked, resolveHome)
 
     expect(resolveHomeCalls).toEqual([])
     expect(writes).toHaveLength(1)
@@ -290,12 +289,9 @@ describe("Pull children - end-to-end example", () => {
   it("omits a home from the result entirely when nothing is checked", () => {
     const g = freshGraph()
     const tree = buildPullTree(g, "[[parent]]")!
-    const writes = planOrganiseWrites(
-      tree,
-      { path: "Organising.md", exists: true },
-      () => false,
-      () => ({ path: "unused", exists: false }),
-    )
+    const writes = planOrganiseWrites(g, tree, { path: "Organising.md", exists: true },
+    () => false,
+    () => ({ path: "unused", exists: false }),)
     expect(writes).toEqual([])
   })
 
@@ -314,7 +310,7 @@ describe("Pull children - end-to-end example", () => {
     const resolveHomeDistinct = (key: string): OrganiseHome =>
       key === "[[a]]" ? { path: "A.md", exists: false } : { path: "B.md", exists: false }
 
-    const writesDistinct = planOrganiseWrites(tree, rootHome, checkAll, resolveHomeDistinct)
+    const writesDistinct = planOrganiseWrites(g, tree, rootHome, checkAll, resolveHomeDistinct)
 
     expect(writesDistinct).toHaveLength(3) // Organising.md, A.md, B.md
     const orgWrite = writesDistinct.find(w => w.home.path === "Organising.md")!
@@ -328,7 +324,7 @@ describe("Pull children - end-to-end example", () => {
     // Second: siblings resolving to the same home get merged into one SectionWrite.
     const resolveHomeSame = (): OrganiseHome => ({ path: "Common.md", exists: false })
 
-    const writesSame = planOrganiseWrites(tree, rootHome, checkAll, resolveHomeSame)
+    const writesSame = planOrganiseWrites(g, tree, rootHome, checkAll, resolveHomeSame)
 
     expect(writesSame).toHaveLength(2) // Organising.md, Common.md
     const orgWriteSame = writesSame.find(w => w.home.path === "Organising.md")!
@@ -368,7 +364,7 @@ describe("Pull children - end-to-end example", () => {
       return rootHome
     }
 
-    const writes = planOrganiseWrites(tree, rootHome, checkAll, resolveHome)
+    const writes = planOrganiseWrites(g, tree, rootHome, checkAll, resolveHome)
 
     // Only two homes: root and Child.md. Grandchild.md never gets a
     // SectionWrite at all, since its only content is its own already-there
@@ -415,7 +411,7 @@ describe("planOrganiseWrites - nested text children", () => {
     expect(parentLine.children).toHaveLength(1)
 
     const rootHome: OrganiseHome = { path: "Organising.md", exists: true }
-    const writes = planOrganiseWrites(tree, rootHome, checkAll, () => rootHome)
+    const writes = planOrganiseWrites(g, tree, rootHome, checkAll, () => rootHome)
 
     const write = writes.find(w => w.home.path === "Organising.md")!
     expect(write.mentions.map(l => l.depth)).toEqual([0, 1])
@@ -443,7 +439,7 @@ describe("planOrganiseWrites - nested text children", () => {
     const extraLinesOf = (node: PullNode, depth: number): PullLine[] =>
       node.key === mentionNode.key ? [{ depth: depth + 1, text: "test2" }, { depth: depth + 1, text: "test3" }] : []
 
-    const writes = planOrganiseWrites(tree, rootHome, checkAll, () => rootHome, extraLinesOf)
+    const writes = planOrganiseWrites(g, tree, rootHome, checkAll, () => rootHome, extraLinesOf)
 
     const write = writes.find(w => w.home.path === "Organising.md")!
     expect(write.mentions).toEqual([
@@ -472,7 +468,7 @@ describe("planOrganiseWrites - nested text children", () => {
         ? [{ depth: depth + 1, text: "some detail" }, { depth: depth + 1, text: "more detail" }]
         : []
 
-    const writes = planOrganiseWrites(tree, rootHome, checkAll, () => rootHome, extraLinesOf)
+    const writes = planOrganiseWrites(g, tree, rootHome, checkAll, () => rootHome, extraLinesOf)
 
     const write = writes.find(w => w.home.path === "Organising.md")!
     expect(write.children).toEqual([
@@ -564,7 +560,7 @@ describe("Organise -> reindex -> re-organise idempotency", () => {
     const resolveHome1 = (key: string): OrganiseHome =>
       key === "[[child]]" ? { path: "Child.md", exists: false } : rootHome
 
-    const writes1 = planOrganiseWrites(tree1, rootHome, checkAll, resolveHome1)
+    const writes1 = planOrganiseWrites(g, tree1, rootHome, checkAll, resolveHome1)
     const dels1 = planDeletions(g, tree1, checkAll)
 
     // Sanity check on the "before" state: both homes get a write, and both
@@ -624,7 +620,7 @@ describe("Organise -> reindex -> re-organise idempotency", () => {
     const resolveHome2 = (key: string): OrganiseHome =>
       key === "[[child]]" ? { path: "Child.md", exists: true } : rootHome
 
-    const writes2 = planOrganiseWrites(tree2, rootHome, checkAll, resolveHome2)
+    const writes2 = planOrganiseWrites(g, tree2, rootHome, checkAll, resolveHome2)
     const dels2 = planDeletions(g, tree2, checkAll)
 
     const childWrite2 = writes2.find(w => w.home.path === "Child.md")
@@ -735,7 +731,7 @@ describe("Reparenting via a hand-nested organise:children link", () => {
     const resolveHome = (key: string): OrganiseHome =>
       key === "[[a]]" ? { path: "A.md", exists: true } : rootHome
 
-    const writes = planOrganiseWrites(tree, rootHome, checkAll, resolveHome)
+    const writes = planOrganiseWrites(g, tree, rootHome, checkAll, resolveHome)
     const deletions = planDeletions(g, tree, checkAll)
 
     const files = new Map<string, string>([
@@ -767,5 +763,140 @@ describe("Reparenting via a hand-nested organise:children link", () => {
       "## Notes\n" +
       "- some existing detail"
     )
+  })
+})
+
+// ── Frontmatter-declared parent relation ─────────────────────────────────────
+
+describe("Consolidating a parent that a child declares via frontmatter `parent:`", () => {
+  it("never deletes the child's frontmatter delimiter, and still files the child's mentions into its own note", () => {
+    // The indexer records a frontmatter `parent: "[[Root]]"` edge at the
+    // child page's own location - line 0 of Child.md, its opening `---`.
+    // There is no bullet to remove or relocate: the hierarchy is already
+    // declared where it belongs.
+    const rootContent = "---\ntags: [x]\n---\n- intro"
+    const childContent = "---\nparent: \"[[Root]]\"\n---\n- own detail"
+    const dailyContent = "- [[Child]] met today"
+    const g = buildGraph(parse(rootContent, "Root.md"), parse(childContent, "Child.md"), parse(dailyContent, "2025-03-20.md"))
+
+    const tree = buildPullTree(g, "[[root]]")!
+    const rootHome: OrganiseHome = { path: "Root.md", exists: true }
+    const resolveHome = (key: string): OrganiseHome =>
+      key === "[[child]]" ? { path: "Child.md", exists: true } : rootHome
+
+    const writes = planOrganiseWrites(g, tree, rootHome, checkAll, resolveHome)
+    const deletions = planDeletions(g, tree, checkAll)
+
+    const files = new Map<string, string>([
+      ["Root.md", rootContent],
+      ["Child.md", childContent],
+      ["2025-03-20.md", dailyContent],
+    ])
+    applyPlanToFiles(files, writes, deletions)
+
+    expect(files.get("Root.md")).toBe(rootContent)
+    expect(files.get("Child.md")).toBe(
+      "---\nparent: \"[[Root]]\"\n---\n" +
+      "<!-- organise:children -->\n" +
+      "<!-- /organise:children -->\n" +
+      "\n" +
+      "<!-- organise:mentions -->\n" +
+      "- [[Child]] met today 2025-03-20\n" +
+      "<!-- /organise:mentions -->\n" +
+      "\n" +
+      "- own detail"
+    )
+    expect(files.get("2025-03-20.md")).toBe("")
+  })
+})
+
+// ── Selective consolidation (sub-topic rows unchecked) ───────────────────────
+
+describe("Selective consolidation", () => {
+  it("still files a checked mention whose parent topic row is unchecked", () => {
+    // The consolidate pane leaves sub-topic rows unchecked by default; the
+    // user must still be able to check an individual line beneath one.
+    const g = buildGraph(
+      parse("- [[Parent]]\n  - [[Child]]", "2025-03-20.md"),
+      parse("- [[Child]] http://test-url\n- [[Child]] test note without url", "2025-03-22.md"),
+    )
+    const tree = buildPullTree(g, "[[parent]]")!
+    const childKey = tree.children[0].key
+    const isChecked = (key: string) => key !== childKey
+    const rootHome: OrganiseHome = { path: "Organising.md", exists: true }
+    const resolveHome = (key: string): OrganiseHome =>
+      key === "[[child]]" ? { path: "Child.md", exists: true } : rootHome
+
+    const writes = planOrganiseWrites(g, tree, rootHome, isChecked, resolveHome)
+    expect(writes.map(w => w.home.path)).toEqual(["Child.md"])
+    expect(writes[0].mentions.map(l => l.text)).toEqual([
+      "[[Child]] [http://test-url](http://test-url) 2025-03-22",
+      "[[Child]] test note without url 2025-03-22",
+    ])
+
+    const deletions = planDeletions(g, tree, isChecked)
+    expect(deletions.map(d => d.location.path)).toEqual(["2025-03-22.md", "2025-03-22.md"])
+  })
+
+  it("promotes a checked sub-line to its unchecked parent mention's depth", () => {
+    const g = buildGraph(parse(
+      "- [[A]] [[B]] notes\n  - [Gaps](https://example.com) 2024-06-02",
+      "Source.md",
+    ))
+    const tree = buildPullTree(g, "[[a]]")!
+    const parentLine = tree.children[0]
+    const rootHome: OrganiseHome = { path: "Organising.md", exists: true }
+
+    const writes = planOrganiseWrites(g, tree, rootHome, key => key !== parentLine.key, () => rootHome)
+    expect(writes[0].mentions.map(l => l.depth)).toEqual([0])
+    expect(writes[0].mentions[0].text).toContain("Gaps")
+  })
+
+  it("never deletes a checked line while an unchecked line stays nested under it", () => {
+    // Deleting "meeting" would leave "[[Topic]]" and its unchecked detail
+    // re-parented under whatever bullet precedes them in the daily note.
+    const daily = "- [[Root]] meeting\n  - [[Topic]]\n    - detail http://x.com"
+    const g = buildGraph(parse(daily, "2025-03-20.md"))
+    const tree = buildPullTree(g, "[[root]]")!
+    const detailKey = tree.children[0].children[0].children[0].key
+
+    const deletions = planDeletions(g, tree, key => key !== detailKey)
+    expect(deletions).toEqual([])
+  })
+
+  it("never deletes a line whose nested child is placed elsewhere in the tree and so stays behind", () => {
+    // Himalaya.md shape: [[Risks]] is nested under [[Program]], but Risks.md
+    // also declares `parent: [[Root]]`, so the pull tree places [[Risks]] at
+    // its frontmatter position (never deleted). Deleting Program's line
+    // would leave "- [[Risks]]" re-parented under the preceding bullet.
+    const g = buildGraph(
+      parse("---\nparent: \"[[Root]]\"\n---\n", "Risks.md"),
+      parse("- [[Other]]\n- [[Program]]\n\t- [[Risks]]", "Root.md"),
+    )
+    const tree = buildPullTree(g, "[[root]]")!
+    expect(tree.children.map(c => c.key)).toContain("[[risks]]")
+
+    const deletedLines = planDeletions(g, tree, checkAll)
+      .filter(d => d.location.path === "Root.md")
+      .map(d => d.location.position.start.line)
+    expect(deletedLines).not.toContain(1)
+    expect(deletedLines).not.toContain(2)
+  })
+
+  it("deletes a moved line even when its topic is mentioned, unchecked, in another note", () => {
+    // 2024-Aug-W32 shape: "[[Costs]]" is nested under "[[Root]]" in a weekly
+    // note, and [[Costs]] is also mentioned in a later daily note. That
+    // mention (a sub-topic row, unchecked by default) is not nested under
+    // the weekly line, so it must not turn the move into a copy.
+    const g = buildGraph(
+      parse("- [[Root]]\n  - [[Costs]]", "2024-08-10.md"),
+      parse("- [[Costs]] explorer notes http://x.com", "2025-05-01.md"),
+    )
+    const tree = buildPullTree(g, "[[root]]")!
+    const costs = tree.children.find(c => c.key === "[[costs]]")!
+    const mentionKey = costs.children[0].key
+
+    const deletions = planDeletions(g, tree, key => key !== mentionKey)
+    expect(deletions.map(d => `${d.location.path}:${d.location.position.start.line}`)).toEqual(["2024-08-10.md:1"])
   })
 })

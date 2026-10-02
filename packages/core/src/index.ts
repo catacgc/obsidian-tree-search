@@ -55,6 +55,7 @@ export {
   formatOccurrenceDate,
   planOrganiseWrites,
   planDeletions,
+  isFrontmatterRelation,
   renderPullLine,
   type PullNode,
   type PullLine,

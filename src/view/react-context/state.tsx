@@ -8,7 +8,7 @@ type TextTokenWithLocationLink = { tokenType: "text"; text: string; decoration: 
 import {createScope, molecule} from "bunshi";
 import {App} from "obsidian";
 import {GlobalAtoms} from "./global";
-import {separatorAtom} from "./settings";
+import {searchViewModesAtom, separatorAtom, type SearchViewMode} from "./settings";
 import {atomWithDefault} from "jotai/utils";
 import {withAtomEffect} from "jotai-effect";
 
@@ -249,9 +249,11 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         return get(treeNodesAtom)[sel]
     })
 
-    const timelineActiveAtom = atom(get => scp.allowTimeline === true && get(GlobalAtoms.searchViewModeAtom) === "timeline")
+    // Per-view (scope name) Tree/Timeline mode, persisted to data.json by main.ts.
+    const viewModeAtom = atom<SearchViewMode>(get => get(searchViewModesAtom)[scp.name] ?? "tree")
+    const timelineActiveAtom = atom(get => scp.allowTimeline === true && get(viewModeAtom) === "timeline")
     const toggleViewModeAtom = atom(null, (get, set) =>
-        set(GlobalAtoms.searchViewModeAtom, get(GlobalAtoms.searchViewModeAtom) === "timeline" ? "tree" : "timeline"))
+        set(searchViewModesAtom, {...get(searchViewModesAtom), [scp.name]: get(viewModeAtom) === "timeline" ? "tree" : "timeline"}))
     // View-local recency filter; narrows the timeline without touching the query.
     const timelineWindowAtom = atom<TimelineWindow>("all")
     // Raw results of the last search, kept so mode/window changes can re-project

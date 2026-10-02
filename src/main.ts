@@ -9,24 +9,13 @@ import {ContextCodeBlock} from "./view/markdown-code-block/ContextCodeBlock";
 import {SearchModal} from "./view/search-modal/SearchModal";
 import {archiveLine, archivePage, highlightLine, insertLine, moveToFolder, openFileByName, revealFolder, showFolder, unarchiveLine, unarchivePage} from './obsidian-utils';
 import {createStore} from 'jotai';
-import {getSettings, updateSettings} from './view/react-context/settings';
+import {getPluginData, getSettings, searchViewModesAtom, updateSettings} from './view/react-context/settings';
 import './view/styles.css';
 import {GlobalAtoms} from "./view/react-context/global";
 import {resetDefaultInjector} from "bunshi";
 import {RaycastServer} from "./view/raycast/raycast-server";
 import {HOVER_SOURCE_ID} from "./view/hover-preview";
 import {ORGANISE_VIEW, OrganiseView, type OrganiseViewState} from "./view/organise-notes/OrganiseView";
-
-// Extracts the graph key ([[page]] or page#header) for the first wikilink on
-// `line`, so "Consolidate notes" can resolve a root node from wherever the
-// cursor happens to sit.
-function extractLinkKeyFromLine(line: string): string | null {
-    const match = line.match(/\[\[([^\]|#]+)(?:#([^\]|]+))?/);
-    if (!match) return null;
-    const page = match[1].trim().toLowerCase();
-    const header = match[2]?.trim().toLowerCase();
-    return header ? `${page}#${header}` : `[[${page}]]`;
-}
 
 export default class TreeSearchPlugin extends Plugin {
     index: IndexedTree
@@ -124,7 +113,7 @@ export default class TreeSearchPlugin extends Plugin {
         this.addCommand({
             id: 'organise-notes',
             name: 'Consolidate notes',
-            editorCallback: async (editor) => {
+            callback: async () => {
                 const activeFile = this.app.workspace.getActiveFile()
 
                 if (!activeFile) {
@@ -132,12 +121,10 @@ export default class TreeSearchPlugin extends Plugin {
                     return
                 }
 
-                // A wikilink under the cursor takes precedence (lets you organise
-                // a different page's children into the current note); otherwise
-                // fall back to the active note's own key, so running the command
-                // anywhere in Parent.md organises [[parent]]'s children.
-                const rootKey = extractLinkKeyFromLine(editor.getLine(editor.getCursor().line))
-                    ?? `[[${activeFile.basename.toLowerCase()}]]`
+                // Always the active note itself - never a wikilink under the
+                // cursor, which silently retargeted the pane at that sub-topic
+                // and pulled its children up into this (their grandparent) note.
+                const rootKey = `[[${activeFile.basename.toLowerCase()}]]`
 
                 // Reindex the organising note before building the preview, so a
                 // run shortly after a previous one (e.g. from a different root)
@@ -151,6 +138,8 @@ export default class TreeSearchPlugin extends Plugin {
 
         this.addSettingTab(new SettingsTab(this.app, this));
         await this.loadSettings();
+        // Tree/Timeline toggles write searchViewModesAtom; persist each change.
+        this.register(this.globalStore.sub(searchViewModesAtom, () => { void this.saveSettings() }))
 
         this.server = new RaycastServer(this.globalStore);
         this.server.start();
@@ -268,7 +257,7 @@ export default class TreeSearchPlugin extends Plugin {
     }
 
     async saveSettings() {
-        await this.saveData(getSettings(this.globalStore));
+        await this.saveData(getPluginData(this.globalStore));
     }
 }
 

@@ -3,6 +3,8 @@ import type { Frontmatter } from "./frontmatter.ts"
 
 const LIST_ITEM_RE = /^(\s*)(?:[-*+]|\d+\.)\s+(.*)/
 const HEADER_RE = /^(#{1,6})\s+(.*)/
+// Any list marker, including an empty bullet ("-" alone); used only for outline-break detection
+const LIST_MARKER_RE = /^\s*(?:[-*+]|\d+\.)(?:\s|$)/
 const TASK_RE = /^\[([ xX])\]\s+(.*)/
 const INLINE_TAG_RE = /#([\w/]+)/g
 const META_ACTION_RE = /\(meta-action-[\w-]+::[^)]*\)/g
@@ -27,6 +29,7 @@ function shouldSkip(text: string, archiveTag: string): boolean {
  *  - headers: HeadingCache[]
  *
  * Mimics the output that Obsidian's Dataview plugin provides via dv.page().
+ * List items are only collected from the leading outline; see `outlineEnded`.
  */
 export function scanMarkdown(
   content: string,
@@ -63,9 +66,35 @@ export function scanMarkdown(
   type HeaderEntry = { level: number; lineNum: number; text: string }
   const headerStack: HeaderEntry[] = []
 
+  // The outline is the leading run of list items; the first other content line
+  // (outside headings/comments/list continuations) starts free-form notes, whose
+  // bullets are not indexed. Headings are indexed on both sides of the break.
+  let outlineEnded = false
+  // true after a list-item line, false after a heading; indented non-list lines
+  // while true are continuations of the list item, not a break
+  let inList = false
+  // open multi-line comment block, with its closing delimiter
+  let commentClose: "-->" | "%%" | null = null
+
   for (let lineNum = bodyStartLine; lineNum < lines.length; lineNum++) {
     const line = lines[lineNum]
+    // lines inside a multi-line comment are neither headings, bullets, nor a break
+    if (commentClose) {
+      if (line.includes(commentClose)) commentClose = null
+      continue
+    }
     if (!line.trim()) continue
+
+    // ── Comment line (<!-- … -->, %% … %%) ──────────────────────────────────
+    const trimmed = line.trim()
+    if (trimmed.startsWith("<!--")) {
+      if (trimmed.indexOf("-->", 4) === -1) commentClose = "-->"
+      continue
+    }
+    if (trimmed.startsWith("%%")) {
+      if (trimmed.indexOf("%%", 2) === -1) commentClose = "%%"
+      continue
+    }
 
     // ── Header line ──────────────────────────────────────────────────────────
     const headerMatch = line.match(HEADER_RE)
@@ -88,8 +117,17 @@ export function scanMarkdown(
 
       // reset list indent stack on new section
       indentStack.length = 0
+      inList = false
       continue
     }
+
+    // ── Outline break ────────────────────────────────────────────────────────
+    if (!LIST_MARKER_RE.test(line)) {
+      if (!(inList && /^\s/.test(line))) outlineEnded = true
+      continue
+    }
+    inList = true
+    if (outlineEnded) continue
 
     // ── List item line ───────────────────────────────────────────────────────
     const listMatch = line.match(LIST_ITEM_RE)

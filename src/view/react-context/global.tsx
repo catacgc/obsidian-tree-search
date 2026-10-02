@@ -10,8 +10,6 @@ const currentModalAtom = atom<Modal | null>(null)
 const pinAtom = atom<boolean>(false)
 const parserTypeAtom = atom<"native-wasm" | "typescript">("typescript")
 
-export type SearchViewMode = "tree" | "timeline"
-
 export type GlobalStore = ReturnType<typeof getDefaultStore>
 
 export const GlobalAtoms = {
@@ -23,7 +21,4 @@ export const GlobalAtoms = {
     pinAtom,
     parserTypeAtom,
     activeFileAtom: atom<TFile | undefined>(undefined),
-    // Tree/Timeline presentation shared by the Search modal and Search pane.
-    // In-memory only: resets to "tree" on plugin reload.
-    searchViewModeAtom: atom<SearchViewMode>("tree")
 }

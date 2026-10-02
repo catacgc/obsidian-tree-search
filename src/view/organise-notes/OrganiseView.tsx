@@ -40,7 +40,9 @@ export class OrganiseView extends ItemView {
     }
 
     getDisplayText(): string {
-        return this.viewState ? `Organise: ${this.viewState.rootKey}` : "Consolidate notes";
+        if (!this.viewState) return "Consolidate notes";
+        const name = this.viewState.notePath.split("/").pop()!.replace(/\.md$/, "");
+        return `Consolidate: ${name}`;
     }
 
     getIcon(): string {

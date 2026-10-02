@@ -1,0 +1,69 @@
+/* MarkdownRenderer wraps each rendered line in a block <p> carrying the
+   theme's paragraph margins; flatten it so rows stay one line tall. */
+.ts-pull-line > p {
+	display: inline;
+	margin: 0;
+}
+
+.ts-pull-row {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--size-4-2);
+	padding: 1px 0;
+	line-height: var(--line-height-tight);
+}
+
+.ts-pull-row input[type="checkbox"] {
+	margin: 0.15em 0 0;
+	flex-shrink: 0;
+}
+
+/* Text and "source → destination" share a line when the pane is wide
+   enough; in a narrow sidebar the label wraps onto its own line instead of
+   being clipped (a clipped "Himalaya - Amazon Use Case" reads as "Himalaya"). */
+.ts-pull-body {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	column-gap: var(--size-4-2);
+}
+
+.ts-pull-text {
+	flex: 1 1 14em;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.ts-pull-meta {
+	margin-left: auto;
+	min-width: 0;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	overflow-wrap: anywhere;
+}
+
+/* Fixed slot so rows with and without a chevron keep their text aligned.
+   Two-class selectors beat Obsidian's `.clickable-icon` padding/size. */
+.ts-pull-row .ts-pull-toggle {
+	flex-shrink: 0;
+	width: 16px;
+	height: 16px;
+	padding: 0;
+	margin: 0.1em 0 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--text-faint);
+	background: transparent;
+	box-shadow: none;
+}
+
+.ts-pull-row .ts-pull-toggle svg {
+	transition: transform 100ms ease-in-out;
+}
+
+.ts-pull-row .ts-pull-toggle svg.is-expanded {
+	transform: rotate(90deg);
+}

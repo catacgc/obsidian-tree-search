@@ -266,4 +266,45 @@ describe("scanMarkdown", () => {
       expect(lists[0].text).toBe("do [[thing]]")
     })
   })
+
+  describe("outline break", () => {
+    const texts = (md: string) => scan(md).lists.map((l) => l.text)
+
+    it("indexes only the outline before the first prose line after frontmatter", () => {
+      const fm = "---\nfrontmatter: value\n---\n"
+      const md = fm + "\n- [[an]]\n - [[outline]]\n - [[in this note]]\n\nand then note text\n\n- [[Later]] bullet\n"
+      const { lists } = scanMarkdown(md, "test.md", fm.length, "archive")
+      expect(lists.map((l) => l.text)).toEqual(["[[an]]", "[[outline]]", "[[in this note]]"])
+    })
+
+    it("keeps headings after the break but not their bullets", () => {
+      const { lists, headers } = scan("- [[A]]\nprose\n## Later\n- [[B]]")
+      expect(lists.map((l) => l.text)).toEqual(["[[A]]"])
+      expect(headers.map((h) => h.heading)).toEqual(["Later"])
+    })
+
+    it("indexes no bullets when the note starts with prose", () => {
+      expect(texts("Thanks, Catalin,\n- [[A]]\n  - [[B]]")).toEqual([])
+    })
+
+    it("does not break on comments, headings, blanks, or list continuations", () => {
+      const md =
+        "<!-- organise:children -->\n- [[A]]\n<!-- /organise:children -->\n\n# H\n- [[B]]\n  continued text\n- [[C]]\n%% note %%\n- [[D]]"
+      expect(texts(md)).toEqual(["[[A]]", "[[B]]", "[[C]]", "[[D]]"])
+    })
+
+    it("skips everything inside a multi-line comment", () => {
+      expect(texts("- [[A]]\n<!--\nprose inside\n- [[Hidden]]\n-->\n- [[B]]")).toEqual(["[[A]]", "[[B]]"])
+    })
+
+    for (const b of ["```js", "![[img.png]]", "---", "> [!NOTE]", "| a | b |", "#tag", "https://x.y"]) {
+      it(`breaks the outline on ${JSON.stringify(b)}`, () => {
+        expect(texts("- [[A]]\n" + b + "\n- [[B]]")).toEqual(["[[A]]"])
+      })
+    }
+
+    it("breaks on an indented line with no list since the heading", () => {
+      expect(texts("# H\n  indented\n- [[A]]")).toEqual([])
+    })
+  })
 })
