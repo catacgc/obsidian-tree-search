@@ -15,6 +15,8 @@ export type MarkdownFieldHandle = {
     selection(): { start: number; end: number }
     setSelection(start: number, end?: number): void
     focus(): void
+    /** Obsidian's list-aware indent / outdent of the selected lines (what Tab / Shift+Tab do in a note). */
+    indent(dir: 1 | -1): void
 }
 
 type Props = {
@@ -125,6 +127,7 @@ export function MarkdownField(props: Props) {
             setSelection: (start, end = start) =>
                 cm.dispatch({selection: {anchor: clamp(start), head: clamp(end)}, scrollIntoView: true}),
             focus: () => cm.focus(),
+            indent: dir => ed.editor.exec(dir > 0 ? "indentMore" : "indentLess"),
         }
 
         const stop = (ev: Event) => {

@@ -5,6 +5,7 @@ import React, {useEffect, useLayoutEffect, useMemo, useRef, useState} from "reac
 import {useAtomValue, useSetAtom} from "jotai";
 import {useMolecule} from "bunshi/react";
 import {htmlToMarkdown, Notice, Platform, Scope, type Modifier} from "obsidian";
+import {Brackets, ClipboardPaste, IndentDecrease, IndentIncrease, Paperclip} from "lucide-react";
 import {attachmentExt, attachmentKind, attachmentName, reverseMarkdownParsing} from "@mdtree/core";
 import {GlobalAtoms} from "../react-context/global";
 import {SearchViewMolecule} from "../react-context/state";
@@ -58,6 +59,41 @@ function clipboardLinkTitle(html: string, url: string): string {
     return t === "" || strip(t) === strip(url) ? "" : t
 }
 
+/** What a paste carries: files (attachments), plain text and HTML. */
+type PasteData = { files: File[]; plain: string; html: string }
+
+/** The clipboard as paste data, for the toolbar's Paste. Non-text items become Files named "" (attachmentExt then
+ *  takes the extension from the MIME type). Where `clipboard.read` is missing or denied, plain text only via
+ *  `readText`; throws when that fails too. */
+async function readClipboard(): Promise<PasteData> {
+    let items: ClipboardItems
+    try {
+        // First await: iOS only allows it synchronously inside the tap's user gesture.
+        items = await navigator.clipboard.read()
+    } catch {
+        return {files: [], plain: await navigator.clipboard.readText(), html: ""}
+    }
+    const data: PasteData = {files: [], plain: "", html: ""}
+    let plainSeen = false
+    let htmlSeen = false
+    for (const item of items) {
+        for (const type of item.types) {
+            if (type === "text/plain") {
+                if (plainSeen) continue
+                plainSeen = true
+                data.plain = await (await item.getType(type)).text()
+            } else if (type === "text/html") {
+                if (htmlSeen) continue
+                htmlSeen = true
+                data.html = await (await item.getType(type)).text()
+            } else if (!type.startsWith("text/")) {
+                data.files.push(new File([await item.getType(type)], "", {type}))
+            }
+        }
+    }
+    return data
+}
+
 export function InlineEditor({state}: { state: EditorState }) {
     const {updateEditorAtom, cancelEditorAtom, saveEditorAtom} = useMolecule(EditorMolecule)
     const update = useSetAtom(updateEditorAtom)
@@ -82,6 +118,7 @@ export function InlineEditor({state}: { state: EditorState }) {
     const alive = useRef(false)
     const escapeRef = useRef<() => void>(() => {})
     const scopeKeyRef = useRef<(ev: KeyboardEvent) => boolean>(() => false)
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
     const [focused, setFocused] = useState<Section>("outline")
     const [contentCaret, setContentCaret] = useState(0)
@@ -259,6 +296,58 @@ export function InlineEditor({state}: { state: EditorState }) {
         else void save()
     }
 
+    // ── Mobile toolbar ────────────────────────────────────────────────────────
+    /** Section the toolbar acts on: the content field when open and last focused, else the outline. */
+    const toolSection: Section = focused === "content" && active !== null ? "content" : "outline"
+    /** An Alt-Edit outline holds one line without its prefix (`linePrefix`); indenting it would corrupt the line. */
+    const canIndent = toolSection === "content" || append
+
+    /** Toolbar Insert link: wraps the selection in `[[…]]` (empty: `[[]]`), caret before `]]`, so the link results open on the text inside. */
+    function insertLinkBrackets() {
+        const h = fieldOf(toolSection)
+        if (!h) return
+        const {text, start, end} = fieldState(h)
+        applyEdit(toolSection, {...wrapSelection(text, start, end, "[[", "]]"), caret: end + 2, selectionEnd: undefined})
+    }
+
+    /** Toolbar Indent / Outdent: Tab / Shift+Tab of the focused field. */
+    function indentLine(dir: 1 | -1) {
+        const h = fieldOf(toolSection)
+        if (!h || !canIndent) return
+        if (toolSection === "content") {
+            h.indent(dir)
+            h.focus()
+            return
+        }
+        const {text, start} = fieldState(h)
+        applyEdit("outline", outlineIndent(text, start, dir))
+    }
+
+    /** Toolbar Paste: the clipboard through pasteInto, as if pasted into the focused field. */
+    async function pasteFromClipboard() {
+        const section = toolSection
+        let data: PasteData
+        try {
+            data = await readClipboard()
+        } catch (err) {
+            new Notice(`Can't read the clipboard: ${err instanceof Error ? err.message : String(err)}`)
+            return
+        }
+        if (!alive.current) return
+        if (data.files.length === 0 && data.plain === "" && data.html === "") {
+            new Notice("The clipboard is empty")
+            return
+        }
+        pasteInto(section, data, false, false)
+    }
+
+    /** Files chosen with the toolbar's Attach: attached like a paste or drop (§3.5). */
+    function onPickFiles(ev: React.ChangeEvent<HTMLInputElement>) {
+        const files = Array.from(ev.currentTarget.files ?? [])
+        ev.currentTarget.value = ""   // picking the same file again fires change again
+        if (files.length > 0) onDropFiles(toolSection, files)
+    }
+
     // ── Keys ──────────────────────────────────────────────────────────────────
     /** True when handled: the field then keeps the key from CodeMirror and Obsidian. */
     function onKeyDown(ev: KeyboardEvent, section: Section): boolean {
@@ -384,32 +473,39 @@ export function InlineEditor({state}: { state: EditorState }) {
         else applyEdit(section, insertAtCaret(current, at, names.map(n => `![[${n}]]`).join(section === "outline" ? " " : "\n")))
     }
 
-    /** Files become session attachments; a pasted URL becomes a markdown link (EDITOR.md §3.8); outline text
-     *  is re-shaped (§3.2). True when handled; otherwise Obsidian's own paste runs. */
     function onPaste(ev: ClipboardEvent, section: Section): boolean {
-        const plain = plainPaste.current
+        const plainOnly = plainPaste.current
         plainPaste.current = false
+        const cd = ev.clipboardData
+        return pasteInto(section, {files: Array.from(cd?.files ?? []), plain: cd?.getData("text/plain") ?? "", html: cd?.getData("text/html") ?? ""}, plainOnly, true)
+    }
+
+    /** Files become session attachments (EDITOR.md §3.5); a URL becomes a markdown link (§3.8) unless `plainOnly`;
+     *  outline text is re-shaped (§3.2). `native`: called from the field's paste event, where false lets Obsidian's
+     *  own paste run (content section text); the toolbar inserts that text itself. True when handled. */
+    function pasteInto(section: Section, data: PasteData, plainOnly: boolean, native: boolean): boolean {
         const h = fieldOf(section)
         if (!h) return false
         const {text, start, end} = fieldState(h)
-        const files = Array.from(ev.clipboardData?.files ?? [])
-        if (files.length > 0) {
-            void pasteFiles(section, files, text, start)
+        if (data.files.length > 0) {
+            void pasteFiles(section, data.files, text, start)
             return true
         }
-        const url = plain ? null : pastedUrl(ev.clipboardData?.getData("text/plain") ?? "")
+        const url = plainOnly ? null : pastedUrl(data.plain)
         if (url !== null) {
-            const html = ev.clipboardData?.getData("text/html") ?? ""
-            const edit = pasteLink(text, start, end, url, html === "" ? "" : clipboardLinkTitle(html, url))
+            const edit = pasteLink(text, start, end, url, data.html === "" ? "" : clipboardLinkTitle(data.html, url))
             if (edit) {
                 applyEdit(section, edit)
                 return true
             }
         }
-        if (section === "content") return false
-        const html = plain ? "" : ev.clipboardData?.getData("text/html") ?? ""
-        const pasted = (html !== "" && autoConvertHtml(app) ? htmlToMarkdown(html) : ev.clipboardData?.getData("text/plain") ?? "")
+        const pasted = (!plainOnly && data.html !== "" && autoConvertHtml(app) ? htmlToMarkdown(data.html) : data.plain)
             .replace(/\r\n?/g, "\n")
+        if (section === "content") {
+            if (native) return false
+            if (pasted !== "") applyEdit("content", insertAtCaret(text.slice(0, start) + text.slice(end), start, pasted))
+            return true
+        }
         if (append) {
             const edit = pasteOutline(text, start, end, pasted)
             if (edit) applyEdit("outline", edit)
@@ -487,6 +583,20 @@ export function InlineEditor({state}: { state: EditorState }) {
                     {...fieldProps("content")}
                 />
             </div>
+        </div>}
+
+        {Platform.isMobile && <div className="ts-editor-toolbar">
+            <button className="ts-editor-tool clickable-icon" aria-label="Insert link" disabled={state.saving}
+                onMouseDown={ev => ev.preventDefault()} onClick={insertLinkBrackets}><Brackets size={18}/></button>
+            <button className="ts-editor-tool clickable-icon" aria-label="Indent" disabled={state.saving || !canIndent}
+                onMouseDown={ev => ev.preventDefault()} onClick={() => indentLine(1)}><IndentIncrease size={18}/></button>
+            <button className="ts-editor-tool clickable-icon" aria-label="Outdent" disabled={state.saving || !canIndent}
+                onMouseDown={ev => ev.preventDefault()} onClick={() => indentLine(-1)}><IndentDecrease size={18}/></button>
+            <button className="ts-editor-tool clickable-icon" aria-label="Paste" disabled={state.saving}
+                onMouseDown={ev => ev.preventDefault()} onClick={() => void pasteFromClipboard()}><ClipboardPaste size={18}/></button>
+            <button className="ts-editor-tool clickable-icon" aria-label="Attach file" disabled={state.saving}
+                onMouseDown={ev => ev.preventDefault()} onClick={() => fileInputRef.current?.click()}><Paperclip size={18}/></button>
+            <input ref={fileInputRef} type="file" multiple hidden onChange={onPickFiles}/>
         </div>}
 
         {previewText.trim() !== "" && <div className="ts-editor-preview">

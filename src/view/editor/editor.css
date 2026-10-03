@@ -109,6 +109,31 @@
     padding-bottom: 0;
 }
 
+/* The fields never render embeds (images, PDFs, notes): the widget shows its link text; the preview below shows thumbnails.
+   Some widgets (PDF) are sized boxes of their own, so the box collapses to the text. */
+.ts-inline-editor .ts-editor-text .internal-embed {
+    display: inline;
+    width: auto;
+    height: auto;
+    border: none;
+    padding: 0;
+    margin: 0;
+}
+
+.ts-inline-editor .ts-editor-text .internal-embed > * {
+    display: none;
+}
+
+.ts-inline-editor .ts-editor-text .internal-embed::before {
+    content: "![[" attr(src) "]]";
+    color: var(--text-muted);
+}
+
+/* With the caret on it, live preview reveals the embed's source (`.cm-formatting-embed`) next to some widgets (PDF). */
+.ts-inline-editor .ts-editor-text .cm-line:has(.cm-formatting-embed) .internal-embed {
+    display: none;
+}
+
 .ts-inline-editor .ts-editor-text .cm-editor.cm-focused {
     outline: none;
 }
@@ -142,11 +167,42 @@
     padding: 0 4px;
 }
 
+/* Mobile toolbar (InlineEditor): icon buttons under the last field. */
+.ts-editor-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
 .ts-editor-preview {
     max-height: calc(6 * 1.5em);
     overflow: hidden;
     font-size: var(--font-ui-small);
     color: var(--text-muted);
+}
+
+/* Pasted images as small thumbnails, inline with the text. */
+.ts-editor-preview .image-embed,
+.ts-editor-preview .image-wrapper {
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.ts-editor-preview .image-embed {
+    margin: 0 2px;
+}
+
+.ts-editor-preview .image-embed img {
+    width: auto;
+    height: auto;
+    max-width: 64px;
+    max-height: 48px;
+    object-fit: cover;
+    border-radius: var(--radius-s);
+}
+
+.ts-editor-preview .embed-actions {
+    display: none;
 }
 
 .ts-editor-footer {

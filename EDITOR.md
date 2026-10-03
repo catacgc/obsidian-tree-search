@@ -78,8 +78,11 @@ From top to bottom:
 
 1. **Outline section**: a markdown field, always shown (§3.2).
 2. **Content section**: a second markdown field, shown only after a note link is clicked (§3.3).
-3. **Preview**: a live preview of the focused section, rendered with `MarkdownRenderer.render` and at most 6 lines. It reuses the `MarkdownLine` component from `src/view/organise-notes/PullTreeView.tsx`. Move `MarkdownLine` to `src/view/editor/MarkdownLine.tsx` and import it from both places. Pasted attachments are already on disk (§3.5), so their embeds render in the preview.
-4. **Footer hints** (§3.6).
+3. **Mobile toolbar** (`Platform.isMobile` only): icon buttons acting on the last focused field (§3.9).
+4. **Preview**: a live preview of the focused section, rendered with `MarkdownRenderer.render` and at most 6 lines. It reuses the `MarkdownLine` component from `src/view/organise-notes/PullTreeView.tsx`. Move `MarkdownLine` to `src/view/editor/MarkdownLine.tsx` and import it from both places. Pasted attachments are already on disk (§3.5), so their embeds render in the preview; images show as thumbnails of at most 64×48 px (`editor.css`).
+5. **Footer hints** (§3.6).
+
+The fields never render embeds: every `![[…]]` widget (image, PDF, note) shows its link text `![[name]]`, muted, and is hidden while live preview reveals the embed's source (`.cm-formatting-embed`) on the caret line (`editor.css`).
 
 Both fields are `MarkdownField` (`src/view/editor/MarkdownField.tsx`): Obsidian's own markdown editor (CodeMirror 6 with live preview), recovered from a throwaway markdown embed in `src/view/editor/obsidian-editor.ts` the way the Kanban plugin does it (private API; if a future Obsidian removes it, the editor shows a Notice and has no fields). The editor sees a proxied `app` that hides line numbers and fold indicators, ignores the editor's `workspace.activeEditor = owner` on focus (so the field never becomes the active editor), and hands it an inert `workspace.editorSuggest` (so Obsidian's own `[[` suggest and other plugins' editor suggests never open; links use the results list, §3.4). Obsidian's hotkeys still see a focused CodeMirror field as an editor, so the editor's keys are claimed first in its Scope (§3.6). Capture listeners on the field's host run before CodeMirror and Obsidian: the owner handles file pastes and drops (§3.5), outline text pastes (§3.2) and link clicks (§3.3); Obsidian never opens a link clicked in the field. Other keys stay inside the field, except Escape. Enter that arrives through CodeMirror's keymap rather than a keydown (e.g. from an Android keyboard) gets the same outline handling. Each field starts at one line and grows up to 8 lines, then scrolls. The content field is re-created per buffer, so undo never crosses buffers. The outline gets focus on mount, with the caret restored from `EditorState.caret` (the outline caret, kept in the state and persisted with the draft). Only one editor is shown at a time: an Alt-Edit session hides the draft until it ends (§3.7).
 
@@ -231,6 +234,17 @@ A paste whose plain text, trimmed, is a single URL (`scheme://…` with no white
 - **Rich link, no selection:** when the clipboard HTML has exactly one `<a>` whose `href` is the URL (ignoring one trailing `/`) and whose text is not just the URL, the paste gives `[title](url)` with the title (brackets escaped) selected. This ignores the "Auto convert HTML" setting: no HTML is converted.
 - **Otherwise:** `[](url)` with the caret between the brackets.
 - **Raw URL:** the URL is pasted as-is right after `](` (e.g. into Mod+K's selected `url`), over a multi-line selection, or over a selected URL. **Mod+Shift+V** always pastes the raw URL.
+
+### 3.9 Mobile toolbar
+
+Soft keyboards have no Tab or Shift+Tab, and Obsidian's own mobile toolbar acts on `workspace.activeEditor`, which the fields never become (§3.1). So on mobile (`Platform.isMobile`) the editor shows its own row of icon buttons (`.ts-editor-toolbar`) between the fields and the preview. Each acts on the content section when it is open and was focused last, else on the outline. The buttons `preventDefault` on mousedown so the field keeps focus and the keyboard stays up. Desktop shows no toolbar.
+
+| Button | Action |
+|---|---|
+| Insert link | Wrap the selection in `[[…]]` (empty: `[[]]`), caret before `]]`, so the link results (§3.4) open on the text inside |
+| Indent / Outdent | Outline (Append): Tab / Shift+Tab (§3.6). Content: Obsidian's `indentMore` / `indentLess` (`MarkdownFieldHandle.indent`). Disabled in an Alt-Edit outline (one line, no prefix) |
+| Paste | Read the clipboard (`navigator.clipboard.read`, falling back to `readText`) and handle it like a paste into the field (`pasteInto`): files become attachments (§3.5), a URL a link (§3.8), outline text is re-shaped (§3.2), content text is inserted at the caret. An unreadable clipboard shows the Notice `Can't read the clipboard: <reason>`; an empty one `The clipboard is empty` |
+| Attach file | Open the device file picker (any type, several files); the picked files are attached like a paste (§3.5) |
 
 ## 4. Append
 
