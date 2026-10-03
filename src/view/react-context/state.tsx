@@ -1,10 +1,9 @@
 import {TreeNode} from '../search/SearchViewFlatten'
-import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, nodeMatchesQuery, linkTargetTree, type QueryExpr, partitionArchived, extractArchiveReveal, suggestAt, type Suggestion, buildTimeline, fileParent, parseDuration} from '@mdtree/core'
+import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, linkTargetTree, type QueryExpr, partitionArchived, extractArchiveReveal, suggestAt, type Suggestion, buildTimeline, fileParent, parseDuration, flattenIndex, defaultVisibility} from '@mdtree/core'
 import {atom, useAtomValue} from 'jotai'
-import {ParsedNode, ParsedTextToken, TextNode, Location} from '@mdtree/core'
+import {ParsedNode} from '@mdtree/core'
 
 type SearchQuery = { query: string; file?: string; heading?: string }
-type TextTokenWithLocationLink = { tokenType: "text"; text: string; decoration: "italic" | "bold" | "underline" | "strikethrough" | "code" | "none"; location: Location }
 import {createScope, molecule} from "bunshi";
 import {App} from "obsidian";
 import {GlobalAtoms} from "./global";
@@ -316,13 +315,8 @@ export const SearchViewMolecule = molecule((mol, scope) => {
 
         // Flatten nodes with the correct expand level, tagging each row's
         // `matched` flag against the active query (drives dimming in the view).
-        const nodes = flattenIndex(result, expandLevel, get(matchExprsAtom))
-
-        // Apply visibility logic immediately instead of separate update
-        const nodesWithVisibility = nodes.map(node => ({
-            ...node,
-            visible: node.indent <= expandLevel
-        }))
+        // Greyed-out subtrees start collapsed (defaultVisibility).
+        const nodesWithVisibility: TreeNode[] = flattenIndex(result, expandLevel, get(matchExprsAtom))
 
         const searchVisible = get(searchVisibleAtom)
 
@@ -451,7 +445,8 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     const expandVisibleNodesAtom = atom(null, (get, set) => {
         const level = get(getExpandLevel)
         const treeNodes = get(treeNodesAtom)
-        const newNodes = treeNodes.map(it => { return { ...it, ...{ visible: it.indent <= level } } })
+        const visible = defaultVisibility(treeNodes, level)
+        const newNodes = treeNodes.map((it, i) => ({ ...it, visible: visible[i] }))
         set(treeNodesAtom, newNodes)
     })
 
@@ -584,154 +579,4 @@ export function extractTerms(expr: QueryExpr): string[] {
         case "modifier":   return []
         case "empty":      return []
     }
-}
-
-function transformToText(node: ParsedNode): TextNode {
-    let tokens: ParsedTextToken[] = []
-    switch(node.nodeType) {
-        case "page":
-            tokens = [
-                {
-                    tokenType: "obsidian_link",
-                    source: node.page,
-                    pageTarget: node.page,
-                }
-            ]
-            break   
-        case "header":
-            tokens = [
-                {
-                    tokenType: "obsidian_link",
-                    source: node.header,
-                    pageTarget: node.page,
-                    headerName: node.header
-                }
-            ]
-            break
-        case "text":
-            tokens = node.parsedTokens
-            break
-        case "folderNote":
-            tokens = [
-                {
-                    tokenType: "obsidian_link",
-                    source: node.page.page,
-                    pageTarget: node.page.page,
-                }
-            ]
-            break
-        case "pointer":
-            tokens = [
-                {
-                    tokenType: "text",
-                    text: "⚠️ Pointer node",
-                    decoration: "none"
-                }
-            ]
-            break
-    }
-
-    return {
-        nodeType: "text",
-        location: node.location,
-        parsedTokens: tokens,
-        tags: [],
-        isTask: false,
-        isCompleted: false,
-        searchKey: node.searchKey,
-        ageDays: node.ageDays,
-        boost: node.boost
-    }
-}
-
-function mergeTokens(node1: TextNode, node2: TextNode): TextNode {
-    const separator: TextTokenWithLocationLink = {
-        tokenType: "text",
-        text: "⇒",
-        decoration: "none",
-        location: node2.location
-    }
-    const tokens = [...node1.parsedTokens, separator as unknown as ParsedTextToken, ...node2.parsedTokens]
-    return {
-        nodeType: "text" as const,
-        location: node1.location,
-        parsedTokens: tokens,
-        tags: [],
-        ageDays: Math.min(node1.ageDays, node2.ageDays),
-        boost: node1.boost,
-        isTask: false,
-        isCompleted: false,
-        searchKey: node1.searchKey
-    }
-}
-
-// TODO: merged nodes are not yet ready for "production"
-function merge(node1: TreeNode, node2: ParsedNode): TreeNode {
-    const existingNode = node1.node
-
-    return {
-        node: mergeTokens(transformToText(existingNode), transformToText(node2)),
-        indent: node1.indent,
-        hasChildren: false,
-        visible: true,
-        selected: false,
-        index: node1.index,
-        matched: node1.matched,
-        archived: node1.archived
-    }
-}
-
-export function flattenIndex(indexed: ResultNode[], defaultIndentLevel = 0, matchExprs: QueryExpr[] = []): TreeNode[] {
-    const result: TreeNode[] = []
-
-    function flatten(unsorted: ResultNode[], indent = 0, parentIndex = 0): number {
-
-        const nodes = unsorted.sort((a, b) => {
-
-            // // Add node-specific boost values if they exist
-            let aboost = a.node.boost || 0
-            let bboost = b.node.boost || 0
-            //
-            // // Add other factors
-            // aboost += a.children.length
-            // bboost += b.children.length
-            // aboost -= a.node.searchKey.length
-            // bboost -= b.node.searchKey.length
-
-            return bboost - aboost
-        })
-        
-        let index = parentIndex
-
-        // if (result.length > 0 && nodes.length == 1 /*&& nodes[0].node.nodeType == "page"*/) {
-        //     const node = nodes[0]
-        //     const isheader = node.node.nodeType == "page" || node.node.nodeType == "header"
-        //     if (isheader && node.children.length != 0) {
-        //         const lastresult = result[result.length - 1]
-        //         result[result.length - 1] = merge(lastresult, node.node)
-        //
-        //         return flatten(node.children, indent, index)
-        //     }
-        // }
-
-        for (const node of nodes) {
-            result.push({
-                node: node.node,
-                indent: indent,
-                hasChildren: node.children.length > 0,
-                visible: indent <= defaultIndentLevel,
-                selected: false,
-                index: index,
-                matched: nodeMatchesQuery(node.node, matchExprs),
-                archived: node.effectiveArchived ?? false
-            })
-            index += 1
-            index = flatten(node.children, indent + 1, index)
-        }
-        return index
-    }
-
-    flatten(indexed)
-
-    return result
 }

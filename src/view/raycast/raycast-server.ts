@@ -1,7 +1,6 @@
 import http, {IncomingMessage, Server, ServerResponse} from "http";
 import {Platform} from "obsidian";
-import {searchIndex, partitionArchived, parseQuery, extractArchiveReveal} from "@mdtree/core";
-import {flattenIndex} from "../react-context/state";
+import {searchIndex, partitionArchived, parseQuery, extractArchiveReveal, flattenIndex} from "@mdtree/core";
 import {getSettings, separatorAtom} from "../react-context/settings";
 import fs from "fs";
 import {createRaycastResponse} from "../node-actions";
