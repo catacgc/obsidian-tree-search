@@ -16,10 +16,11 @@ export type TimelineItem = {
 // that themselves match the last query stage — the rows the tree highlights
 // for that stage. Context the tree keeps but dims (a hit's non-matching
 // subtree, ancestors kept only for earlier stages) is not an item; matched
-// ancestors become the breadcrumb. Emoji-bearing nodes are pinned
-// and, mirroring `in:`, bypass the recency window. `fallbackAgeDays` dates
+// ancestors become the breadcrumb. Emoji-bearing nodes are pinned on top but,
+// like `in:`, stay subject to the recency window. `fallbackAgeDays` dates
 // undated nodes (the host supplies e.g. the containing file's ctime; core stays
-// filesystem-agnostic); nodes it cannot date are dropped unless pinned.
+// filesystem-agnostic); nodes it cannot date are dropped unless pinned and no
+// window is set.
 export function buildTimeline(
   results: ResultNode[],
   stages: QueryExpr[],
@@ -36,7 +37,7 @@ export function buildTimeline(
     if (hit && node.nodeType !== "pointer") {
       const pinned = containsEmoji(node.searchKey)
       const ageDays = isUndated(node.ageDays) ? (fallbackAgeDays?.(node) ?? UNDATED_AGE) : node.ageDays
-      if (pinned || (!isUndated(ageDays) && (windowDays === null || ageDays <= windowDays))) {
+      if (windowDays === null ? pinned || !isUndated(ageDays) : ageDays <= windowDays) {
         const breadcrumb = ancestors.filter(a => a.nodeType !== "pointer" && nodeMatchesQuery(a, stages))
         const key = getKey(node)
         const existing = items.get(key)

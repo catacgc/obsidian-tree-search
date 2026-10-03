@@ -266,8 +266,6 @@ function matchModifier(attrs: ParsedNode, field: QueryModifierField, value: stri
     }
   }
   if (field === "in") {
-    // Emoji-bearing nodes are treated as always "fresh" and match any window.
-    if (containsEmoji(attrs.searchKey)) return true
     const days = parseDuration(value)
     return days !== null && attrs.ageDays <= days
   }

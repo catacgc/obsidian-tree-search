@@ -70,19 +70,28 @@ describe("buildTimeline", () => {
     expect(keys(buildTimeline(tree, parseQuery("governa :page", ".")))).toEqual(["Data governance archive", "Data governance"])
   })
 
-  it("pins emoji hits on top and lets them bypass the recency window", () => {
+  it("pins emoji hits on top but keeps them inside the recency window", () => {
     const tree = [
       rn(textNode("spark old", 400)),
       rn(textNode("spark 🚀 idea", UNDATED_AGE)),
+      rn(textNode("spark 🎉 old", 400)),
+      rn(textNode("spark 🔥 new", 5)),
       rn(textNode("spark new", 3)),
     ]
     const stages = parseQuery("spark", ".")
 
+    // No window: every emoji hit is shown and pinned, undated ones included.
     const all = buildTimeline(tree, stages)
-    expect(keys(all)).toEqual(["spark 🚀 idea", "spark new", "spark old"])
-    expect(all[0].pinned).toBe(true)
+    expect(keys(all)).toEqual(["spark 🔥 new", "spark 🎉 old", "spark 🚀 idea", "spark new", "spark old"])
+    expect(all.slice(0, 3).every(i => i.pinned)).toBe(true)
 
-    expect(keys(buildTimeline(tree, stages, 7))).toEqual(["spark 🚀 idea", "spark new"])
+    // A window drops emoji hits older than it (or undated), like any other hit.
+    expect(keys(buildTimeline(tree, stages, 7))).toEqual(["spark 🔥 new", "spark new"])
+  })
+
+  it("drops emoji hits older than an in: window in the query", () => {
+    const tree = [rn(textNode("spark 🎉 old", 400)), rn(textNode("spark 🔥 new", 5)), rn(textNode("spark new", 3))]
+    expect(keys(buildTimeline(tree, parseQuery("spark in:7d", ".")))).toEqual(["spark 🔥 new", "spark new"])
   })
 
   it("excludes undated non-emoji hits when no fallback date is available", () => {

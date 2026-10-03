@@ -286,10 +286,10 @@ describe("in: recency modifier", () => {
     expect(matchQuery({ ...text("stale"), ageDays: 30 }, expr)).toBe(false)
   })
 
-  it("treats emoji-bearing nodes as always fresh, regardless of age", () => {
+  it("applies the window to emoji-bearing nodes like any other", () => {
     const expr: QueryExpr = { type: "modifier", field: "in", value: "7d" }
-    expect(matchQuery({ ...text("🎉 launched"), ageDays: 999 }, expr)).toBe(true)
-    expect(matchQuery({ ...text("no emoji here"), ageDays: 999 }, expr)).toBe(false)
+    expect(matchQuery({ ...text("🎉 launched"), ageDays: 3 }, expr)).toBe(true)
+    expect(matchQuery({ ...text("🎉 launched"), ageDays: 999 }, expr)).toBe(false)
   })
 
   it("never matches an invalid duration", () => {
@@ -299,8 +299,7 @@ describe("in: recency modifier", () => {
 
   it("never matches an undated node in any window", () => {
     expect(matchQuery({ ...text("undated"), ageDays: UNDATED_AGE }, { type: "modifier", field: "in", value: "1y" })).toBe(false)
-    // ...unless it bears an emoji, which is always fresh
-    expect(matchQuery({ ...text("🎉 undated"), ageDays: UNDATED_AGE }, { type: "modifier", field: "in", value: "1d" })).toBe(true)
+    expect(matchQuery({ ...text("🎉 undated"), ageDays: UNDATED_AGE }, { type: "modifier", field: "in", value: "1y" })).toBe(false)
   })
 })
 
