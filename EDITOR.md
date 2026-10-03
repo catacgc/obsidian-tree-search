@@ -90,10 +90,12 @@ Both fields are `MarkdownField` (`src/view/editor/MarkdownField.tsx`): Obsidian'
 
 The outline holds the bullets that Append writes under the parent (§4) or the single line that Edit rewrites (§5).
 
-- **Append** starts prefilled with the parent as its first bullet, `- [[P]]\n    - `, and the caret at the end, when no draft exists; with a draft, picking a parent inserts `[[P]]` at the draft's caret instead (§4.1). The user may delete or change the parent line. The blank draft (§4.1) starts with `- `. Every line is a bullet: 4 spaces per level, then `- ` (or `- [ ] `/`- [x] ` for tasks), then text. Rules:
-  - Enter starts a new sibling bullet at the same indent, inserting `- `.
+- **Append** starts prefilled with the parent as its first bullet, `- [[P]]\n    - `, and the caret at the end, when no draft exists; with a draft, picking a parent inserts `[[P]]` at the draft's caret instead (§4.1). The user may delete or change the parent line. The blank draft (§4.1) starts with `- `. Every line is a bullet: 4 spaces per level, then `- ` (or `- [ ] `/`- [x] ` for tasks), then text. The outline is always a list: whatever changes the text (keys, soft keyboard, deleting a selection, cut, undo, paste, programmatic edits), a `MarkdownField` `repair` transaction filter (`outlineRepairs`) gives every line without a marker `- ` after its indent and a bare marker its space, in the same transaction (one undo step). `*`, `+` and `1.` markers count as list lines. Rules:
+  - Enter on the first line starts a child bullet one level (4 spaces) deeper, so the top line becomes the parent of what follows; Enter on any other line starts a sibling bullet at the same indent. Text after the caret moves to the new bullet.
   - Tab and Shift+Tab indent and outdent the current bullet by 4 spaces, but never deeper than the previous line's indent + 4.
-  - Backspace on a line (not the first) that holds only an indent and a bare marker (`-`, `*`, `+`, optionally `[ ]`/`[x]`) deletes the whole line and puts the caret at the end of the previous line.
+  - Backspace (empty selection, `outlineBackspace`), handled both on keydown and in CodeMirror's keymap (Android keyboards send no keydown):
+    - on a line (not the first) that holds only an indent and a bare marker (`-`, `*`, `+`, optionally `[ ]`/`[x]`), it deletes the whole line and puts the caret at the end of the previous line;
+    - with the caret inside or right after a line's prefix (indent, marker, checkbox), it drops a checkbox (caret after the marker); else a non-first line joins the end of the previous line (no space added; the caret lands at the join); the first line keeps its marker (caret to its text start).
   - Pasted text (`pasteOutline`) is converted from the clipboard's HTML to markdown when Obsidian's "Auto convert HTML" setting is on (Mod+Shift+V pastes the plain text), so nested lists keep their structure. Blank lines are dropped, plain lines get a `- ` prefix, and indents (tabs, 2/3/4-space units) become 4-space levels relative to the first pasted line. At a bare bullet the first line fills it and the rest follow at the caret line's indent; a single line is inserted inline without its marker; on a blank line the block replaces it; otherwise the block goes below the caret line as its siblings.
   - On save, empty bullets are dropped.
 - **Edit** shows only the editable part of one line (§5). Enter saves, and the line cannot be split: pasted line breaks become spaces.
@@ -192,10 +194,10 @@ The editor's keys go through `onKeyDown`, first from a catch-all handler in the 
 
 | Key | Outline | Content |
 |---|---|---|
-| Enter | Append: new sibling bullet. Edit: save. | Obsidian (continues lists) |
+| Enter | Append: on the first line a child bullet, else a sibling bullet. Edit: save. | Obsidian (continues lists) |
 | Mod+Enter / Shift+Enter | Save | Save |
 | Tab / Shift+Tab | Append: indent / outdent the bullet. Edit: Obsidian | Obsidian |
-| Backspace | Append: on a bare-bullet line, delete the whole line (§3.2) | Obsidian |
+| Backspace | Append: on a bare-bullet line, delete the whole line; in a line's prefix, drop its checkbox or join the previous line; the first line's marker stays (§3.2) | Obsidian |
 | Alt+Enter | Open the content section for the link at or near the caret (§3.3) | Not handled (goes to Obsidian) |
 | Escape | Dismiss an open `[[` suggestion; else close Quick Add, keeping the Append draft (an Alt-Edit session is discarded); back to the launching Search view when launched from Search | Hide the section and return focus to the outline (the buffer is kept) |
 | Mod+B / Mod+I | Wrap the selection in `**…**` / `*…*` | same |
@@ -242,6 +244,7 @@ Soft keyboards have no Tab or Shift+Tab, and Obsidian's own mobile toolbar acts 
 | Button | Action |
 |---|---|
 | Insert link | Wrap the selection in `[[…]]` (empty: `[[]]`), caret before `]]`, so the link results (§3.4) open on the text inside |
+| Task | The caret line becomes a `- [ ] ` task (`toggleTask`: bulleted first if needed, `[ ] ` after the marker); on a line that already has a checkbox (`[ ]` or `[x]`) the checkbox is removed. Outline (Append) and content. Disabled in an Alt-Edit outline |
 | Indent / Outdent | Outline (Append): Tab / Shift+Tab (§3.6). Content: Obsidian's `indentMore` / `indentLess` (`MarkdownFieldHandle.indent`). Disabled in an Alt-Edit outline (one line, no prefix) |
 | Paste | Read the clipboard (`navigator.clipboard.read`, falling back to `readText`) and handle it like a paste into the field (`pasteInto`): files become attachments (§3.5), a URL a link (§3.8), outline text is re-shaped (§3.2), content text is inserted at the caret. An unreadable clipboard shows the Notice `Can't read the clipboard: <reason>`; an empty one `The clipboard is empty` |
 | Attach file | Open the device file picker (any type, several files); the picked files are attached like a paste (§3.5) |

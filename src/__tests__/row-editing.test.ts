@@ -8,6 +8,7 @@ import {
 import {
     outlineIndent, linkQueryAt, acceptLink, linkAt, insertAttachmentBullets, outlineBaseNote,
     outlineBackspace, pasteOutline, changedRange, pasteLink, pastedUrl, ensureBullet, insertLinkAtCaret,
+    outlineEnter, outlineRepairs, toggleTask,
 } from "../view/editor/textarea-ops"
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -193,9 +194,65 @@ describe("outlineBackspace", () => {
         expect(outlineBackspace("- [[P]]\n    - ", 14)).toEqual({ text: "- [[P]]", caret: 7 })
     })
 
-    it("leaves the first line and lines with text to the default Backspace", () => {
-        expect(outlineBackspace("- ", 2)).toBeNull()
+    it("keeps the first line's marker, caret to its text start", () => {
+        expect(outlineBackspace("- ", 2)).toEqual({ text: "- ", caret: 2 })
+        expect(outlineBackspace("- a", 0)).toEqual({ text: "- a", caret: 2 })
+    })
+
+    it("drops a checkbox, caret after the marker", () => {
+        expect(outlineBackspace("- [ ] a", 6)).toEqual({ text: "- a", caret: 2 })
+    })
+
+    it("joins a non-first line at its text start to the end of the previous line", () => {
+        expect(outlineBackspace("- a\n    - b", 10)).toEqual({ text: "- ab", caret: 3 })
+    })
+
+    it("leaves Backspace inside a line's text to the default", () => {
         expect(outlineBackspace("- [[P]]\n    - x", 15)).toBeNull()
+    })
+})
+
+describe("outlineEnter", () => {
+    it("starts a child bullet one level deeper on the first line", () => {
+        expect(outlineEnter("- a", 3)).toEqual({ text: "- a\n    - ", caret: 10 })
+    })
+
+    it("starts a sibling at the caret line's indent on later lines", () => {
+        expect(outlineEnter("- a\n    - b", 11)).toEqual({ text: "- a\n    - b\n    - ", caret: 18 })
+    })
+
+    it("moves the text after the caret onto the new bullet", () => {
+        expect(outlineEnter("- ab", 3)).toEqual({ text: "- a\n    - b", caret: 10 })
+    })
+})
+
+describe("outlineRepairs", () => {
+    it("accepts every list marker, checkboxes included", () => {
+        expect(outlineRepairs("- a\n    - [ ] b\n* c\n1. d")).toEqual([])
+    })
+
+    it("bullets marker-less and blank lines after their indent and spaces bare markers", () => {
+        expect(outlineRepairs("a\n    b\n-\n")).toEqual([
+            { from: 0, insert: "- " }, { from: 6, insert: "- " }, { from: 9, insert: " " }, { from: 10, insert: "- " },
+        ])
+    })
+})
+
+describe("toggleTask", () => {
+    it("adds a checkbox after the marker, caret kept in its text", () => {
+        expect(toggleTask("- a\n    - b", 11)).toEqual({ text: "- a\n    - [ ] b", caret: 15 })
+    })
+
+    it("removes an existing checkbox", () => {
+        expect(toggleTask("- a\n    - [ ] b", 15)).toEqual({ text: "- a\n    - b", caret: 11 })
+    })
+
+    it("bullets a plain line first", () => {
+        expect(toggleTask("foo", 3)).toEqual({ text: "- [ ] foo", caret: 9 })
+    })
+
+    it("moves a caret inside the prefix after the checkbox", () => {
+        expect(toggleTask("- a", 0)).toEqual({ text: "- [ ] a", caret: 6 })
     })
 })
 

@@ -5,7 +5,7 @@ import React, {useEffect, useLayoutEffect, useMemo, useRef, useState} from "reac
 import {useAtomValue, useSetAtom} from "jotai";
 import {useMolecule} from "bunshi/react";
 import {htmlToMarkdown, Notice, Platform, Scope, type Modifier} from "obsidian";
-import {Brackets, ClipboardPaste, IndentDecrease, IndentIncrease, Paperclip} from "lucide-react";
+import {Brackets, ClipboardPaste, IndentDecrease, IndentIncrease, ListTodo, Paperclip} from "lucide-react";
 import {attachmentExt, attachmentKind, attachmentName, reverseMarkdownParsing} from "@mdtree/core";
 import {GlobalAtoms} from "../react-context/global";
 import {SearchViewMolecule} from "../react-context/state";
@@ -30,9 +30,11 @@ import {
     outlineBaseNote,
     outlineEnter,
     outlineIndent,
+    outlineRepairs,
     pasteLink,
     pasteOutline,
     pastedUrl,
+    toggleTask,
     wrapLink,
     wrapSelection,
     type TextEdit,
@@ -296,11 +298,23 @@ export function InlineEditor({state}: { state: EditorState }) {
         else void save()
     }
 
+    /** Backspace in the Append outline (outlineBackspace, empty selection only); false leaves it to the field. */
+    function outlinePlainBackspace(): boolean {
+        const h = outlineRef.current
+        if (!h || !append) return false
+        const {text, start, end} = fieldState(h)
+        if (start !== end) return false
+        const edit = outlineBackspace(text, start)
+        if (!edit) return false
+        applyEdit("outline", edit)
+        return true
+    }
+
     // ── Mobile toolbar ────────────────────────────────────────────────────────
     /** Section the toolbar acts on: the content field when open and last focused, else the outline. */
     const toolSection: Section = focused === "content" && active !== null ? "content" : "outline"
-    /** An Alt-Edit outline holds one line without its prefix (`linePrefix`); indenting it would corrupt the line. */
-    const canIndent = toolSection === "content" || append
+    /** Task, Indent and Outdent act on the line prefix; an Alt-Edit outline holds one line without it (`linePrefix`). */
+    const canEditPrefix = toolSection === "content" || append
 
     /** Toolbar Insert link: wraps the selection in `[[…]]` (empty: `[[]]`), caret before `]]`, so the link results open on the text inside. */
     function insertLinkBrackets() {
@@ -310,10 +324,18 @@ export function InlineEditor({state}: { state: EditorState }) {
         applyEdit(toolSection, {...wrapSelection(text, start, end, "[[", "]]"), caret: end + 2, selectionEnd: undefined})
     }
 
+    /** Toolbar Task: the caret line becomes a `- [ ] ` task, or loses its checkbox (toggleTask). */
+    function toggleTaskLine() {
+        const h = fieldOf(toolSection)
+        if (!h || !canEditPrefix) return
+        const {text, start} = fieldState(h)
+        applyEdit(toolSection, toggleTask(text, start))
+    }
+
     /** Toolbar Indent / Outdent: Tab / Shift+Tab of the focused field. */
     function indentLine(dir: 1 | -1) {
         const h = fieldOf(toolSection)
-        if (!h || !canIndent) return
+        if (!h || !canEditPrefix) return
         if (toolSection === "content") {
             h.indent(dir)
             h.focus()
@@ -380,13 +402,7 @@ export function InlineEditor({state}: { state: EditorState }) {
             void save()
             return true
         }
-        if (section === "outline" && append && ev.key === "Backspace" && !ev.altKey && !mod && !ev.ctrlKey && !ev.metaKey && start === end) {
-            const edit = outlineBackspace(text, start)
-            if (edit) {
-                applyEdit(section, edit)
-                return true
-            }
-        }
+        if (section === "outline" && ev.key === "Backspace" && !ev.altKey && !mod && !ev.ctrlKey && !ev.metaKey && outlinePlainBackspace()) return true
         if (section === "outline" && ev.key === "Enter" && ev.altKey) {
             const name = linkAt(text, start) ?? firstLinkOnLine(text, start) ?? (append && parentName ? parentName : null)
             if (name) openContent(name)
@@ -535,6 +551,8 @@ export function InlineEditor({state}: { state: EditorState }) {
             outlinePlainEnter()
             return true
         },
+        onBackspace: () => section === "outline" && outlinePlainBackspace(),
+        repair: section === "outline" && append ? outlineRepairs : undefined,
         onKeyDown: (ev: KeyboardEvent) => onKeyDown(ev, section),
         onPaste: (ev: ClipboardEvent) => onPaste(ev, section),
         onDropFiles: (files: File[]) => onDropFiles(section, files),
@@ -588,9 +606,11 @@ export function InlineEditor({state}: { state: EditorState }) {
         {Platform.isMobile && <div className="ts-editor-toolbar">
             <button className="ts-editor-tool clickable-icon" aria-label="Insert link" disabled={state.saving}
                 onMouseDown={ev => ev.preventDefault()} onClick={insertLinkBrackets}><Brackets size={18}/></button>
-            <button className="ts-editor-tool clickable-icon" aria-label="Indent" disabled={state.saving || !canIndent}
+            <button className="ts-editor-tool clickable-icon" aria-label="Task" disabled={state.saving || !canEditPrefix}
+                onMouseDown={ev => ev.preventDefault()} onClick={toggleTaskLine}><ListTodo size={18}/></button>
+            <button className="ts-editor-tool clickable-icon" aria-label="Indent" disabled={state.saving || !canEditPrefix}
                 onMouseDown={ev => ev.preventDefault()} onClick={() => indentLine(1)}><IndentIncrease size={18}/></button>
-            <button className="ts-editor-tool clickable-icon" aria-label="Outdent" disabled={state.saving || !canIndent}
+            <button className="ts-editor-tool clickable-icon" aria-label="Outdent" disabled={state.saving || !canEditPrefix}
                 onMouseDown={ev => ev.preventDefault()} onClick={() => indentLine(-1)}><IndentDecrease size={18}/></button>
             <button className="ts-editor-tool clickable-icon" aria-label="Paste" disabled={state.saving}
                 onMouseDown={ev => ev.preventDefault()} onClick={() => void pasteFromClipboard()}><ClipboardPaste size={18}/></button>

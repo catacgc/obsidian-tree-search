@@ -4,6 +4,8 @@
 export type TextEdit = { text: string; caret: number; selectionEnd?: number }
 
 const LIST_MARKER_LINE_RE = /^\s*(?:[-*+]|\d+\.)(?:\s|$)/
+const BARE_MARKER_LINE_RE = /^[ \t]*(?:[-*+]|\d+\.)$/
+const MARKER_PREFIX_RE = /^([ \t]*(?:[-*+]|\d+\.)[ \t]+)(\[[ xX]\][ \t]+)?/
 const LINK_RE = /(!?)\[\[([^\]\n]*)\]\]/g
 
 function lineStartAt(text: string, caret: number): number {
@@ -68,10 +70,12 @@ export function firstLinkOnLine(text: string, caret: number): string | null {
     return firstPageLink(text.slice(lineStartAt(text, caret), lineEndAt(text, caret)))
 }
 
-/** Enter in the outline: a new bullet at the current line's indent. */
+/** Enter in the outline: a new bullet at the caret line's indent; on the first line one level (4 spaces) deeper, so
+ *  the top line becomes the parent of what follows. */
 export function outlineEnter(text: string, caret: number): TextEdit {
-    const line = text.slice(lineStartAt(text, caret), lineEndAt(text, caret))
-    return insertAtCaret(text, caret, "\n" + leadingWhitespace(line) + "- ")
+    const start = lineStartAt(text, caret)
+    const indent = leadingWhitespace(text.slice(start, lineEndAt(text, caret)))
+    return insertAtCaret(text, caret, "\n" + indent + (start === 0 ? "    " : "") + "- ")
 }
 
 /** Tab / Shift+Tab: shift the caret line by ±4 spaces, clamped to [0, previous line indent + 4] (0 on the first line). */
@@ -97,30 +101,71 @@ export function appendPrefill(parentName: string): string {
 
 const BARE_BULLET_LINE_RE = /^[ \t]*(?:[-*+](?: \[[ xX]\])?)?[ \t]*$/
 
-/** Backspace on a non-first line holding only an indent and/or a bare marker (`-`, `*`, `+`, optionally `[ ]`/`[x]`):
- *  removes that line and its preceding newline; caret to the end of the previous line. Null otherwise. */
+/** Backspace (empty selection) in the Append outline, which must stay a list:
+ *  - a non-first line holding only an indent and/or a bare marker (`-`, `*`, `+`, optionally `[ ]`/`[x]`) is removed
+ *    with its preceding newline, caret to the end of the previous line;
+ *  - caret inside or right after a line's prefix (indent, marker, checkbox): a checkbox is dropped (caret after the
+ *    marker); else a non-first line joins the end of the previous line (caret at the join); the first line keeps its
+ *    marker (caret to its text start).
+ *  Null otherwise: the field's own Backspace. */
 export function outlineBackspace(text: string, caret: number): TextEdit | null {
     const start = lineStartAt(text, caret)
-    if (start === 0) return null
     const end = lineEndAt(text, caret)
-    if (!BARE_BULLET_LINE_RE.test(text.slice(start, end))) return null
-    return {text: text.slice(0, start - 1) + text.slice(end), caret: start - 1}
+    const line = text.slice(start, end)
+    if (start > 0 && BARE_BULLET_LINE_RE.test(line)) return {text: text.slice(0, start - 1) + text.slice(end), caret: start - 1}
+    const m = MARKER_PREFIX_RE.exec(line)
+    if (!m || caret > start + m[0].length) return null
+    if (m[2]) {
+        const at = start + m[1].length
+        return {text: text.slice(0, at) + text.slice(at + m[2].length), caret: at}
+    }
+    if (start === 0) return {text, caret: m[0].length}
+    return {text: text.slice(0, start - 1) + text.slice(start + m[0].length), caret: start - 1}
 }
 
-const BARE_MARKER_LINE_RE = /^[ \t]*(?:[-*+]|\d+\.)$/
-const MARKER_PREFIX_RE = /^[ \t]*(?:[-*+]|\d+\.)[ \t]+(?:\[[ xX]\][ \t]+)?/
+/** How to make `line` a list item: a space after a bare marker (`-`, `*`, `+`, `1.`), else `- ` after the indent of a
+ *  line without a marker (blank lines included); null for a list line. `at` is an offset in `line`. */
+function bulletFix(line: string): { at: number; insert: string } | null {
+    if (BARE_MARKER_LINE_RE.test(line)) return {at: line.length, insert: " "}
+    if (LIST_MARKER_LINE_RE.test(line)) return null
+    return {at: /^[ \t]*/.exec(line)![0].length, insert: "- "}
+}
 
-/** Makes the caret line a list item: a line without a list marker gets `- ` after its indent; a bare marker (`-`, `*`, `+`, `1.`)
- *  at line end gets a trailing space. Caret shifts with the insertion. Unchanged otherwise. */
+/** Makes the caret line a list item (bulletFix). Caret shifts with the insertion. Unchanged otherwise. */
 export function ensureBullet(text: string, caret: number): TextEdit {
     const ls = lineStartAt(text, caret)
-    const le = lineEndAt(text, caret)
-    const line = text.slice(ls, le)
-    let at: number, insert: string
-    if (BARE_MARKER_LINE_RE.test(line)) [at, insert] = [le, " "]
-    else if (LIST_MARKER_LINE_RE.test(line)) return {text, caret}
-    else [at, insert] = [ls + /^[ \t]*/.exec(line)![0].length, "- "]
-    return {text: text.slice(0, at) + insert + text.slice(at), caret: caret >= at ? caret + insert.length : caret}
+    const fix = bulletFix(text.slice(ls, lineEndAt(text, caret)))
+    if (!fix) return {text, caret}
+    const at = ls + fix.at
+    return {text: text.slice(0, at) + fix.insert + text.slice(at), caret: caret >= at ? caret + fix.insert.length : caret}
+}
+
+/** Insertions that make every line of an Append outline a list item (bulletFix per line), as offsets in `text`.
+ *  Empty when every line already is one. */
+export function outlineRepairs(text: string): { from: number; insert: string }[] {
+    const out: { from: number; insert: string }[] = []
+    let ls = 0
+    for (const line of text.split("\n")) {
+        const fix = bulletFix(line)
+        if (fix) out.push({from: ls + fix.at, insert: fix.insert})
+        ls += line.length + 1
+    }
+    return out
+}
+
+/** Mobile toolbar Task: the caret line (ensureBullet first) becomes a `[ ] ` task after its marker, or loses its
+ *  checkbox when it has one. The caret keeps its place in the text (moved after the checkbox when inside the prefix). */
+export function toggleTask(text: string, caret: number): TextEdit {
+    const e = ensureBullet(text, caret)
+    const ls = lineStartAt(e.text, e.caret)
+    const m = MARKER_PREFIX_RE.exec(e.text.slice(ls, lineEndAt(e.text, e.caret)))
+    if (!m) return e
+    const at = ls + m[1].length
+    if (m[2]) {
+        const end = at + m[2].length
+        return {text: e.text.slice(0, at) + e.text.slice(end), caret: e.caret >= end ? e.caret - m[2].length : Math.min(e.caret, at)}
+    }
+    return {text: e.text.slice(0, at) + "[ ] " + e.text.slice(at), caret: Math.max(e.caret, at) + 4}
 }
 
 /** Search pick into a draft: `[[name]]` inline at `caret` on a bulleted line (ensureBullet first). Never inside the

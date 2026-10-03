@@ -5,7 +5,7 @@
 // on the host (they run before CodeMirror's and Obsidian's handlers on `.cm-content`).
 import React, {useEffect, useLayoutEffect, useRef} from "react";
 import {Notice, Platform, type App} from "obsidian";
-import {Compartment, Prec, type Extension} from "@codemirror/state";
+import {ChangeSet, Compartment, EditorState, Prec, type Extension} from "@codemirror/state";
 import {EditorView, keymap, type ViewUpdate} from "@codemirror/view";
 import {editorAppProxy, embeddedEditorClass, type EmbeddedEditor, type EmbeddedEditorClass} from "./obsidian-editor";
 import {changedRange} from "./textarea-ops";
@@ -33,6 +33,12 @@ type Props = {
     onCaret(caret: number): void
     /** Enter that reached CodeMirror's keymap (e.g. from an Android keyboard); true = handled. */
     onEnter(): boolean
+    /** Backspace that reached CodeMirror's keymap (e.g. from an Android keyboard, which sends no keydown); true = handled. */
+    onBackspace(): boolean
+    /** Insertions that keep the doc valid, given the text a doc change produced (offsets in it). They are applied in the
+     *  same transaction as every change (typing, deleting, undo, paste, owner updates), so one undo step reverts both;
+     *  a caret at an insertion point moves past it. */
+    repair?(text: string): { from: number; insert: string }[]
     /** True = handled; the field then stops the key before CodeMirror sees it. */
     onKeyDown(ev: KeyboardEvent): boolean
     /** True = handled; otherwise Obsidian's own paste runs. */
@@ -80,7 +86,16 @@ export function MarkdownField(props: Props) {
                 return [
                     ...super.buildLocalExtensions(),
                     editable.current.of(EditorView.editable.of(!latest.current.readOnly)),
-                    Prec.highest(keymap.of([{key: "Enter", run: () => latest.current.onEnter()}])),
+                    Prec.highest(keymap.of([
+                        {key: "Enter", run: () => latest.current.onEnter()},
+                        {key: "Backspace", run: () => latest.current.onBackspace()},
+                    ])),
+                    EditorState.transactionFilter.of(tr => {
+                        const repairs = tr.docChanged ? latest.current.repair?.(tr.newDoc.toString()) : undefined
+                        if (!repairs?.length) return tr
+                        const changes = ChangeSet.of(repairs, tr.newDoc.length)
+                        return [tr, {changes, selection: tr.newSelection.map(changes, 1), sequential: true}]
+                    }),
                 ]
             }
 
