@@ -37,3 +37,13 @@ export async function getPeriodicResolver(vaultRoot: string): Promise<(path: str
   resolverCache.set(vaultRoot, resolver)
   return resolver
 }
+
+/** Today's daily-note vault path, per the core "Daily Notes" setting; undefined without one.
+ *  Formatted per call so long-lived `serve` processes follow the date. */
+export async function getDailyNotePath(vaultRoot: string): Promise<() => string | undefined> {
+  const daily = await readJson(join(vaultRoot, ".obsidian", "daily-notes.json"))
+  if (!daily) return () => undefined
+  const folder: string = daily.folder ?? ""
+  const format: string = daily.format || "YYYY-MM-DD"
+  return () => `${folder ? folder.replace(/\/+$/, "") + "/" : ""}${moment().format(format)}.md`
+}

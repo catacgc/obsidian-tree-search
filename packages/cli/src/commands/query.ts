@@ -2,6 +2,7 @@ import { resolve, basename } from "node:path"
 import { DEFAULT_SETTINGS, NotesGraph, searchIndex, flattenIndex, parseQuery, extractArchiveReveal, partitionArchived, reverseMarkdownParsing } from "@mdtree/core"
 import type { TreeNode } from "@mdtree/core"
 import { VaultStore, defaultDbPath } from "../store/sqlite.ts"
+import { getDailyNotePath } from "../vault/periodic-config.ts"
 
 export type QueryOptions = {
   dirs: string[]
@@ -35,7 +36,8 @@ export async function runQuery(opts: QueryOptions): Promise<void> {
     store.loadIntoGraph(vaultName, graph)
     store.close()
 
-    const results = searchIndex(graph, opts.queryStr, DEFAULT_SETTINGS.searchSeparator)
+    const dailyNote = (await getDailyNotePath(vaultRoot))()
+    const results = searchIndex(graph, opts.queryStr, DEFAULT_SETTINGS.searchSeparator, { dailyNote })
     const { visible, archivedCount: vaultArchived } = partitionArchived(results, reveal)
     const flat = flattenIndex(visible, 0, matchExprs)
     allResults.push(...flat)

@@ -128,6 +128,9 @@ export const GlobalAppMolecule = molecule((_, scope) => {
     }
 })
 
+/** Quick Add's results list while no `[[` is open: the outline of today's daily note. */
+export const DAILY_OUTLINE_QUERY = ":daily :page"
+
 export const SearchModalMolecule = molecule((mol, scope) => {
     const scp = scope(SearchViewScope)
     const searchMol = mol(SearchViewMolecule)
@@ -139,15 +142,16 @@ export const SearchModalMolecule = molecule((mol, scope) => {
         const searchQuery = get(searchMol.actualQueryAtom)
         const graph = get(GlobalAtoms.graphAtom)
         const separator = get(separatorAtom)
+        const options = get(GlobalAtoms.indexAtom)?.searchOptions()
 
-        if (scp.isQuickLink || scp.isQuickAdd) {
+        if (scp.isQuickLink || (scp.isQuickAdd && searchQuery !== DAILY_OUTLINE_QUERY)) {
             // Insert Link and Quick Add offer only link targets: notes and headers whose
             // own name/alias/heading matches the query, archived rows hidden.
             set(searchMol.updateSearchResultsAtom, linkTargetTree(graph, searchQuery, separator), 0)
             return
         }
 
-        const searchResults = searchIndex(graph, searchQuery, separator)
+        const searchResults = searchIndex(graph, searchQuery, separator, options)
 
         // `is:archived` reveals (rather than hides) archived rows; its presence
         // in the query flips partitioning from drop-with-count to keep-and-grey.
@@ -166,7 +170,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
 
     const { lastSearchAtom } = mol(GlobalAppMolecule)
 
-    // Quick Add's list is the editor's `[[` autocomplete: it starts empty, never with Search's query.
+    // Quick Add's list is the editor's `[[` autocomplete (InlineEditor sets its query), never Search's query.
     const searchQueryAtom = atomWithDefault<SearchQuery>(get =>
         scp.isModal && !scp.isQuickAdd ? get(lastSearchAtom) : {query: ""})
 

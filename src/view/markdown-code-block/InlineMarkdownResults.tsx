@@ -38,7 +38,7 @@ export const InlineMarkdownMolecule = molecule((mol, scope) => {
         const { reveal } = extractArchiveReveal(parseQuery(combinedQuery, separator))
 
         if (settings.query && settings.inferred) {
-            const rawResults = searchIndex(graph, combinedQuery, separator)
+            const rawResults = searchIndex(graph, combinedQuery, separator, get(GlobalAtoms.indexAtom)?.searchOptions())
             const { visible, archivedCount } = partitionArchived(rawResults, reveal)
             set(searchMol.updateSearchResultsAtom, visible, archivedCount)
         } else {

@@ -74,6 +74,14 @@ export function describeQuerySyntax(): QuerySyntaxGroup[] {
       ],
     },
     {
+      title: "Scope — outline:",
+      entries: [
+        { syntax: "outline:<note>", description: "outline of the latest note matching <note>" },
+        { syntax: "outline:\"my note\"", description: "outline of exactly “my note”" },
+        { syntax: ":daily", description: "outline of today's daily note", insertText: ":daily" },
+      ],
+    },
+    {
       title: "Combine",
       entries: [
         { syntax: "a b", description: "AND — both" },

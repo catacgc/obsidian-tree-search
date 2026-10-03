@@ -5,6 +5,7 @@ import { watchVault } from "../vault/watcher.ts"
 import { VaultStore, defaultDbPath } from "../store/sqlite.ts"
 import { startServer, type VaultIndex } from "../server/server.ts"
 import { loadOrBuild } from "./watch.ts"
+import { getDailyNotePath } from "../vault/periodic-config.ts"
 import { AsyncQueue } from "../util/async-queue.ts"
 import { enqueuePluginRuns } from "../plugins/trigger.ts"
 
@@ -39,6 +40,7 @@ export async function runServe(opts: ServeOptions): Promise<void> {
       graph,
       settings: DEFAULT_SETTINGS,
       vaultName,
+      dailyNote: await getDailyNotePath(vaultRoot),
     }
 
     const server = startServer(vaultIndex, {

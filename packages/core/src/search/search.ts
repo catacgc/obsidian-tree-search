@@ -1,6 +1,6 @@
-import type { NotesGraph } from "../graph/graph.ts"
-import type { ParsedNode } from "../graph/types.ts"
-import { firstPassInclude, matchQuery, parseQuery, extractArchiveReveal, queryTargetsFolders, type QueryExpr } from "./query.ts"
+import { linkTargetKeys, type NotesGraph } from "../graph/graph.ts"
+import type { EdgeEntry, ParsedNode } from "../graph/types.ts"
+import { firstPassInclude, matchQuery, parseQuery, extractArchiveReveal, extractOutlineScope, queryTargetsFolders, DAILY_NOTE, type OutlineTarget, type QueryExpr } from "./query.ts"
 import { partitionArchived } from "./archive.ts"
 
 export type ResultNode = {
@@ -12,14 +12,26 @@ export type ResultNode = {
   effectiveArchived?: boolean
 }
 
+/** Runtime context a query can refer to but the graph can't name. */
+export type SearchOptions = {
+  /** Vault path of today's daily note: the target of `:daily`. Unset, `:daily` matches nothing. */
+  dailyNote?: string
+}
+
 // ── Tree builder ──────────────────────────────────────────────────────────────
+
+type EdgeFilter = (edge: EdgeEntry) => boolean
+
+// Folder-containment edges are only followed when the query targets folders,
+// so folder trees stay out of ordinary searches.
+const skipFolderEdges: EdgeFilter = edge => edge.attributes.type !== "folder"
 
 function buildTree(
   nodeKey: string,
   graph: NotesGraph,
   roots: Map<string, ResultNode>,
   traversed: Set<string>,
-  includeFolderEdges = false,
+  follow: EdgeFilter = skipFolderEdges,
 ): ResultNode {
   traversed.add(nodeKey)
 
@@ -30,9 +42,7 @@ function buildTree(
   }
 
   for (const edge of graph.outboundEdgeEntries(nodeKey)) {
-    // Folder-containment edges are only followed when the query targets folders,
-    // so folder trees stay out of ordinary searches.
-    if (edge.attributes.type === "folder" && !includeFolderEdges) continue
+    if (!follow(edge)) continue
 
     let childNode: ResultNode | null = null
 
@@ -45,7 +55,7 @@ function buildTree(
     traversed.add(edge.edge)
 
     if (!childNode) {
-      childNode = buildTree(edge.target, graph, roots, traversed, includeFolderEdges)
+      childNode = buildTree(edge.target, graph, roots, traversed, follow)
     }
 
     childNode.node = { ...childNode.node, ...{ location: edge.attributes.location } }
@@ -54,6 +64,85 @@ function buildTree(
   }
 
   return newNode
+}
+
+// ── Outline scope ─────────────────────────────────────────────────────────────
+//
+// `outline:<note>` keeps a search inside a note's own outline: its headings and
+// bullets as written in that file, without following links out of it. An
+// outline edge is a "parent" edge recorded in that file, minus the edges the
+// indexer adds from every page/header a line links to (same location as the
+// line): those make the line a child of the linked note, not of its outline
+// parent. A line nested under a bullet that links the same note shares that
+// edge (edges are unique per pair), so it is dropped too, as in `fileParent`.
+
+type OutlineScope = { keys: Set<string>; follow: EdgeFilter }
+
+type NoteCandidate = { key: string; name: string; path: string; lowerPath: string; ageDays: number }
+
+/** Paths of the real notes `outline:` targets name, compared lowercase:
+ *  - `:daily`: today's daily note (`SearchOptions.dailyNote`), by path;
+ *  - exact (quoted): every note whose name or vault path (with or without `.md`) equals it;
+ *  - a fragment: the note whose name equals it, else the most recent one whose name
+ *    (or, for a fragment with a `/`, vault path) contains it. */
+function outlinePaths(graph: NotesGraph, targets: OutlineTarget[], options: SearchOptions): Set<string> {
+  const notes: NoteCandidate[] = []
+  graph.filterNodes((key, attrs) => {
+    if (attrs.nodeType === "page" && !attrs.isReference) {
+      const path = attrs.location.path
+      notes.push({ key, name: attrs.page.toLowerCase(), path, lowerPath: path.toLowerCase(), ageDays: attrs.ageDays })
+    }
+    return false
+  })
+
+  const paths = new Set<string>()
+  for (const t of targets) {
+    const v = (t.value === DAILY_NOTE ? options.dailyNote ?? "" : t.value).toLowerCase()
+    if (!v) continue
+    if (t.exact) {
+      for (const n of notes) {
+        if (n.name === v || n.lowerPath === v || n.lowerPath.replace(/\.md$/, "") === v) paths.add(n.path)
+      }
+      continue
+    }
+    const named = notes.find(n => n.name === v)
+    if (named) {
+      paths.add(named.path)
+      continue
+    }
+    // Newest first: the note's own date (ageDays), then its file's mtime (carried by
+    // the edges recorded in that file), then path for a stable pick.
+    const latest = notes
+      .filter(n => (v.includes("/") ? n.lowerPath : n.name).includes(v))
+      .map(n => ({
+        n,
+        mtime: graph.outboundEdgeEntries(n.key)
+          .reduce((max, e) => e.attributes.location.path === n.path ? Math.max(max, e.attributes.mtime) : max, 0),
+      }))
+      .sort((a, b) => a.n.ageDays - b.n.ageDays || b.mtime - a.mtime || a.n.path.localeCompare(b.n.path))[0]
+    if (latest) paths.add(latest.n.path)
+  }
+  return paths
+}
+
+function outlineScope(graph: NotesGraph, targets: OutlineTarget[], options: SearchOptions): OutlineScope {
+  const paths = outlinePaths(graph, targets, options)
+  const follow: EdgeFilter = edge => {
+    if (edge.attributes.type !== "parent" || !paths.has(edge.attributes.location.path)) return false
+    const target = graph.getNodeAttributes(edge.target)
+    return target.nodeType !== "text" || !linkTargetKeys(target.parsedTokens).has(edge.source)
+  }
+
+  const keys = new Set<string>()
+  const stack = graph
+    .filterNodes((_, attrs) => attrs.nodeType === "page" && !attrs.isReference && paths.has(attrs.location.path))
+  while (stack.length > 0) {
+    const key = stack.pop()!
+    if (keys.has(key)) continue
+    keys.add(key)
+    for (const edge of graph.outboundEdgeEntries(key)) if (follow(edge)) stack.push(edge.target)
+  }
+  return { keys, follow }
 }
 
 // ── Filter helpers ────────────────────────────────────────────────────────────
@@ -118,27 +207,32 @@ export function searchIndex(
   graph: NotesGraph,
   qs: string,
   separator: string,
+  options: SearchOptions = {},
 ): ResultNode[] {
   if (qs.length < 3) return []
 
   // Strip `is:archived` out of the matching stages (it is a visibility toggle,
   // not a matcher) so it never filters results; a bare `is:archived` stage is
   // substituted with the archived predicate so it still selects archived nodes.
-  const { stages: expressions } = extractArchiveReveal(parseQuery(qs, separator))
-  const includeFolderEdges = queryTargetsFolders(expressions)
+  // `outline:` likewise leaves the stages: it scopes the candidates and edges.
+  const { targets, stages: expressions } =
+    extractOutlineScope(extractArchiveReveal(parseQuery(qs, separator)).stages)
+  const scope = targets.length > 0 ? outlineScope(graph, targets, options) : null
+  const follow: EdgeFilter = scope?.follow ?? (queryTargetsFolders(expressions) ? () => true : skipFolderEdges)
 
   const roots = new Map<string, ResultNode>()
   const firstPass = expressions[0]
 
   const firstPageCandidates = graph
-    .filterNodes((_, attrs) => attrs.nodeType !== "pointer" && firstPassInclude(attrs, firstPass))
+    .filterNodes((key, attrs) =>
+      attrs.nodeType !== "pointer" && (!scope || scope.keys.has(key)) && firstPassInclude(attrs, firstPass))
     .sort((a, b) => b.length - a.length)
 
   const traversed = new Set<string>()
 
   for (const nodeKey of firstPageCandidates) {
     if (roots.has(nodeKey) || traversed.has(nodeKey)) continue
-    const newNode = buildTree(nodeKey, graph, roots, traversed, includeFolderEdges)
+    const newNode = buildTree(nodeKey, graph, roots, traversed, follow)
     roots.set(nodeKey, newNode)
   }
 

@@ -381,6 +381,26 @@ describe("prefix matching for is:/has: values", () => {
   })
 })
 
+describe("outline: field", () => {
+  it("keeps a quoted name whole and exact, separator and spaces included", () => {
+    expect(parseQuery("outline:\"Daily 2026.10.03\" is:page", ".")).toEqual([{
+      type: "and",
+      exprs: [
+        { type: "modifier", field: "outline", value: "daily 2026.10.03", exact: true },
+        { type: "modifier", field: "is", value: "page" },
+      ],
+    }])
+  })
+
+  it("leaves a bare name a fragment", () => {
+    expect(parseQuery("outline:sep", ".")[0]).toEqual({ type: "modifier", field: "outline", value: "sep" })
+  })
+
+  it(":daily targets the runtime's daily note exactly", () => {
+    expect(parseQuery(":daily", ".")[0]).toEqual({ type: "modifier", field: "outline", value: ":daily", exact: true })
+  })
+})
+
 describe("legacy bare shortcuts", () => {
   it("resolves :p to is:page", () => {
     expect(parseQuery(":p", ".")[0]).toEqual({ type: "modifier", field: "is", value: "page" })

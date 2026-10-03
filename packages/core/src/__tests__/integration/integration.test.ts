@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test"
 import { loadFixture, search, searchKeys } from "./helpers.ts"
 import { partitionArchived } from "../../search/archive.ts"
-import { linkTargetTree, type ResultNode } from "../../search/search.ts"
+import { linkTargetTree, searchIndex, type ResultNode } from "../../search/search.ts"
 import { DEFAULT_SETTINGS, indexSinglePage } from "../../graph/indexer.ts"
 import { NotesGraph, getKey } from "../../graph/graph.ts"
 import { parseVaultFile } from "../../parser/vault-file.ts"
@@ -300,5 +300,55 @@ describe("type-filters", () => {
   it("has:emoji matches only nodes with an emoji in their search key", () => {
     const keys = searchKeys(g, "has:emoji")
     expect(keys).toHaveLength(0) // fixture has no emoji content
+  })
+})
+
+// ── outline ───────────────────────────────────────────────────────────────────
+
+describe("outline:<note> / :daily", () => {
+  const g = loadFixture("outline")
+  const daily = { dailyNote: "2026-10-03.md" }
+  const DAILY_OUTLINE = ["2026-10-03|", "2026-10-03#morning", "project x|", "kickoff with [[bob]]", "call [[alice]] about #budget", "prep slides #todo"]
+
+  it("outline:<note> is:page is the note's own outline as one tree, without links' other children", () => {
+    const results = search(g, "outline:2026-10-03 is:page")
+    expect(results.map(r => r.node.searchKey)).toEqual(["2026-10-03|"])
+    // Linked notes' own bullets and their mentions elsewhere stay out; an inline link
+    // doesn't repeat its line under the linked note.
+    expect(collectKeysFromResults(results).sort()).toEqual([...DAILY_OUTLINE].sort())
+  })
+
+  it(":daily :page targets the runtime's daily note, by path", () => {
+    expect(collectKeysFromResults(searchIndex(g, ":daily :page", ".", daily)).sort()).toEqual([...DAILY_OUTLINE].sort())
+  })
+
+  it(":daily matches nothing when the runtime names no daily note", () => {
+    expect(search(g, ":daily :page")).toEqual([])
+  })
+
+  it("other terms only match inside the outline", () => {
+    expect(searchKeys(g, "budget")).toContain("budget review #finance")
+    expect(searchKeys(g, "outline:2026-10-03 budget")).toEqual(["call [[alice]] about #budget", "prep slides #todo"])
+  })
+
+  it("a quoted name selects exactly that note, spaces included", () => {
+    expect(searchKeys(g, "outline:\"project x\" is:page")).toEqual(["project x|", "milestone [[q4]]"])
+  })
+
+  it("a quoted name never matches a fragment", () => {
+    expect(search(g, "outline:\"2026-10\"")).toEqual([])
+  })
+
+  it("a bare fragment picks the most recent matching note", () => {
+    expect(searchKeys(g, "outline:2026-10 is:page")[0]).toBe("2026-10-03|")
+    expect(searchKeys(g, "outline:10-01 is:page")[0]).toBe("2026-10-01|")
+  })
+
+  it("a bare name equal to a note's name picks that note over newer fragment matches", () => {
+    expect(searchKeys(g, "outline:2026-10-01 is:page")[0]).toBe("2026-10-01|")
+  })
+
+  it("an unknown note matches nothing", () => {
+    expect(search(g, "outline:nowhere")).toEqual([])
   })
 })

@@ -1,8 +1,9 @@
-import { NotesGraph, buildGraphFromScanner, reindexFileInGraph, makePeriodicDateResolver, type ParseCacheEntry, type IndexSettings, type PeriodicNoteConfig, type MomentParse, serializeCache, deserializeCache } from "@mdtree/core"
+import { NotesGraph, buildGraphFromScanner, reindexFileInGraph, makePeriodicDateResolver, type ParseCacheEntry, type IndexSettings, type PeriodicNoteConfig, type MomentParse, type SearchOptions, serializeCache, deserializeCache } from "@mdtree/core"
 import { TFile, moment } from "obsidian"
 import { getSettings } from "../view/react-context/settings"
 import { GlobalAtoms, GlobalStore } from "../view/react-context/global"
 import { ObsidianVaultScanner } from "./obsidian-vault-scanner"
+import { dailyNotePath } from "../editing/vault-edits"
 
 // Strict moment parse shared by the periodic-note resolver. Uses the `moment`
 // bundled with Obsidian, so week/locale tokens (gggg, ww, MMM) match what the
@@ -75,6 +76,11 @@ export class IndexedTree {
 
     getDailyNoteConfig(): DailyNoteConfig {
         return this.dailyNoteConfig
+    }
+
+    /** Search context: today's daily note, the target of `:daily` (computed per call, so it follows the date). */
+    searchOptions(): SearchOptions {
+        return { dailyNote: dailyNotePath(this.dailyNoteConfig) }
     }
 
     private indexSettings(): IndexSettings {

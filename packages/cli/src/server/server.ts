@@ -12,6 +12,8 @@ export type VaultIndex = {
   graph: NotesGraph
   settings: IndexSettings
   vaultName: string
+  /** Today's daily-note path (`:daily`), if the vault configures daily notes. */
+  dailyNote: () => string | undefined
 }
 
 // ── Request handler ───────────────────────────────────────────────────────────
@@ -27,7 +29,7 @@ function handleRequest(req: Request, vault: VaultIndex): Response {
   }
 
   try {
-    const results = searchIndex(vault.graph, query, vault.settings.searchSeparator)
+    const results = searchIndex(vault.graph, query, vault.settings.searchSeparator, { dailyNote: vault.dailyNote() })
     // `is:archived` is a reveal toggle, not a matcher: strip it for the match
     // expressions (dimming) and use its presence to reveal archived rows.
     const { reveal, stages: matchExprs } = extractArchiveReveal(parseQuery(query, vault.settings.searchSeparator))

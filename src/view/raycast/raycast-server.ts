@@ -58,7 +58,7 @@ export class RaycastServer {
             const app = this.store.get(GlobalAtoms.appAtom);
             const separator = this.store.get(separatorAtom);
             const graph = this.store.get(GlobalAtoms.graphAtom);
-            const result = searchIndex(graph, decodedQuery, separator);
+            const result = searchIndex(graph, decodedQuery, separator, this.store.get(GlobalAtoms.indexAtom)?.searchOptions());
             const { reveal, stages: matchExprs } = extractArchiveReveal(parseQuery(decodedQuery, separator))
             const { visible } = partitionArchived(result, reveal)
             const flattened = flattenIndex(visible, 0, matchExprs)

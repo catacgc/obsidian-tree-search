@@ -1,7 +1,7 @@
 import type { ParsedNode } from "../graph/types.ts"
 import { isUndated } from "../graph/boost.ts"
 
-export type QueryModifierField = "is" | "has" | "in"
+export type QueryModifierField = "is" | "has" | "in" | "outline"
 
 export type QueryExpr =
   | { type: "contains"; value: string }
@@ -10,10 +10,16 @@ export type QueryExpr =
   | { type: "not"; expr: QueryExpr }
   | { type: "and"; exprs: QueryExpr[] }
   | { type: "or"; exprs: QueryExpr[] }
-  | { type: "modifier"; field: QueryModifierField; value: string }
+  // `exact`: a quoted `outline:"name"` (or `:daily`), matched whole rather than as a fragment.
+  | { type: "modifier"; field: QueryModifierField; value: string; exact?: true }
 
 export const IS_VALUES = ["page", "header", "text", "folder", "attachment", "task", "completed", "undated", "archived"]
 export const HAS_VALUES = ["emoji", "link", "page"]
+
+// `outline:` target written by the `:daily` shortcut: today's daily note, which
+// only the runtime can name (`SearchOptions.dailyNote`). A note name can't
+// contain ":", so it never collides with an `outline:<note>` value.
+export const DAILY_NOTE = ":daily"
 
 // Intrinsic archive check: a node authored as archived via any of the three
 // forms. The index-time derived `archived` flag covers page frontmatter and
@@ -50,7 +56,7 @@ export function parseDuration(value: string): number | null {
   return n * unit
 }
 
-const LEGACY_MODIFIERS: Record<string, { field: QueryModifierField; value: string }> = {
+const LEGACY_MODIFIERS: Record<string, { field: QueryModifierField; value: string; exact?: true }> = {
   page: { field: "is", value: "page" },
   header: { field: "is", value: "header" },
   folder: { field: "is", value: "folder" },
@@ -59,6 +65,7 @@ const LEGACY_MODIFIERS: Record<string, { field: QueryModifierField; value: strin
   completed: { field: "is", value: "completed" },
   archived: { field: "is", value: "archived" },
   emoji: { field: "has", value: "emoji" },
+  daily: { field: "outline", value: DAILY_NOTE, exact: true },
 }
 
 function resolveUniquePrefix(candidates: string[], typed: string): string | null {
@@ -119,6 +126,13 @@ function tokenize(input: string, separator: string): Token[] {
       value += input[j]
       j++
     }
+    // `outline:"name with spaces"`: the quoted name belongs to the field, and
+    // keeps its quotes so matchField can tell an exact name from a fragment.
+    if (value === "outline:" && input[j] === '"') {
+      const close = input.indexOf('"', j + 1)
+      value += `"${input.slice(j + 1, close === -1 ? input.length : close)}"`
+      j = close === -1 ? input.length : close + 1
+    }
     tokens.push({ kind: "word", value })
     i = j
   }
@@ -139,20 +153,24 @@ function tokenize(input: string, separator: string): Token[] {
 // The parser never throws: unmatched parens or stray operators are absorbed
 // so a partially-typed query never crashes live search.
 
-function matchField(word: string): { field: QueryModifierField; value: string } | null {
-  const m = /^(is|has|in):(.+)$/.exec(word)
+function matchField(word: string): { field: QueryModifierField; value: string; exact?: true } | null {
+  const m = /^(is|has|in|outline):(.+)$/.exec(word)
   if (!m) return null
   const field = m[1] as QueryModifierField
   const typedValue = m[2]
   // `in:` values are open-ended durations, not an enum — keep the raw string
-  // and validate it at match time via parseDuration.
+  // and validate it at match time via parseDuration. `outline:` names a note:
+  // quoted, the exact name; bare, a fragment (searchIndex picks the latest match).
   if (field === "in") return { field, value: typedValue }
+  if (field === "outline") {
+    return typedValue.startsWith('"') ? { field, value: typedValue.slice(1, -1), exact: true } : { field, value: typedValue }
+  }
   const values = field === "is" ? IS_VALUES : HAS_VALUES
   const resolved = resolveUniquePrefix(values, typedValue)
   return { field, value: resolved ?? typedValue }
 }
 
-function matchLegacyModifier(word: string): { field: QueryModifierField; value: string } | null {
+function matchLegacyModifier(word: string): { field: QueryModifierField; value: string; exact?: true } | null {
   const m = /^:([a-z]+)$/.exec(word)
   if (!m) return null
   const resolved = resolveUniquePrefix(Object.keys(LEGACY_MODIFIERS), m[1])
@@ -222,10 +240,8 @@ function parseTokens(tokens: Token[]): QueryExpr[] {
       return { type: "equals", value: tok.value }
     }
     if (tok.kind === "word") {
-      const field = matchField(tok.value)
-      if (field) return { type: "modifier", field: field.field, value: field.value }
-      const legacy = matchLegacyModifier(tok.value)
-      if (legacy) return { type: "modifier", field: legacy.field, value: legacy.value }
+      const modifier = matchField(tok.value) ?? matchLegacyModifier(tok.value)
+      if (modifier) return { type: "modifier", ...modifier }
       return { type: "contains", value: tok.value }
     }
     // A stray operator token in atom position (e.g. dangling "|" or ")")
@@ -269,6 +285,9 @@ function matchModifier(attrs: ParsedNode, field: QueryModifierField, value: stri
     const days = parseDuration(value)
     return days !== null && attrs.ageDays <= days
   }
+  // `outline:` scopes the whole search (searchIndex) rather than testing one
+  // node, so every node it lets through satisfies it.
+  if (field === "outline") return true
   // field === "has"
   switch (value) {
     case "emoji": return containsEmoji(attrs.searchKey)
@@ -400,4 +419,43 @@ export function extractArchiveReveal(stages: QueryExpr[]): { reveal: boolean; st
     return r.expr
   })
   return { reveal, stages: out }
+}
+
+// ── Outline scope ───────────────────────────────────────────────────────────────
+//
+// `outline:<note>` / `:daily` is not a per-node matcher either: it restricts the
+// whole search to one note's own outline (searchIndex). Its targets are collected
+// from anywhere in the query and the modifiers stripped, so the rest of each stage
+// matches as usual; a stage holding only the scope collapses to empty (matches
+// all). A negated `-outline:` is dropped without scoping.
+
+/** A note named by `outline:`: `exact` names it whole (quoted, or `:daily`); otherwise `value` is a fragment. */
+export type OutlineTarget = { value: string; exact: boolean }
+
+function stripOutline(expr: QueryExpr, targets: OutlineTarget[], negated: boolean): QueryExpr {
+  switch (expr.type) {
+    case "modifier":
+      if (expr.field !== "outline") return expr
+      if (!negated) targets.push({ value: expr.value, exact: expr.exact === true })
+      return { type: "empty" }
+    case "not": {
+      const inner = stripOutline(expr.expr, targets, true)
+      return inner.type === "empty" ? inner : { type: "not", expr: inner }
+    }
+    case "and":
+    case "or": {
+      const kept = expr.exprs.map(e => stripOutline(e, targets, negated)).filter(e => e.type !== "empty")
+      if (kept.length === 0) return { type: "empty" }
+      if (kept.length === 1) return kept[0]
+      return { type: expr.type, exprs: kept }
+    }
+    default:
+      return expr
+  }
+}
+
+export function extractOutlineScope(stages: QueryExpr[]): { targets: OutlineTarget[]; stages: QueryExpr[] } {
+  const targets: OutlineTarget[] = []
+  const out = stages.map(stage => stripOutline(stage, targets, false))
+  return { targets, stages: out }
 }

@@ -37,7 +37,8 @@
 		"postcss-prefix-selector": "^2.1.1",
 		"tailwindcss": "^4.1.7",
 		"tslib": "2.4.0",
-		"typescript": "^5.8.3"
+		"typescript": "^5.8.3",
+		"typescript-language-server": "^6.0.1"
 	},
 	"dependencies": {
 		"@mdtree/core": "workspace:*",

@@ -39,6 +39,17 @@ export function getKey(node: ParsedNode): string {
   }
 }
 
+/** Keys of the page/header nodes a line's `[[links]]` point at: the sources of the
+ *  link "parent" edges the indexer adds to that line (createVirtualPage keys). */
+export function linkTargetKeys(tokens: ParsedTextToken[]): Set<string> {
+  const keys = new Set<string>()
+  for (const t of tokens) {
+    if (t.tokenType !== "obsidian_link") continue
+    keys.add((t.headerName ? `${t.pageTarget}#${t.headerName}` : `[[${t.pageTarget.replace(/\.canvas$/i, "")}]]`).toLowerCase())
+  }
+  return keys
+}
+
 // ── Edge storage ───────────────────────────────────────────────────────────────
 
 type StoredEdge = {

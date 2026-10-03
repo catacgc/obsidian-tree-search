@@ -1,6 +1,6 @@
 // The inline editor shared by Append and Alt-Edit (EDITOR.md §3): outline section, optional
 // content section, live preview and footer hints. Sits at the top of Quick Add, keyed by
-// session, with its `[[` link results (LinkResults) filling the modal below it.
+// session, with its link results (LinkResults: `[[` matches, else the daily outline) filling the modal below it.
 import React, {useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
 import {useAtomValue, useSetAtom} from "jotai";
 import {useMolecule} from "bunshi/react";
@@ -8,7 +8,7 @@ import {htmlToMarkdown, Notice, Platform, Scope, type Modifier} from "obsidian";
 import {Brackets, ClipboardPaste, IndentDecrease, IndentIncrease, ListTodo, Paperclip} from "lucide-react";
 import {attachmentExt, attachmentKind, attachmentName, reverseMarkdownParsing} from "@mdtree/core";
 import {GlobalAtoms} from "../react-context/global";
-import {SearchViewMolecule} from "../react-context/state";
+import {DAILY_OUTLINE_QUERY, SearchViewMolecule} from "../react-context/state";
 import {leaveQuickAddAtom} from "../react-context/quick-add-flow";
 import {openFileByName} from "../../obsidian-utils";
 import {newNotePath, pasteAttachment, trashSessionAttachments} from "../../editing/vault-edits";
@@ -203,8 +203,8 @@ export function InlineEditor({state}: { state: EditorState }) {
     const suggestFor = (section: Section): LinkSuggestState => section === "outline" ? outlineSuggest : contentSuggest
     const suggest = suggestFor(focused)
 
-    // Quick Add's results list follows the open `[[query` of the focused field.
-    useEffect(() => setQuery({query: suggest.open ? suggest.query : ""}), [suggest.open, suggest.query])
+    // Quick Add's results list follows the open `[[query` of the focused field, else shows today's daily outline.
+    useEffect(() => setQuery({query: suggest.open ? suggest.query : DAILY_OUTLINE_QUERY}), [suggest.open, suggest.query])
 
     /** Escape / ✕ / backdrop: close Quick Add; the Append draft stays for next time. */
     const close = () => leave({kind: "cancelled"})
@@ -279,12 +279,15 @@ export function InlineEditor({state}: { state: EditorState }) {
         setFocused("outline")
     }
 
+    /** A picked row: replaces the open `[[query`, or (daily outline, no `[[` open) inserts a note/heading link at the caret. */
     function accept(section: Section, row: TreeNode) {
         const h = fieldOf(section)
         const sug = suggestFor(section)
         if (!h) return
+        if (!sug.open && row.node.nodeType !== "page" && row.node.nodeType !== "header") return
         const {text, start} = fieldState(h)
-        let edit = acceptLink(text, sug.start, start, reverseMarkdownParsing(row.node))
+        const link = reverseMarkdownParsing(row.node)
+        let edit = sug.open ? acceptLink(text, sug.start, start, link) : insertAtCaret(text, start, link)
         // A pick keeps the Append outline's caret line a list item.
         if (section === "outline" && append) edit = ensureBullet(edit.text, edit.caret)
         applyEdit(section, edit)

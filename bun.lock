@@ -37,6 +37,7 @@
         "tailwindcss": "^4.1.7",
         "tslib": "2.4.0",
         "typescript": "^5.8.3",
+        "typescript-language-server": "^6.0.1",
       },
     },
     "packages/cli": {
@@ -904,6 +905,8 @@
     "typed-array-length": ["typed-array-length@1.0.6", "", { "dependencies": { "call-bind": "^1.0.7", "for-each": "^0.3.3", "gopd": "^1.0.1", "has-proto": "^1.0.3", "is-typed-array": "^1.1.13", "possible-typed-array-names": "^1.0.0" } }, "sha512-/OxDN6OtAk5KBpGb28T+HZc2M+ADtvRxXrKKbUwtsLgdoxgX13hyy7ek6bFRl5+aBs2yZzB0c4CnQfAtVypW/g=="],
 
     "typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
+
+    "typescript-language-server": ["typescript-language-server@6.0.1", "", { "bin": { "typescript-language-server": "lib/cli.mjs" } }, "sha512-c5hEHM/7rdFRbQWoHXuddyJ53oF0M2dKeXQOYdwUek556oarltKeumKJGLp/ZMcGV7gW30mGn1MR3V5GDiLiKg=="],
 
     "uc.micro": ["uc.micro@2.1.0", "", {}, "sha512-ARDJmphmdvUk6Glw7y9DQ2bFkKBHwQHLi2lsaH6PPmz/Ka9sFOBsBluozhDltWmnv9u/cF6Rt87znRTPV+yp/A=="],
 

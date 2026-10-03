@@ -1,6 +1,6 @@
 import type { ParsedNode } from "../graph/types.ts"
 import type { ResultNode } from "./search.ts"
-import { getKey, type NotesGraph } from "../graph/graph.ts"
+import { getKey, linkTargetKeys, type NotesGraph } from "../graph/graph.ts"
 import { containsEmoji, isUndated, UNDATED_AGE } from "../graph/boost.ts"
 import { matchQuery, nodeMatchesQuery, type QueryExpr } from "./query.ts"
 
@@ -73,10 +73,7 @@ export function buildTimeline(
 // page/header they link to; those refs are skipped.
 export function fileParent(graph: NotesGraph, node: ParsedNode): ParsedNode | null {
   if (node.nodeType !== "text" && node.nodeType !== "header") return null
-  const refs = node.nodeType === "text"
-    ? new Set(graph.getObsidianLinkReferences(node.parsedTokens).map(r =>
-        (r.headerName ? `${r.pageTarget}#${r.headerName}` : `[[${r.pageTarget.replace(/\.canvas$/i, "")}]]`).toLowerCase()))
-    : undefined
+  const refs = node.nodeType === "text" ? linkTargetKeys(node.parsedTokens) : undefined
   for (const e of graph.inboundEdgeEntries(getKey(node))) {
     if (e.attributes.type !== "parent" || e.attributes.location.path !== node.location.path) continue
     if (refs?.has(e.source)) continue

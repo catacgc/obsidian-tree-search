@@ -42,7 +42,7 @@ export { parseCanvasData, type CanvasData, type NodeTextLine } from "./parser/ca
 export { buildNodesFromTextLines } from "./parser/text-lines.ts"
 
 // Search
-export { searchIndex, advancedSearch, searchParents, flattenTasks, pruneResultTree, linkTargetTree, type ResultNode } from "./search/search.ts"
+export { searchIndex, advancedSearch, searchParents, flattenTasks, pruneResultTree, linkTargetTree, type ResultNode, type SearchOptions } from "./search/search.ts"
 export { parseQuery, parseDuration, matchQuery, firstPassInclude, nodeMatchesQuery, collectModifiers, extractArchiveReveal, containsEmoji as queryContainsEmoji, type QueryExpr, type QueryModifierField } from "./search/query.ts"
 export { suggestAt, spliceSuggestion, type Suggestion } from "./search/suggest.ts"
 export { describeQuerySyntax, type QuerySyntaxEntry, type QuerySyntaxGroup } from "./search/syntax.ts"
