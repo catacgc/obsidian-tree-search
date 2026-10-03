@@ -134,7 +134,7 @@ It works in both sections.
 
 ### 3.5 Pasting attachments
 
-A paste whose `clipboardData.files` is not empty is handled by the editor (`preventDefault`) in either section. **Any file type** is accepted. Each file is **written to disk immediately**.
+A paste whose `clipboardData.files` is not empty is handled by the editor (`preventDefault`) in either section. **Any file type** is accepted. Each file is **written to disk immediately**. A text paste that is a single URL is handled by §3.8.
 
 **Base note** (whose name the attachment is named after):
 - Append outline: the first page link on the caret's line, else the nearest line above with a smaller indent that has a page link, else the parent `P`.
@@ -223,6 +223,14 @@ Escape must **not** close the modal. While focus is inside the editor, it pushes
 3. Keep the query and scroll position. The re-run search shows the new rows.
 
 **Cancel** (Escape in the outline, opening another editor as in §3.1, or unmounting the view or modal while the editor is open): trash all session attachments with `app.fileManager.trashFile` and discard the buffers. Nothing else was written.
+
+### 3.8 Pasting links
+
+A paste whose plain text, trimmed, is a single URL (`scheme://…` with no whitespace) becomes a markdown link in either section (`pastedUrl` / `pasteLink` in `textarea-ops.ts`):
+- **Selection:** `[selection](url)`, caret after the link. The selection wins over any clipboard title.
+- **Rich link, no selection:** when the clipboard HTML has exactly one `<a>` whose `href` is the URL (ignoring one trailing `/`) and whose text is not just the URL, the paste gives `[title](url)` with the title (brackets escaped) selected. This ignores the "Auto convert HTML" setting: no HTML is converted.
+- **Otherwise:** `[](url)` with the caret between the brackets.
+- **Raw URL:** the URL is pasted as-is right after `](` (e.g. into Mod+K's selected `url`), over a multi-line selection, or over a selected URL. **Mod+Shift+V** always pastes the raw URL.
 
 ## 4. Append
 

@@ -103,7 +103,6 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
                         className="w-full pl-5 ml-1 mb-2 mt-2 pr-8 py-3
                         rounded-lg border focus:border-obs-hover hover:border-obs-hover focus:ring-0
                         outline-none transition-all duration-150
-                        bg-obs-base-0
                         "
                     />
 

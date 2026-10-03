@@ -11,9 +11,9 @@ export type SearchAutocompleteProps = {
 export const SearchAutocomplete = ({ suggestions, highlightedIndex, onHover, onAccept }: SearchAutocompleteProps) => {
     if (suggestions.length === 0) return null
 
-    // Styled as the ⌘K action panel: same surface, item rows and selection highlight (ActionPanel.css).
+    // Styled as the ⌘K action panel, like the editor's [[ link list: shared `.ts-suggest` surface and item rows (ActionPanel.css).
     return (
-        <div className="ts-query-suggest" role="listbox">
+        <div className="ts-suggest" role="listbox">
             {suggestions.map((s, i) => (
                 <div
                     key={s.label}

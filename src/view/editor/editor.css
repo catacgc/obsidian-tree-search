@@ -20,7 +20,7 @@
     height: 16px;
     border: none;
     color: var(--interactive-accent);
-    background: var(--background-primary);
+    background: var(--ts-surface);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -39,16 +39,15 @@
     outline: 1px solid var(--interactive-accent);
 }
 
-/* Matches the search block (bg-obs-base-0, rounded-sm, 1px border) and search input (rounded-lg, hover border, no ring). */
+/* No box: the editor sits on the view's own tone (--ts-surface, styles.css) and a soft divider
+   below separates it from the search block, like the action footer's top border. */
 .ts-inline-editor {
     display: flex;
     flex-direction: column;
     gap: 4px;
-    padding: 6px 8px;
-    margin-bottom: 4px;
-    background: var(--color-base-00);
-    border: 1px solid var(--background-modifier-border);
-    border-radius: var(--radius-s);
+    padding: 6px 8px 8px;
+    background: var(--ts-surface);
+    border-bottom: 1px solid var(--background-modifier-border);
     white-space: normal;
 }
 
@@ -56,26 +55,61 @@
     position: relative;
 }
 
-.ts-inline-editor textarea {
+/* MarkdownField: Obsidian's markdown editor in a box styled like the search input; grows to 8 lines, then scrolls. */
+.ts-inline-editor .ts-editor-text {
     width: 100%;
-    resize: none;
+    min-height: calc(1lh + 14px);
+    max-height: calc(8lh + 14px);
     overflow-y: auto;
     font-family: var(--font-text);
     font-size: var(--font-ui-small);
-    background: var(--color-base-00);
+    line-height: var(--line-height-normal);
+    color: var(--text-normal);
+    background: transparent;
     border: 1px solid var(--background-modifier-border);
     border-radius: 0.5rem;
     padding: 6px 10px;
-    box-shadow: none;
-    outline: none;
+    cursor: text;
     transition: border-color 150ms;
 }
 
-.ts-inline-editor textarea:hover,
-.ts-inline-editor textarea:focus,
-.ts-inline-editor textarea:focus-visible {
+.ts-inline-editor .ts-editor-text:hover,
+.ts-inline-editor .ts-editor-text:focus-within {
     border-color: var(--background-modifier-border-hover);
-    box-shadow: none;
+}
+
+.ts-inline-editor .ts-editor-text .markdown-source-view.mod-cm6 {
+    display: block;
+}
+
+.ts-inline-editor .ts-editor-text .cm-scroller {
+    padding: 0;
+    overflow: visible;
+    font-family: var(--font-text);
+    font-size: var(--font-ui-small);
+    line-height: var(--line-height-normal);
+}
+
+.ts-inline-editor .ts-editor-text .cm-sizer {
+    margin: 0;
+    padding: 0;
+    max-width: none;
+    min-height: 0;
+}
+
+.ts-inline-editor .ts-editor-text .cm-content {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    min-height: 0;
+}
+
+/* Obsidian spaces list lines by `--list-spacing`; the field keeps the input's height. */
+.ts-inline-editor .ts-editor-text .cm-line {
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.ts-inline-editor .ts-editor-text .cm-editor.cm-focused {
     outline: none;
 }
 
@@ -155,34 +189,12 @@
     color: var(--text-error);
 }
 
-.ts-link-suggest {
-    position: absolute;
-    top: 100%;
-    left: 0;
+/* Positioning only; the surface and rows are the shared `.ts-suggest` / `.ts-action-panel-item` (ActionPanel.css). */
+.ts-suggest.ts-link-suggest {
+    top: calc(100% + 4px);
     right: 0;
-    max-height: calc(8 * 22px);
-    overflow-y: auto;
-    /* Above the search bar (sticky, z-30) that follows the editor. */
-    z-index: 40;
-    background: var(--background-primary);
-    border: 1px solid var(--background-modifier-border);
 }
 
-.ts-link-suggest-row {
-    height: 22px;
-    font-size: var(--font-ui-small);
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    white-space: nowrap;
-    cursor: pointer;
-}
-
-.ts-link-suggest-row.is-selected {
-    background: var(--background-modifier-hover);
-}
-
-.ts-link-suggest-row.is-muted,
-.ts-link-suggest .is-muted {
+.ts-link-suggest .ts-action-panel-item.is-muted {
     color: var(--text-muted);
 }

@@ -64,7 +64,7 @@ export const SHORTCUTS: Shortcut[] = [
     {id: "newEditor", group: "Editor", keys: [alt("KeyN", "N")], description: "Open editor", needs: "editing"},
 ]
 
-/** Keys inside the inline editor's textareas (handled by InlineEditor; listed for help only). */
+/** Keys inside the inline editor's text fields (handled by InlineEditor; listed for help only). */
 export const EDITOR_KEYS: {keys: KeySpec[]; description: string}[] = [
     {keys: [key(ENTER, "Enter", {macLabel: "↵", shift: true}), key(ENTER, "Enter", {macLabel: "↵", mod: true})], description: "Save"},
     {keys: [key("Escape", "Esc")], description: "Cancel"},

@@ -7,7 +7,7 @@ import {
 } from "../view/editor/row-editing"
 import {
     outlineIndent, linkQueryAt, acceptLink, linkAt, insertAttachmentBullets, outlineBaseNote,
-    outlineBackspace, replaceOutlineParent, pasteOutline, changedRange,
+    outlineBackspace, replaceOutlineParent, pasteOutline, changedRange, pasteLink, pastedUrl,
 } from "../view/editor/textarea-ops"
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -239,6 +239,38 @@ describe("pasteOutline", () => {
     })
     it("is null for blank text", () => {
         expect(pasteOutline("- ", 2, 2, "\n \n")).toBeNull()
+    })
+})
+
+describe("pastedUrl", () => {
+    it("accepts a single trimmed URL of any scheme", () => {
+        expect(pastedUrl(" https://x.com/a ")).toBe("https://x.com/a")
+        expect(pastedUrl("obsidian://open?vault=v")).toBe("obsidian://open?vault=v")
+    })
+    it("rejects text around or after the URL", () => {
+        expect(pastedUrl("see https://x.com")).toBeNull()
+        expect(pastedUrl("https://x.com\nfoo")).toBeNull()
+    })
+})
+
+describe("pasteLink", () => {
+    it("wraps the selection, caret after the link", () => {
+        expect(pasteLink("- hello", 2, 7, "https://x.com", "")).toEqual({ text: "- [hello](https://x.com)", caret: 24 })
+    })
+    it("the selection beats the clipboard title", () => {
+        expect(pasteLink("- hello", 2, 7, "https://x.com", "X")).toEqual({ text: "- [hello](https://x.com)", caret: 24 })
+    })
+    it("without a selection or title: caret between the brackets", () => {
+        expect(pasteLink("- ", 2, 2, "https://x.com", "")).toEqual({ text: "- [](https://x.com)", caret: 3, selectionEnd: 3 })
+    })
+    it("selects the title, escaping its brackets", () => {
+        expect(pasteLink("", 0, 0, "https://x.com", "a [b]")).toEqual({ text: "[a \\[b\\]](https://x.com)", caret: 1, selectionEnd: 8 })
+    })
+    it("is null in a destination slot, over a multi-line selection or over a URL", () => {
+        expect(pasteLink("[s](", 4, 4, "https://x.com", "")).toBeNull()
+        expect(pasteLink("[s](url)", 4, 7, "https://x.com", "")).toBeNull()
+        expect(pasteLink("a\nb", 0, 3, "https://x.com", "")).toBeNull()
+        expect(pasteLink("https://old.com", 0, 15, "https://x.com", "")).toBeNull()
     })
 })
 

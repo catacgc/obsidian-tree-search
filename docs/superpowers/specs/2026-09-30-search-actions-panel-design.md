@@ -67,7 +67,7 @@ Alternatives considered:
 - **No row selected:** only **Actions** shows. The panel then lists only the View section.
 - **Clicks:** the main action runs it (`executeActionAtom`). **Actions** toggles the panel.
 - **Keycaps:** `<kbd class="ts-keycap">` with a 1 px `--background-modifier-border` border, `--radius-s` corners and `--font-ui-smaller` text. They are hidden when `Platform.isMobile`.
-- **Style:** the search block's look: `--color-base-00` background, a 1 px `--background-modifier-border` top border, muted text (`--color-base-40`), and the accent color on hover. Height 32 px on desktop and 44 px on `Platform.isPhone`.
+- **Style:** the search block's look: the view's own tone (`--ts-surface`, see EDITOR.md §3.1), a 1 px `--background-modifier-border` top border, muted text (`--color-base-40`), and the accent color on hover. Height 32 px on desktop and 44 px on `Platform.isPhone`.
 
 ## 3. Action panel (`src/view/search/ActionPanel.tsx` + pure `src/view/search/action-panel.ts`, new)
 
@@ -142,7 +142,7 @@ Navigation (`next`, `previous`) and `recency` are not listed; the chips stay vis
 
 - **Placement:** rendered inside the view, above the footer and aligned to its right edge. Width `min(360px, 100% - 16px)`. On `Platform.isPhone`, or when the view is narrower than 400 px, it spans the full width.
 - **Size:** max height 60 % of the view; the list scrolls.
-- **Style:** `--color-base-00` background, a 1 px `--background-modifier-border` border, `--radius-m` corners and `--shadow-s`.
+- **Style:** the view's own tone (`--ts-surface`), a 1 px `--background-modifier-border` border, `--radius-m` corners and `--shadow-s`.
 - **Sections:** a muted, small section title; sections are separated by a 1 px divider.
 - **Rows:** 32 px tall (44 px on `Platform.isPhone`), with a 16 px lucide icon, the title, and right-aligned keycaps (hidden on mobile). The highlighted row uses `--background-modifier-hover`. The first row is highlighted on open.
 - **Filter field:** at the bottom, placeholder `Search for actions…` (`Search for a note…` in Move under). It is an `<input type="text">`: the panel only exists while open and renders after the search input, so it never becomes the "first input" the modal and `activateView` focus.

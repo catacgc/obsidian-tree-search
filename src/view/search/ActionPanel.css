@@ -1,6 +1,6 @@
 /* Action footer and action panel (ActionFooter.tsx / ActionPanel.tsx). Styled like the search
-   block: base-00 background, 1px modifier border, muted text, accent on hover. Not under
-   .tw-reset, so plain class selectors carry the look. */
+   block: the view's own tone (--ts-surface, styles.css), 1px modifier border, muted text, accent
+   on hover. Not under .tw-reset, so plain class selectors carry the look. */
 
 /* Sticky: in the Search pane the whole leaf scrolls, so the footer pins to the visible bottom;
    in the modal the results scroll on their own and this is a no-op. */
@@ -24,7 +24,7 @@
 	min-height: 32px;
 	padding: 0 8px;
 	padding-bottom: env(safe-area-inset-bottom);
-	background: var(--color-base-00);
+	background: var(--ts-surface);
 	border-top: 1px solid var(--background-modifier-border);
 	font-size: var(--font-ui-small);
 	color: var(--color-base-40);
@@ -114,7 +114,7 @@
 	flex-direction: column;
 	width: min(360px, calc(100% - 16px));
 	max-height: min(60vh, 480px);
-	background: var(--color-base-00);
+	background: var(--ts-surface);
 	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-m);
 	box-shadow: var(--shadow-s);
@@ -213,9 +213,9 @@
 	color: var(--text-faint);
 }
 
-/* The search box's is:/in:/has: autocomplete (SearchAutocomplete.tsx) reuses the panel's item rows;
-   this is the panel surface, dropped below the input instead of above the footer. */
-.ts-query-suggest {
+/* The two autocomplete dropdowns share the panel's surface and item rows: the search box's
+   is:/in:/has: list (SearchAutocomplete.tsx) and the editor's [[ link tree (LinkSuggest.tsx). */
+.ts-suggest {
 	position: absolute;
 	top: 100%;
 	left: 0;
@@ -224,14 +224,14 @@
 	max-height: min(60vh, 480px);
 	overflow-y: auto;
 	padding: 4px;
-	background: var(--color-base-00);
+	background: var(--ts-surface);
 	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-m);
 	box-shadow: var(--shadow-s);
 	font-size: var(--font-ui-small);
 }
 
-.is-phone .ts-query-suggest .ts-action-panel-item {
+.is-phone .ts-suggest .ts-action-panel-item {
 	height: 44px;
 }
 

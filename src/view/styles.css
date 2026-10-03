@@ -23,6 +23,29 @@
 	width: 100%;
 }
 
+/* The plugin's panes use the same white / dark background as the modal, not a sidebar's gray. */
+.workspace-leaf-content[data-type="tree-search"],
+.workspace-leaf-content[data-type="file-context"],
+.workspace-leaf-content[data-type="organise-notes"] {
+	background-color: var(--background-primary);
+}
+
+/* The view's tone. The search block, editor, action footer and their dropdowns all paint it;
+   sticky bars and overlays need an opaque fill that matches what is behind them. */
+.ts-search-view {
+	--ts-surface: var(--background-primary);
+}
+
+.modal .ts-search-view {
+	--ts-surface: var(--modal-background);
+}
+
+/* No box around the search input: a soft divider below it, like the action footer's top border. */
+.ts-search-block {
+	background: var(--ts-surface);
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
 .tree-search-modal-body {
 	height: calc(100vh * 0.75);
 }

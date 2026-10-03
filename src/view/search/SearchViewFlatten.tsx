@@ -98,7 +98,7 @@ export const SearchViewFlatten = () => {
 
     return <>
         {allowEditing && editorState && <InlineEditor key={editorState.sessionId} state={editorState}/>}
-        {(viewState.showSearch) && <div className="tw-reset bg-obs-base-0 rounded-sm border border-gray-200">
+        {(viewState.showSearch) && <div className="tw-reset ts-search-block">
                 <SearchBar isQuickLink={viewState.isQuickLink}/>
                 {timelineActive && <TimelineFilterBar/>}
             </div>

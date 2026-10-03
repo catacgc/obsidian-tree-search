@@ -4,7 +4,7 @@
 import React, {useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
 import {useAtomValue, useSetAtom} from "jotai";
 import {useMolecule} from "bunshi/react";
-import {Notice, Platform, Scope} from "obsidian";
+import {htmlToMarkdown, Notice, Platform, Scope, type Modifier} from "obsidian";
 import {attachmentExt, attachmentKind, attachmentName, reverseMarkdownParsing, type TreeNode as CoreTreeNode} from "@mdtree/core";
 import {GlobalAtoms} from "../react-context/global";
 import {SearchViewMolecule} from "../react-context/state";
@@ -13,17 +13,21 @@ import {newNotePath, pasteAttachment, trashSessionAttachments} from "../../editi
 import {basenameOf, EditorMolecule, editorHintsFor, isSaveBlocked, type EditorState} from "./EditorMolecule";
 import {LinkSuggest, useLinkSuggest, type LinkSuggestState} from "./LinkSuggest";
 import {MarkdownLine} from "./MarkdownLine";
+import {MarkdownField, type MarkdownFieldHandle} from "./MarkdownField";
+import {autoConvertHtml} from "./obsidian-editor";
 import {
     acceptLink,
     firstLinkOnLine,
     insertAtCaret,
     insertAttachmentBullets,
     linkAt,
-    normalizePastedOutline,
     outlineBackspace,
     outlineBaseNote,
     outlineEnter,
     outlineIndent,
+    pasteLink,
+    pasteOutline,
+    pastedUrl,
     wrapLink,
     wrapSelection,
     type TextEdit,
@@ -31,18 +35,23 @@ import {
 
 type Section = "outline" | "content"
 
-const MAX_ROWS = 8
 const PREVIEW_LINES = 6
+
+// `Scope.register` matches any modifiers when given null (obsidian.d.ts only declares arrays).
+const ANY_MODIFIERS = null as unknown as Modifier[]
 
 /** Existing buffer key for `name` (links are case-insensitive), else `name`. */
 const bufferKey = (contents: Record<string, string>, name: string) =>
     Object.keys(contents).find(k => k.toLowerCase() === name.toLowerCase()) ?? name
 
-function autoGrow(ta: HTMLTextAreaElement | null) {
-    if (!ta) return
-    ta.style.height = "auto"
-    const lineHeight = parseFloat(getComputedStyle(ta).lineHeight) || 20
-    ta.style.height = `${Math.min(ta.scrollHeight, MAX_ROWS * lineHeight)}px`
+/** Text of the clipboard HTML's only `<a>` whose href is `url` (ignoring one trailing "/"), else "". */
+function clipboardLinkTitle(html: string, url: string): string {
+    const anchors = new DOMParser().parseFromString(html, "text/html").querySelectorAll("a[href]")
+    if (anchors.length !== 1) return ""
+    const strip = (s: string) => s.trim().replace(/\/$/, "")
+    if (strip(anchors[0].getAttribute("href")!) !== strip(url)) return ""
+    const t = (anchors[0].textContent ?? "").replace(/\s+/g, " ").trim()
+    return t === "" || strip(t) === strip(url) ? "" : t
 }
 
 export function InlineEditor({state}: { state: EditorState }) {
@@ -54,11 +63,15 @@ export function InlineEditor({state}: { state: EditorState }) {
     const app = useAtomValue(GlobalAtoms.appAtom)
 
     const rootRef = useRef<HTMLDivElement>(null)
-    const outlineRef = useRef<HTMLTextAreaElement>(null)
-    const contentRef = useRef<HTMLTextAreaElement>(null)
+    const outlineRef = useRef<MarkdownFieldHandle | null>(null)
+    const contentRef = useRef<MarkdownFieldHandle | null>(null)
+    const fieldOf = (s: Section) => s === "outline" ? outlineRef.current : contentRef.current
+    // Mod+Shift+V was pressed: the paste that follows takes the clipboard's plain text.
+    const plainPaste = useRef(false)
     const pending = useRef<{ section: Section; start: number; end: number } | null>(null)
     const alive = useRef(false)
     const escapeRef = useRef<() => void>(() => {})
+    const scopeKeyRef = useRef<(ev: KeyboardEvent) => boolean>(() => false)
 
     const [focused, setFocused] = useState<Section>("outline")
     const [outlineCaret, setOutlineCaret] = useState(state.outline.length)
@@ -80,8 +93,10 @@ export function InlineEditor({state}: { state: EditorState }) {
     const contentSourcePath = (name: string) =>
         app.metadataCache.getFirstLinkpathDest(name, "")?.path ?? newNotePath(app, name, state.sourcePath)
 
-    // Escape is claimed through an Obsidian Scope (so it doesn't close the modal), pushed only
-    // while focus is inside the editor so Escape elsewhere (e.g. in a note) keeps its meaning.
+    // Escape and the fields' own keys are claimed through an Obsidian Scope, pushed only while focus
+    // is inside the editor so Escape elsewhere (e.g. in a note) keeps its meaning. Escape must not
+    // close the modal; the other keys must beat Obsidian's hotkeys, which run before the field's
+    // listeners and treat the field as a markdown editor (Mod+B, Mod+I, Alt+Enter run editor commands).
     const scopeRef = useRef<Scope | null>(null)
     const scopePushed = useRef(false)
     const pushScope = () => {
@@ -103,12 +118,14 @@ export function InlineEditor({state}: { state: EditorState }) {
             escapeRef.current()
             return false
         })
+        // Unhandled keys (undefined) fall through to the field and Obsidian's hotkeys.
+        scope.register(ANY_MODIFIERS, null, ev => scopeKeyRef.current(ev) ? false : undefined)
         scopeRef.current = scope
 
-        const ta = outlineRef.current
-        if (ta) {
-            ta.focus()
-            ta.setSelectionRange(ta.value.length, ta.value.length)
+        const h = outlineRef.current
+        if (h) {
+            h.focus()
+            h.setSelection(h.text().length)
         }
         if (rootRef.current?.contains(document.activeElement)) pushScope()
 
@@ -125,26 +142,24 @@ export function InlineEditor({state}: { state: EditorState }) {
     // Re-targeting or re-requesting an open editor focuses the outline end.
     useEffect(() => {
         if (state.focusNonce === 0) return
-        const ta = outlineRef.current
-        if (!ta) return
-        ta.focus()
-        ta.setSelectionRange(ta.value.length, ta.value.length)
-        setOutlineCaret(ta.value.length)
+        const h = outlineRef.current
+        if (!h) return
+        h.focus()
+        const end = h.text().length
+        h.setSelection(end)
+        setOutlineCaret(end)
         setFocused("outline")
     }, [state.focusNonce])
-
-    useLayoutEffect(() => autoGrow(outlineRef.current), [state.outline])
-    useLayoutEffect(() => autoGrow(contentRef.current), [contentText, active])
 
     // Apply caret/selection changes requested by text operations.
     useLayoutEffect(() => {
         const p = pending.current
         if (!p) return
-        const ta = p.section === "outline" ? outlineRef.current : contentRef.current
-        if (!ta) return
+        const h = fieldOf(p.section)
+        if (!h) return
         pending.current = null
-        ta.focus()
-        ta.setSelectionRange(p.start, p.end)
+        h.focus()
+        h.setSelection(p.start, p.end)
         if (p.section === "outline") setOutlineCaret(p.start)
         else setContentCaret(p.start)
     })
@@ -160,13 +175,20 @@ export function InlineEditor({state}: { state: EditorState }) {
     escapeRef.current = () => {
         if (outlineSuggest.open) return outlineSuggest.dismiss()
         if (contentSuggest.open) return contentSuggest.dismiss()
-        if (document.activeElement === contentRef.current && active !== null) {
+        if (active !== null && rootRef.current?.querySelector(".ts-editor-content")?.contains(document.activeElement)) {
             update(s => ({...s, activeContent: null}))
             pending.current = {section: "outline", start: outlineCaret, end: outlineCaret}
             setFocused("outline")
             return
         }
         cancelToSearch()
+    }
+
+    scopeKeyRef.current = ev => {
+        const root = rootRef.current
+        const inField = (cls: string) => !!root?.querySelector(cls)?.contains(document.activeElement)
+        const section: Section | null = inField(".ts-editor-outline") ? "outline" : inField(".ts-editor-content") ? "content" : null
+        return section !== null && onKeyDown(ev, section)
     }
 
     // ── Text plumbing ─────────────────────────────────────────────────────────
@@ -180,9 +202,14 @@ export function InlineEditor({state}: { state: EditorState }) {
         pending.current = {section, start: edit.caret, end: edit.selectionEnd ?? edit.caret}
     }
 
-    function trackCaret(section: Section, ta: HTMLTextAreaElement) {
-        if (section === "outline") setOutlineCaret(ta.selectionStart)
-        else setContentCaret(ta.selectionStart)
+    function setCaret(section: Section, caret: number) {
+        if (section === "outline") setOutlineCaret(caret)
+        else setContentCaret(caret)
+    }
+
+    /** The field's text and selection, read from the editor (the model can lag an IME composition). */
+    function fieldState(h: MarkdownFieldHandle) {
+        return {text: h.text(), ...h.selection()}
     }
 
     function openContent(name: string) {
@@ -211,87 +238,94 @@ export function InlineEditor({state}: { state: EditorState }) {
     }
 
     function accept(section: Section, row: CoreTreeNode) {
-        const ta = section === "outline" ? outlineRef.current : contentRef.current
+        const h = fieldOf(section)
         const sug = suggestFor(section)
-        if (!ta) return
-        applyEdit(section, acceptLink(ta.value, sug.start, ta.selectionStart, reverseMarkdownParsing(row.node)))
+        if (!h) return
+        const {text, start} = fieldState(h)
+        applyEdit(section, acceptLink(text, sug.start, start, reverseMarkdownParsing(row.node)))
+    }
+
+    /** Plain Enter in the outline: a new bullet (Append) or save (Edit). */
+    function outlinePlainEnter() {
+        const h = outlineRef.current
+        if (!h) return
+        if (append) applyEdit("outline", outlineEnter(h.text(), h.selection().start))
+        else void save()
     }
 
     // ── Keys ──────────────────────────────────────────────────────────────────
-    function onKeyDown(ev: React.KeyboardEvent<HTMLTextAreaElement>, section: Section) {
-        // Escape goes to the pushed Scope (it must not close the modal); everything else stays here.
-        if (ev.key === "Escape") return
-        ev.stopPropagation()
-        const ta = ev.currentTarget
-        const {value: text, selectionStart: start, selectionEnd: end} = ta
+    /** True when handled: the field then keeps the key from CodeMirror and Obsidian. */
+    function onKeyDown(ev: KeyboardEvent, section: Section): boolean {
         const mod = Platform.isMacOS ? ev.metaKey : ev.ctrlKey
+        plainPaste.current = mod && ev.shiftKey && !ev.altKey && ev.key.toLowerCase() === "v"
+        // Escape goes to the pushed Scope (it must not close the modal).
+        // Keys that confirm or edit an IME composition belong to the IME.
+        if (ev.key === "Escape" || ev.isComposing) return false
+        const h = fieldOf(section)
+        if (!h) return false
+        const {text, start, end} = fieldState(h)
         const sug = suggestFor(section)
 
         if (sug.open && sug.rows.length > 0) {
             if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
-                ev.preventDefault()
                 const n = sug.rows.length
                 sug.setSelected((sug.selected + (ev.key === "ArrowDown" ? 1 : n - 1)) % n)
-                return
+                return true
             }
             if ((ev.key === "Enter" || ev.key === "Tab") && !ev.shiftKey) {
-                ev.preventDefault()
                 accept(section, sug.rows[sug.selected])
-                return
+                return true
             }
         }
 
         if (ev.key === "Enter" && (mod || ev.shiftKey)) {
-            ev.preventDefault()
             void save()
-            return
+            return true
         }
         if (section === "outline" && append && ev.key === "Backspace" && !ev.altKey && !mod && !ev.ctrlKey && !ev.metaKey && start === end) {
             const edit = outlineBackspace(text, start)
             if (edit) {
-                ev.preventDefault()
                 applyEdit(section, edit)
-                return
+                return true
             }
         }
         if (section === "outline" && ev.key === "Enter" && ev.altKey) {
-            ev.preventDefault()
             const name = linkAt(text, start) ?? firstLinkOnLine(text, start) ?? (append && parentName ? parentName : null)
             if (name) openContent(name)
-            return
+            return true
         }
+        // In the content section Enter is Obsidian's (it continues lists).
         if (ev.key === "Enter" && section === "outline") {
-            ev.preventDefault()
-            if (append) applyEdit(section, outlineEnter(text, start))
-            else void save()
-            return
+            outlinePlainEnter()
+            return true
         }
         if (ev.key === "Tab" && section === "outline" && append) {
-            ev.preventDefault()
             applyEdit(section, outlineIndent(text, start, ev.shiftKey ? -1 : 1))
-            return
+            return true
         }
         if (mod && !ev.altKey && !ev.shiftKey) {
             const key = ev.key.toLowerCase()
             if (key === "b" || key === "i") {
-                ev.preventDefault()
                 const mark = key === "b" ? "**" : "*"
                 applyEdit(section, wrapSelection(text, start, end, mark, mark))
-            } else if (key === "k") {
-                ev.preventDefault()
+                return true
+            }
+            if (key === "k") {
                 applyEdit(section, wrapLink(text, start, end))
+                return true
             }
         }
+        return false
     }
 
-    function onClick(ev: React.MouseEvent<HTMLTextAreaElement>, section: Section) {
-        const ta = ev.currentTarget
-        trackCaret(section, ta)
-        const name = linkAt(ta.value, ta.selectionStart)
-        if (!name) return
-        const mod = Platform.isMacOS ? ev.metaKey : ev.ctrlKey
+    /** A rendered `[[link]]` at `pos` was clicked: Mod opens the note, otherwise its content buffer opens. */
+    function onLinkClick(section: Section, pos: number, mod: boolean): boolean {
+        const h = fieldOf(section)
+        const name = h ? linkAt(h.text(), pos) : null
+        if (!name) return false
         if (mod) void openFileByName(app, name)
         else if (section === "outline" || bufferKey(state.contents, name) !== active) openContent(name)
+        return true
     }
 
     // ── Paste ─────────────────────────────────────────────────────────────────
@@ -334,45 +368,73 @@ export function InlineEditor({state}: { state: EditorState }) {
         }
         if (names.length === 0) return
 
-        const ta = section === "outline" ? outlineRef.current : contentRef.current
-        const current = ta?.value ?? text
+        const h = fieldOf(section)
+        const current = h ? h.text() : text
         const at = Math.min(caret, current.length)
         if (section === "outline" && append) applyEdit(section, insertAttachmentBullets(current, at, names))
         else applyEdit(section, insertAtCaret(current, at, names.map(n => `![[${n}]]`).join(section === "outline" ? " " : "\n")))
     }
 
-    function onPaste(ev: React.ClipboardEvent<HTMLTextAreaElement>, section: Section) {
-        const ta = ev.currentTarget
-        const {value, selectionStart: start, selectionEnd: end} = ta
-        const files = Array.from(ev.clipboardData.files)
+    /** Files become session attachments; a pasted URL becomes a markdown link (EDITOR.md §3.8); outline text
+     *  is re-shaped (§3.2). True when handled; otherwise Obsidian's own paste runs. */
+    function onPaste(ev: ClipboardEvent, section: Section): boolean {
+        const plain = plainPaste.current
+        plainPaste.current = false
+        const h = fieldOf(section)
+        if (!h) return false
+        const {text, start, end} = fieldState(h)
+        const files = Array.from(ev.clipboardData?.files ?? [])
         if (files.length > 0) {
-            ev.preventDefault()
-            void pasteFiles(section, files, value, start)
-            return
+            void pasteFiles(section, files, text, start)
+            return true
         }
-        const pasted = ev.clipboardData.getData("text/plain")
-        if (section !== "outline" || !pasted.includes("\n")) return
-        ev.preventDefault()
-        const without = value.slice(0, start) + value.slice(end)
-        const insert = append ? normalizePastedOutline(pasted) : pasted.replace(/\r?\n/g, " ")
-        applyEdit(section, insertAtCaret(without, start, insert))
+        const url = plain ? null : pastedUrl(ev.clipboardData?.getData("text/plain") ?? "")
+        if (url !== null) {
+            const html = ev.clipboardData?.getData("text/html") ?? ""
+            const edit = pasteLink(text, start, end, url, html === "" ? "" : clipboardLinkTitle(html, url))
+            if (edit) {
+                applyEdit(section, edit)
+                return true
+            }
+        }
+        if (section === "content") return false
+        const html = plain ? "" : ev.clipboardData?.getData("text/html") ?? ""
+        const pasted = (html !== "" && autoConvertHtml(app) ? htmlToMarkdown(html) : ev.clipboardData?.getData("text/plain") ?? "")
+            .replace(/\r\n?/g, "\n")
+        if (append) {
+            const edit = pasteOutline(text, start, end, pasted)
+            if (edit) applyEdit("outline", edit)
+        } else if (pasted !== "") {
+            applyEdit("outline", insertAtCaret(text.slice(0, start) + text.slice(end), start, pasted.replace(/\n/g, " ")))
+        }
+        return true
+    }
+
+    function onDropFiles(section: Section, files: File[]) {
+        const h = fieldOf(section)
+        if (h) void pasteFiles(section, files, h.text(), h.selection().start)
     }
 
     // ── Render ────────────────────────────────────────────────────────────────
-    const textareaProps = (section: Section) => ({
-        rows: 1,
+    const fieldProps = (section: Section) => ({
+        app,
         readOnly: state.saving,
-        spellCheck: true,
-        onKeyDown: (ev: React.KeyboardEvent<HTMLTextAreaElement>) => onKeyDown(ev, section),
-        onKeyUp: (ev: React.KeyboardEvent<HTMLTextAreaElement>) => trackCaret(section, ev.currentTarget),
-        onSelect: (ev: React.SyntheticEvent<HTMLTextAreaElement>) => trackCaret(section, ev.currentTarget),
-        onClick: (ev: React.MouseEvent<HTMLTextAreaElement>) => onClick(ev, section),
-        onPaste: (ev: React.ClipboardEvent<HTMLTextAreaElement>) => onPaste(ev, section),
-        onFocus: () => setFocused(section),
-        onChange: (ev: React.ChangeEvent<HTMLTextAreaElement>) => {
-            setText(section, ev.currentTarget.value)
-            trackCaret(section, ev.currentTarget)
+        sourcePath: section === "outline" || active === null ? state.sourcePath : contentSourcePath(active),
+        onText: (text: string, caret: number) => {
+            setText(section, text)
+            setCaret(section, caret)
         },
+        onCaret: (caret: number) => setCaret(section, caret),
+        onEnter: () => {
+            if (section !== "outline") return false
+            outlinePlainEnter()
+            return true
+        },
+        onKeyDown: (ev: KeyboardEvent) => onKeyDown(ev, section),
+        onPaste: (ev: ClipboardEvent) => onPaste(ev, section),
+        onDropFiles: (files: File[]) => onDropFiles(section, files),
+        onLinkClick: (pos: number, mod: boolean) => onLinkClick(section, pos, mod),
+        onFocus: () => setFocused(section),
     })
 
     const chips = state.contentOrder.filter(k => (state.contents[k] ?? "").trim() !== "" || k === active)
@@ -386,15 +448,16 @@ export function InlineEditor({state}: { state: EditorState }) {
         onFocus={pushScope}
         onBlur={ev => { if (!rootRef.current?.contains(ev.relatedTarget as Node | null)) popScope() }}
     >
-        {!append && <div className="ts-editor-header">{`Editing ${basenameOf(state.sourcePath)}:${(state.line ?? 0) + 1}`}</div>}
+        <div className="ts-editor-header">{append
+            ? `Appending to ${basenameOf(state.sourcePath)}`
+            : `Editing ${basenameOf(state.sourcePath)}:${(state.line ?? 0) + 1}`}</div>
 
         <div className="ts-editor-field">
-            <textarea
-                ref={outlineRef}
+            <MarkdownField
+                handleRef={outlineRef}
                 className="ts-editor-outline"
-                autoFocus
                 value={state.outline}
-                {...textareaProps("outline")}
+                {...fieldProps("outline")}
             />
             {focused === "outline" && <LinkSuggest state={outlineSuggest} onAccept={row => accept("outline", row)}/>}
         </div>
@@ -411,11 +474,12 @@ export function InlineEditor({state}: { state: EditorState }) {
                 <button className="ts-editor-close clickable-icon" aria-label="Close content" onClick={closeContent}>✕</button>
             </div>
             <div className="ts-editor-field">
-                <textarea
-                    ref={contentRef}
+                <MarkdownField
+                    key={active}
+                    handleRef={contentRef}
                     className="ts-editor-content"
                     value={contentText}
-                    {...textareaProps("content")}
+                    {...fieldProps("content")}
                 />
                 {focused === "content" && <LinkSuggest state={contentSuggest} onAccept={row => accept("content", row)}/>}
             </div>

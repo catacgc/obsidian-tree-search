@@ -1,8 +1,18 @@
 // macOS Option+letter shortcuts on dead keys (Option+N, E, U, I, `) start an IME
 // composition (`˜`, `´`, `¨`, …) that keydown `preventDefault` can't stop. It lands in
-// whichever text field has focus when it arrives, often one the shortcut just focused.
+// whichever text field has focus when it arrives, often one the shortcut just focused
+// (e.g. the inline editor's CodeMirror outline after Alt+N).
+import {EditorView} from "@codemirror/view";
 
 const WINDOW_MS = 1000
+
+type TextControl = HTMLInputElement | HTMLTextAreaElement
+type Snapshot =
+    | {el: TextControl; value: string; start: number; end: number}
+    | {view: EditorView; value: string; start: number; end: number}
+
+const isTextControl = (el: EventTarget | null): el is TextControl =>
+    el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
 
 /**
  * Call from the keydown handler of a shortcut that handled `ev`. On a dead key, the
@@ -11,19 +21,26 @@ const WINDOW_MS = 1000
  */
 export function swallowDeadKey(ev: {key: string}): void {
     if (ev.key !== "Dead") return
-    let before: {el: HTMLInputElement | HTMLTextAreaElement; value: string; start: number; end: number} | null = null
+    let before: Snapshot | null = null
 
     const onStart = (e: Event) => {
         const el = e.target
-        if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return
-        before = {el, value: el.value, start: el.selectionStart ?? el.value.length, end: el.selectionEnd ?? el.value.length}
+        if (isTextControl(el)) {
+            before = {el, value: el.value, start: el.selectionStart ?? el.value.length, end: el.selectionEnd ?? el.value.length}
+            return
+        }
+        const view = el instanceof HTMLElement ? EditorView.findFromDOM(el) : null
+        if (view) {
+            const sel = view.state.selection.main
+            before = {view, value: view.state.doc.toString(), start: sel.from, end: sel.to}
+        }
     }
     const onInput = (e: Event) => {
         const b = before
-        if (!b || e.target !== b.el) return
+        if (!b || e.target !== ("el" in b ? b.el : b.view.contentDOM)) return
         stop()
         // Leave the event dispatch before touching the field.
-        window.setTimeout(() => restore(b.el, b.value, b.start, b.end))
+        window.setTimeout(() => restore(b))
     }
     const stop = () => {
         document.removeEventListener("compositionstart", onStart, true)
@@ -35,9 +52,20 @@ export function swallowDeadKey(ev: {key: string}): void {
     const timer = window.setTimeout(stop, WINDOW_MS)
 }
 
-function restore(el: HTMLInputElement | HTMLTextAreaElement, value: string, start: number, end: number) {
+function restore(b: Snapshot) {
+    const {value, start, end} = b
+    if (!("el" in b)) {
+        // The editor's update listener feeds the owner; no synthetic input event.
+        const {view} = b
+        const focused = view.hasFocus
+        // Blurring ends the composition (and the OS dead-key state) before the doc is reset.
+        if (focused) view.contentDOM.blur()
+        view.dispatch({changes: {from: 0, to: view.state.doc.length, insert: value}, selection: {anchor: start, head: end}})
+        if (focused) view.focus()
+        return
+    }
+    const {el} = b
     const focused = document.activeElement === el
-    // Blurring ends the composition (and the OS dead-key state) before the value is reset.
     if (focused) el.blur()
     const proto = el instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype
     Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(el, value)

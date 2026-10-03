@@ -1,4 +1,4 @@
-// Pure text operations for the inline editor's textareas. No DOM, no obsidian.
+// Pure text operations for the inline editor's text fields (MarkdownField). No DOM, no obsidian.
 // Every edit returns the new text plus the caret (and optional selection end).
 
 export type TextEdit = { text: string; caret: number; selectionEnd?: number }
@@ -118,15 +118,55 @@ export function replaceOutlineParent(text: string, parentName: string): string {
     return [head, ...body].join("\n")
 }
 
-/** Multi-line paste into the outline: CRLF→LF, tabs→4 spaces, blank lines dropped, plain lines turned into bullets. */
-export function normalizePastedOutline(pasted: string): string {
-    return pasted
-        .replace(/\r\n/g, "\n")
-        .replace(/\t/g, "    ")
-        .split("\n")
-        .filter(l => l.trim() !== "")
-        .map(l => LIST_MARKER_LINE_RE.test(l) ? l : leadingWhitespace(l) + "- " + l.trim())
-        .join("\n")
+/** Pasted text as outline lines: blanks dropped, plain lines bulleted, indents mapped to 4-space levels relative to the first line. */
+function outlineBlock(pasted: string): string[] {
+    const lines = pasted.replace(/\r\n?/g, "\n").replace(/\t/g, "    ").split("\n").filter(l => l.trim() !== "")
+    const stack: number[] = []
+    return lines.map(line => {
+        const w = indentWidth(line)
+        while (stack.length > 0 && stack[stack.length - 1] >= w) stack.pop()
+        const depth = stack.length
+        stack.push(w)
+        const content = line.trimStart()
+        return "    ".repeat(depth) + (LIST_MARKER_LINE_RE.test(content) ? content : "- " + content)
+    })
+}
+
+const BARE_PREFIX_RE = /^[ \t]*[-*+] (?:\[[ xX]\] )?$/
+
+/** Outline paste (EDITOR.md §3.2). Replaces [start, end) with the pasted lines re-indented under the caret line. Null when nothing pastable. */
+export function pasteOutline(text: string, start: number, end: number, pasted: string): TextEdit | null {
+    const block = outlineBlock(pasted)
+    if (block.length === 0) return null
+    const base = text.slice(0, start) + text.slice(end)
+    const lineStart = lineStartAt(base, start)
+    const lineEnd = lineEndAt(base, start)
+    const line = base.slice(lineStart, lineEnd)
+    const indent = leadingWhitespace(line)
+    const strip = (l: string) => l.trimStart().replace(/^(?:[-*+]|\d+[.)])\s+/, "")
+
+    // At a bare bullet (or a single line): the first line fills the caret position, the rest follow at the caret line's indent.
+    if (BARE_PREFIX_RE.test(base.slice(lineStart, start)) || block.length === 1) {
+        return insertAtCaret(base, start, [strip(block[0]), ...block.slice(1).map(l => indent + l)].join("\n"))
+    }
+    // A blank caret line is replaced by the block.
+    if (line.trim() === "") {
+        const inserted = block.map(l => indent + l).join("\n")
+        return {text: base.slice(0, lineStart) + inserted + base.slice(lineEnd), caret: lineStart + inserted.length}
+    }
+    // Otherwise the block becomes siblings after the caret line.
+    const inserted = block.map(l => "\n" + indent + l).join("")
+    return {text: base.slice(0, lineEnd) + inserted + base.slice(lineEnd), caret: lineEnd + inserted.length}
+}
+
+/** Smallest single replacement turning `from` into `to` (common prefix/suffix kept; they never overlap). */
+export function changedRange(from: string, to: string): { from: number; to: number; insert: string } {
+    const min = Math.min(from.length, to.length)
+    let p = 0
+    while (p < min && from[p] === to[p]) p++
+    let s = 0
+    while (s < min - p && from[from.length - 1 - s] === to[to.length - 1 - s]) s++
+    return {from: p, to: from.length - s, insert: to.slice(p, to.length - s)}
 }
 
 /** Note that owns the caret line: its own first link, else the nearest ancestor line's link, else `fallback`. */
@@ -185,5 +225,32 @@ export function wrapLink(text: string, start: number, end: number): TextEdit {
         text: text.slice(0, start) + `[${sel}](url)` + text.slice(end),
         caret,
         selectionEnd: caret + 3,
+    }
+}
+
+const URL_RE = /^[a-z][a-z0-9+.-]*:\/\/\S+$/i
+
+/** The clipboard's plain text as a single URL (trimmed), or null. */
+export function pastedUrl(plain: string): string | null {
+    const t = plain.trim()
+    return URL_RE.test(t) ? t : null
+}
+
+/** Paste of `url` over [start, end) as a markdown link (EDITOR.md §3.8): a selection becomes the link
+ *  text; otherwise `[title](url)` with the title selected (`[](url)`, caret inside, when untitled).
+ *  Null = not a link paste (destination slot, multi-line or URL selection); the caller pastes normally. */
+export function pasteLink(text: string, start: number, end: number, url: string, title: string): TextEdit | null {
+    if (text.slice(0, start).endsWith("](")) return null
+    if (start < end) {
+        const sel = text.slice(start, end)
+        if (sel.includes("\n") || pastedUrl(sel) !== null) return null
+        const link = `[${sel}](${url})`
+        return {text: text.slice(0, start) + link + text.slice(end), caret: start + link.length}
+    }
+    const name = title.replace(/[[\]]/g, "\\$&")
+    return {
+        text: text.slice(0, start) + `[${name}](${url})` + text.slice(start),
+        caret: start + 1,
+        selectionEnd: start + 1 + name.length,
     }
 }
