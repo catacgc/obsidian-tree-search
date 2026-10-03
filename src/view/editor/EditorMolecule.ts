@@ -1,6 +1,7 @@
-// Per-view editor-mode state (EDITOR.md): the one inline editor (Append / Alt-Edit),
+// Per-view editor-mode state (EDITOR.md): the inline editor (Append draft / Alt-Edit),
 // the Alt-held flag, drag state, and the save / reparent flows. Scoped like
-// SearchViewMolecule so the pane and the modal each have their own editor.
+// SearchViewMolecule; only Quick Add renders the editor, and the open* atoms of every
+// view hand their requests to it (quick-add-flow.ts).
 import {atom, type Getter} from "jotai"
 import {molecule} from "bunshi"
 import {Notice, type App, type TFile} from "obsidian"
@@ -22,9 +23,11 @@ import {
 } from "@mdtree/core"
 import {SearchViewMolecule, SearchViewScope} from "../react-context/state"
 import {GlobalAtoms} from "../react-context/global"
-import {settingsAtom} from "../react-context/settings"
+import {leaveQuickAddAtom, openQuickAddAtom, type EditorRequest} from "../react-context/quick-add-flow"
+import {rowTargets, type RowTarget} from "../search/select-target"
+import {appendDraftAtom, settingsAtom} from "../react-context/settings"
 import type {TreeNode} from "../search/SearchViewFlatten"
-import type {DailyNoteConfig} from "../../indexing/indexed-tree"
+import {basenameOf, dailyConfigOf, emptySession} from "./draft"
 import {
     appendToDailyNote,
     applyAttachmentPlan,
@@ -37,13 +40,10 @@ import {
     type EditorAttachment,
 } from "../../editing/vault-edits"
 import {appendTargetAt, classifyReparent, isEditableRow, type OwnPath} from "./row-editing"
-import {appendPrefill, replaceOutlineParent} from "./textarea-ops"
 
 export type EditorState = {
     sessionId: number
     mode: "append" | "edit"
-    /** The row whose ⊕ / Alt-Edit opened the editor; absent for the blank on-demand editor. */
-    target?: TreeNode
     parentName?: string
     /** Append: today's daily note path; Edit: the row's file. */
     sourcePath: string
@@ -59,17 +59,11 @@ export type EditorState = {
     doneSteps: string[]
     touchedPaths: string[]
     saving: boolean
-    /** Bumped when an open Append editor is re-targeted or re-requested; the editor then focuses its outline. */
-    focusNonce: number
+    /** Outline caret, kept so a reopened draft and Search picks resume where the user was. */
+    caret: number
 }
 
 const OUT_OF_DATE = "This row's index is out of date — try again in a moment"
-const DEFAULT_DAILY: DailyNoteConfig = {folder: "", format: "YYYY-MM-DD", template: ""}
-
-let lastSessionId = 0
-const nextSessionId = () => (lastSessionId = Math.max(lastSessionId + 1, Date.now()))
-
-export const basenameOf = (path: string) => path.split("/").pop()!.replace(/\.md$/, "")
 
 /** File of the page a node belongs to (headers map to their page); null for references and non-pages. */
 export function makeOwnPath(graph: NotesGraph): OwnPath {
@@ -103,10 +97,19 @@ export function isSaveBlocked(app: App, s: EditorState): boolean {
 }
 
 export const EditorMolecule = molecule((mol, scope) => {
-    scope(SearchViewScope)
+    const scp = scope(SearchViewScope)
     const view = mol(SearchViewMolecule)
 
-    const editorStateAtom = atom<EditorState | null>(null)
+    /** The editor Quick Add shows: the Alt-Edit session if any, else the Append draft. Writes go to the slot matching
+     *  the state's mode; null clears the shown one. */
+    const editorStateAtom = atom(
+        get => get(GlobalAtoms.editSessionAtom) ?? get(appendDraftAtom),
+        (get, set, next: EditorState | null) => {
+            if (next) set(next.mode === "edit" ? GlobalAtoms.editSessionAtom : appendDraftAtom, next)
+            else if (get(GlobalAtoms.editSessionAtom)) set(GlobalAtoms.editSessionAtom, null)
+            else set(appendDraftAtom, null)
+        })
+
     const altHeldAtom = atom(false)
     /** Renderable position of the row being dragged. */
     const dragIndexAtom = atom<number | null>(null)
@@ -116,8 +119,6 @@ export const EditorMolecule = molecule((mol, scope) => {
         get(GlobalAtoms.graphVersionAtom)
         return makeOwnPath(get(GlobalAtoms.graphAtom))
     })
-
-    const dailyConfig = (index: {getDailyNoteConfig(): DailyNoteConfig} | null) => index?.getDailyNoteConfig() ?? DEFAULT_DAILY
 
     async function refreshPaths(app: App, index: {refreshPage(f: TFile): Promise<void>} | null, paths: string[]) {
         if (!index) return
@@ -146,53 +147,22 @@ export const EditorMolecule = molecule((mol, scope) => {
         await trashSessionAttachments(get(GlobalAtoms.appAtom), s.attachments)
     })
 
-    const emptySession = () => ({
-        sessionId: nextSessionId(),
-        contents: {}, contentOrder: [], activeContent: null,
-        attachments: [], doneSteps: [], touchedPaths: [], saving: false, focusNonce: 0,
-    })
-
-    /** Opens Append under `parentName`; an open Append editor keeps its buffers and only swaps its parent line. */
-    const openAppendAtom = atom(null, async (get, set, target: TreeNode, parentName: string) => {
-        const s = get(editorStateAtom)
-        if (s?.mode === "append") {
-            if (s.saving) return
-            set(editorStateAtom, {
-                ...s, target, parentName,
-                outline: replaceOutlineParent(s.outline, parentName),
-                focusNonce: s.focusNonce + 1,
-            })
-            return
-        }
-        await set(cancelEditorAtom)
-        set(editorStateAtom, {
-            ...emptySession(),
-            mode: "append",
-            target,
-            parentName,
-            sourcePath: dailyNotePath(dailyConfig(get(GlobalAtoms.indexAtom))),
-            outline: appendPrefill(parentName),
+    /** Hands `request` to Quick Add, which hosts the editor, with this view's query and selected row. */
+    const handOffAtom = atom(null, (get, set, request: EditorRequest) => {
+        const sel = get(view.selectedNodeAtom)
+        set(openQuickAddAtom, {
+            request,
+            session: {view: scp.name, reopenSearch: scp.isModal, query: get(view.actualQueryAtom), selected: sel ? rowTargets(sel) : []},
         })
     })
 
-    /** Opens a blank Append editor whose roots go to today's daily note; focuses an already open Append editor instead. */
-    const openBlankEditorAtom = atom(null, async (get, set) => {
-        const s = get(editorStateAtom)
-        if (s?.mode === "append") {
-            set(editorStateAtom, {...s, focusNonce: s.focusNonce + 1})
-            return
-        }
-        await set(cancelEditorAtom)
-        set(editorStateAtom, {
-            ...emptySession(),
-            mode: "append",
-            sourcePath: dailyNotePath(dailyConfig(get(GlobalAtoms.indexAtom))),
-            outline: "- ",
-        })
-    })
+    /** Links `parentName` into the Append draft at its caret (a new draft prefilled under it if none). */
+    const openAppendAtom = atom(null, (_get, set, parentName: string) => set(handOffAtom, {kind: "link", name: parentName}))
+
+    /** Shows the Append draft (a blank one if none); its roots go to today's daily note. */
+    const openBlankEditorAtom = atom(null, (_get, set) => set(handOffAtom, {kind: "draft"}))
 
     const openEditAtom = atom(null, async (get, set, row: TreeNode) => {
-        await set(cancelEditorAtom)
         const app = get(GlobalAtoms.appAtom)
         const path = row.node.location.path
         const line = row.node.location.position.start.line
@@ -205,17 +175,17 @@ export const EditorMolecule = molecule((mol, scope) => {
             await markOutOfDate(app, get(GlobalAtoms.indexAtom), path)
             return
         }
-        set(editorStateAtom, {
+        set(handOffAtom, {kind: "edit", state: {
             ...emptySession(),
             mode: "edit",
-            target: row,
             sourcePath: path,
             line,
             originalLine: text,
             linePrefix: split.prefix,
             editKind: isList ? "list" : "heading",
             outline: split.text,
-        })
+            caret: split.text.length,
+        }})
     })
 
     const selectedPos = (get: Getter): {rows: TreeNode[]; pos: number} => {
@@ -228,7 +198,7 @@ export const EditorMolecule = molecule((mol, scope) => {
         const {rows, pos} = selectedPos(get)
         if (pos < 0) return
         const target = appendTargetAt(rows, pos, get(view.timelineActiveAtom))
-        if (target) await set(openAppendAtom, target.target, target.parentName)
+        if (target) set(openAppendAtom, target.parentName)
     })
 
     const openEditForSelectedAtom = atom(null, async (get, set) => {
@@ -251,8 +221,9 @@ export const EditorMolecule = molecule((mol, scope) => {
         }
         commit({})
 
-        const cfg = dailyConfig(index)
+        const cfg = dailyConfigOf(index)
         const exists = (name: string) => !!app.metadataCache.getFirstLinkpathDest(name, "")
+        let appended: {path: string; line: number} | null = null
         try {
             if (!s.doneSteps.includes("attachments")) {
                 const plan = resolveAttachmentEmbeds({[OUTLINE_KEY]: s.outline, ...s.contents}, s.attachments, exists)
@@ -271,8 +242,9 @@ export const EditorMolecule = molecule((mol, scope) => {
             }
 
             if (s.mode === "append" && !s.doneSteps.includes("outline")) {
-                const files = await appendToDailyNote(app, parseOutline(s.outline).lines, cfg)
-                commit({touchedPaths: [...s.touchedPaths, ...files.map(f => f.path)], doneSteps: [...s.doneSteps, "outline"]})
+                const {file, line} = await appendToDailyNote(app, parseOutline(s.outline).lines, cfg)
+                if (line !== null) appended = {path: file.path, line}
+                commit({touchedPaths: [...s.touchedPaths, file.path], doneSteps: [...s.doneSteps, "outline"]})
             }
             if (s.mode === "edit" && !s.doneSteps.includes("line")) {
                 const newLine = (s.linePrefix ?? "") + s.outline.replace(/\r?\n/g, " ").trimEnd()
@@ -286,12 +258,22 @@ export const EditorMolecule = molecule((mol, scope) => {
             return
         }
 
-        // Back to the search once saved, unless another editor was opened in the meantime.
-        if (get(editorStateAtom)?.sessionId === s.sessionId) {
-            set(editorStateAtom, null)
-            set(view.focusSearchInputAtom, n => n + 1)
+        if (get(editorStateAtom)?.sessionId !== s.sessionId) {
+            await refreshPaths(app, index, s.touchedPaths)
+            return
         }
+        // Saved: back to the launching Search view, which selects and flashes the written row.
+        set(editorStateAtom, null)
+        const targets: RowTarget[] = s.mode === "append"
+            ? [
+                ...(appended ? [appended] : []),
+                ...(s.parentName ? [{key: `[[${s.parentName.toLowerCase()}]]`}] : []),
+            ]
+            : [{path: s.sourcePath, line: s.line ?? 0}]
+        // Set before the refresh: the pane re-finds the row in the recompute the refresh triggers.
+        set(GlobalAtoms.pendingSelectAtom, {view: get(GlobalAtoms.quickAddSessionAtom)?.view ?? "modal", targets, flash: true})
         await refreshPaths(app, index, s.touchedPaths)
+        set(leaveQuickAddAtom, {kind: "saved"})
     })
 
     const clearDragAtom = atom(null, (_get, set) => {

@@ -9,9 +9,10 @@ import {ContextCodeBlock} from "./view/markdown-code-block/ContextCodeBlock";
 import {SearchModal} from "./view/search-modal/SearchModal";
 import {archiveLine, archivePage, highlightLine, insertLine, moveToFolder, openFileByName, revealFolder, showFolder, unarchiveLine, unarchivePage} from './obsidian-utils';
 import {createStore} from 'jotai';
-import {getPluginData, getSettings, searchViewModesAtom, updateSettings} from './view/react-context/settings';
+import {appendDraftAtom, getPluginData, getSettings, searchViewModesAtom, updateSettings} from './view/react-context/settings';
 import './view/styles.css';
 import {GlobalAtoms} from "./view/react-context/global";
+import {openQuickAddAtom} from "./view/react-context/quick-add-flow";
 import {resetDefaultInjector} from "bunshi";
 import {RaycastServer} from "./view/raycast/raycast-server";
 import {HOVER_SOURCE_ID} from "./view/hover-preview";
@@ -25,10 +26,14 @@ export default class TreeSearchPlugin extends Plugin {
     private server: RaycastServer | null = null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private refreshInterval: any = null;
+    // Quick Add's draft changes on every keystroke; persist it once typing pauses.
+    private saveDraft = debounce(() => { void this.saveSettings() }, 500, true)
 
     async onunload() {
         console.log("Cleaning up after")
         this.server?.stop()
+        // Flush a pending draft write while the store still holds the draft.
+        this.saveDraft.run()
         this.globalStore = createStore()
         this.changedRef && this.app.metadataCache.offref(this.changedRef)
         this.finishedRef && this.app.metadataCache.offref(this.finishedRef)
@@ -87,7 +92,7 @@ export default class TreeSearchPlugin extends Plugin {
         searchModal.setTitle("Search");
 
         const quickAddModal = new SearchModal(this.globalStore, "quickAdd");
-        quickAddModal.setTitle("Quick Add");
+        this.globalStore.set(GlobalAtoms.modalsAtom, {search: searchModal, quickAdd: quickAddModal});
 
         this.addCommand({
             id: "quick-link-modal",
@@ -109,7 +114,7 @@ export default class TreeSearchPlugin extends Plugin {
             id: "quick-add-modal",
             name: "Quick Add",
             callback: () => {
-                quickAddModal.open();
+                this.globalStore.set(openQuickAddAtom, {request: {kind: "draft"}, session: null});
             },
         });
 
@@ -117,8 +122,7 @@ export default class TreeSearchPlugin extends Plugin {
             id: "open-editor",
             name: "Open editor",
             callback: () => {
-                searchModal.open();
-                this.globalStore.set(GlobalAtoms.editorRequestAtom, true);
+                this.globalStore.set(openQuickAddAtom, {request: {kind: "draft"}, session: null});
             },
         });
 
@@ -153,6 +157,7 @@ export default class TreeSearchPlugin extends Plugin {
         await this.loadSettings();
         // Tree/Timeline toggles write searchViewModesAtom; persist each change.
         this.register(this.globalStore.sub(searchViewModesAtom, () => { void this.saveSettings() }))
+        this.register(this.globalStore.sub(appendDraftAtom, () => this.saveDraft()))
 
         this.server = new RaycastServer(this.globalStore);
         this.server.start();

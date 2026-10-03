@@ -3,6 +3,9 @@ import {createRoot, Root} from "react-dom/client";
 import {GraphContextProvider} from "../react-context/GraphContextProvider";
 import {SearchModalContainer, SearchModalKind} from "../search/SearchModalContainer";
 import {GlobalAtoms, GlobalStore} from "../react-context/global";
+import {quickAddClosedAtom} from "../react-context/quick-add-flow";
+import {appendDraftAtom} from "../react-context/settings";
+import {quickAddTitle} from "../editor/draft";
 
 export class SearchModal extends Modal {
 
@@ -16,6 +19,8 @@ export class SearchModal extends Modal {
     }
 
     async onOpen() {
+        // openQuickAddAtom has already set the editor state this opens on.
+        if (this.kind === "quickAdd") this.setTitle(quickAddTitle(this.store.get(GlobalAtoms.editSessionAtom) ?? this.store.get(appendDraftAtom)));
         this.root = createRoot(this.contentEl);
 
         this.root?.render(
@@ -28,9 +33,8 @@ export class SearchModal extends Modal {
             </GraphContextProvider>
         );
 
-        setTimeout(() => {
-            // The "Open editor" command already focused the inline editor.
-            if (this.containerEl.querySelector(".ts-inline-editor")) return;
+        // Quick Add has no input; its inline editor focuses itself on mount.
+        if (this.kind !== "quickAdd") setTimeout(() => {
             const inputEl = this.containerEl.querySelector('input');
             inputEl?.click();
             inputEl?.select();
@@ -41,7 +45,8 @@ export class SearchModal extends Modal {
     }
 
     async onClose() {
-        this.store.set(GlobalAtoms.currentModalAtom, null)
+        if (this.store.get(GlobalAtoms.currentModalAtom) === this) this.store.set(GlobalAtoms.currentModalAtom, null)
         this.root?.unmount();
+        if (this.kind === "quickAdd") this.store.set(quickAddClosedAtom)
     }
 }

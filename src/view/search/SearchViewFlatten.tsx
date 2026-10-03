@@ -10,9 +10,7 @@ import {SearchHelp} from "./SearchHelp";
 import {TimelineFilterBar, TimelineRow} from "./SearchTimeline";
 import React, {useEffect, useMemo, useState} from "react";
 import {EditorMolecule} from "../editor/EditorMolecule";
-import {InlineEditor} from "../editor/InlineEditor";
 import {appendTargetAt, isEditableRow, type AppendTarget} from "../editor/row-editing";
-import {GlobalAtoms} from "../react-context/global";
 
 export type TreeNode = {
     node: ParsedNode,
@@ -29,8 +27,8 @@ export type TreeNode = {
 
 export const SearchViewFlatten = () => {
     const {searchViewStateAtom, incrementPagesAtom, timelineActiveAtom, timelineWindowAtom, rebuildResultsAtom, actualQueryAtom,
-        allowEditing, hoveredLineAtom, selectedLineAtom} = useMolecule(SearchViewMolecule)
-    const {editorStateAtom, altHeldAtom, ownPathAtom, openBlankEditorAtom} = useMolecule(EditorMolecule)
+        allowEditing, hoveredLineAtom, selectedLineAtom, flashLineAtom} = useMolecule(SearchViewMolecule)
+    const {altHeldAtom, ownPathAtom} = useMolecule(EditorMolecule)
 
     const viewState = useAtomValue(searchViewStateAtom)
     const incrementPages = useSetAtom(incrementPagesAtom)
@@ -38,25 +36,23 @@ export const SearchViewFlatten = () => {
     const timelineWindow = useAtomValue(timelineWindowAtom)
     const actualQuery = useAtomValue(actualQueryAtom)
     const rebuild = useSetAtom(rebuildResultsAtom)
-    const editorState = useAtomValue(editorStateAtom)
+    const [flashLine, setFlashLine] = useAtom(flashLineAtom)
     const [altHeld, setAltHeld] = useAtom(altHeldAtom)
     const hovered = useAtomValue(hoveredLineAtom)
     const selected = useAtomValue(selectedLineAtom)
     const ownPath = useAtomValue(ownPathAtom)
     const [pointerInList, setPointerInList] = useState(false)
-    const [editorRequest, setEditorRequest] = useAtom(GlobalAtoms.editorRequestAtom)
-    const openBlank = useSetAtom(openBlankEditorAtom)
 
     // Re-project the stored results when the mode (possibly flipped from another
     // open view) or the recency window changes; idempotent on mount.
     useEffect(() => { rebuild() }, [timelineActive, timelineWindow])
 
-    // The "Open editor" command opens the Search modal and requests a blank editor there.
+    // A selection that flashes (the row a save just wrote) stops flashing after the animation.
     useEffect(() => {
-        if (!editorRequest || !allowEditing || !viewState.isModal) return
-        setEditorRequest(false)
-        void openBlank()
-    }, [editorRequest, allowEditing])
+        if (flashLine === null) return
+        const timer = window.setTimeout(() => setFlashLine(null), 1500)
+        return () => window.clearTimeout(timer)
+    }, [flashLine])
 
     // Alt/Option state drives the edit hint; reset on blur so it never sticks.
     useEffect(() => {
@@ -97,7 +93,6 @@ export const SearchViewFlatten = () => {
     }
 
     return <>
-        {allowEditing && editorState && <InlineEditor key={editorState.sessionId} state={editorState}/>}
         {(viewState.showSearch) && <div className="tw-reset ts-search-block">
                 <SearchBar isQuickLink={viewState.isQuickLink}/>
                 {timelineActive && <TimelineFilterBar/>}

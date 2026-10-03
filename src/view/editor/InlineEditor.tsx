@@ -1,22 +1,26 @@
-// The inline editor shared by Append and Alt-Edit (EDITOR.md §3): Edit header, outline
-// section, optional content section, live preview and footer hints. Rendered at the
-// top of the view, above the search box, keyed by session.
+// The inline editor shared by Append and Alt-Edit (EDITOR.md §3): outline section, optional
+// content section, live preview and footer hints. Sits at the top of Quick Add, keyed by
+// session, with its `[[` link results (LinkResults) filling the modal below it.
 import React, {useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
 import {useAtomValue, useSetAtom} from "jotai";
 import {useMolecule} from "bunshi/react";
 import {htmlToMarkdown, Notice, Platform, Scope, type Modifier} from "obsidian";
-import {attachmentExt, attachmentKind, attachmentName, reverseMarkdownParsing, type TreeNode as CoreTreeNode} from "@mdtree/core";
+import {attachmentExt, attachmentKind, attachmentName, reverseMarkdownParsing} from "@mdtree/core";
 import {GlobalAtoms} from "../react-context/global";
 import {SearchViewMolecule} from "../react-context/state";
+import {leaveQuickAddAtom} from "../react-context/quick-add-flow";
 import {openFileByName} from "../../obsidian-utils";
 import {newNotePath, pasteAttachment, trashSessionAttachments} from "../../editing/vault-edits";
-import {basenameOf, EditorMolecule, editorHintsFor, isSaveBlocked, type EditorState} from "./EditorMolecule";
-import {LinkSuggest, useLinkSuggest, type LinkSuggestState} from "./LinkSuggest";
+import type {TreeNode} from "../search/SearchViewFlatten";
+import {EditorMolecule, editorHintsFor, isSaveBlocked, type EditorState} from "./EditorMolecule";
+import {basenameOf} from "./draft";
+import {LinkResults, useLinkSuggest, type LinkSuggestState} from "./LinkSuggest";
 import {MarkdownLine} from "./MarkdownLine";
 import {MarkdownField, type MarkdownFieldHandle} from "./MarkdownField";
 import {autoConvertHtml} from "./obsidian-editor";
 import {
     acceptLink,
+    ensureBullet,
     firstLinkOnLine,
     insertAtCaret,
     insertAttachmentBullets,
@@ -59,8 +63,14 @@ export function InlineEditor({state}: { state: EditorState }) {
     const update = useSetAtom(updateEditorAtom)
     const cancel = useSetAtom(cancelEditorAtom)
     const save = useSetAtom(saveEditorAtom)
-    const focusSearch = useSetAtom(useMolecule(SearchViewMolecule).focusSearchInputAtom)
     const app = useAtomValue(GlobalAtoms.appAtom)
+    const leave = useSetAtom(leaveQuickAddAtom)
+    const {searchQueryAtom, arrowDownAtom, arrowUpAtom, selectedNodeAtom, renderableTreeNodesAtom} = useMolecule(SearchViewMolecule)
+    const setQuery = useSetAtom(searchQueryAtom)
+    const arrowDown = useSetAtom(arrowDownAtom)
+    const arrowUp = useSetAtom(arrowUpAtom)
+    const picked = useAtomValue(selectedNodeAtom)
+    const rowCount = useAtomValue(renderableTreeNodesAtom).length
 
     const rootRef = useRef<HTMLDivElement>(null)
     const outlineRef = useRef<MarkdownFieldHandle | null>(null)
@@ -74,7 +84,6 @@ export function InlineEditor({state}: { state: EditorState }) {
     const scopeKeyRef = useRef<(ev: KeyboardEvent) => boolean>(() => false)
 
     const [focused, setFocused] = useState<Section>("outline")
-    const [outlineCaret, setOutlineCaret] = useState(state.outline.length)
     const [contentCaret, setContentCaret] = useState(0)
 
     const append = state.mode === "append"
@@ -82,7 +91,7 @@ export function InlineEditor({state}: { state: EditorState }) {
     const active = state.activeContent
     const contentText = active !== null ? state.contents[active] ?? "" : ""
 
-    const outlineSuggest = useLinkSuggest(state.outline, outlineCaret, focused === "outline")
+    const outlineSuggest = useLinkSuggest(state.outline, state.caret, focused === "outline")
     const contentSuggest = useLinkSuggest(contentText, contentCaret, focused === "content" && active !== null)
 
     const hintDeps = [app, state.outline, state.contents, state.contentOrder, state.attachments, state.mode, state.editKind, state.parentName]
@@ -110,7 +119,7 @@ export function InlineEditor({state}: { state: EditorState }) {
         scopePushed.current = false
     }
 
-    // ── Mount: focus, Escape scope, cancel on unmount ─────────────────────────
+    // ── Mount: focus, Escape scope; an Alt-Edit session ends on unmount ───────
     useEffect(() => {
         alive.current = true
         const scope = new Scope(app.scope)
@@ -125,31 +134,20 @@ export function InlineEditor({state}: { state: EditorState }) {
         const h = outlineRef.current
         if (h) {
             h.focus()
-            h.setSelection(h.text().length)
+            h.setSelection(Math.min(state.caret, h.text().length))
         }
         if (rootRef.current?.contains(document.activeElement)) pushScope()
 
-        const sessionId = state.sessionId
+        // The Append draft outlives Quick Add (until saved or discarded); an Alt-Edit session does not.
+        const {sessionId, mode} = state
         return () => {
             popScope()
             scopeRef.current = null
             alive.current = false
             // StrictMode re-mounts synchronously; only a real unmount leaves `alive` false.
-            queueMicrotask(() => { if (!alive.current) void cancel(sessionId) })
+            if (mode === "edit") queueMicrotask(() => { if (!alive.current) void cancel(sessionId) })
         }
     }, [])
-
-    // Re-targeting or re-requesting an open editor focuses the outline end.
-    useEffect(() => {
-        if (state.focusNonce === 0) return
-        const h = outlineRef.current
-        if (!h) return
-        h.focus()
-        const end = h.text().length
-        h.setSelection(end)
-        setOutlineCaret(end)
-        setFocused("outline")
-    }, [state.focusNonce])
 
     // Apply caret/selection changes requested by text operations.
     useLayoutEffect(() => {
@@ -160,16 +158,21 @@ export function InlineEditor({state}: { state: EditorState }) {
         pending.current = null
         h.focus()
         h.setSelection(p.start, p.end)
-        if (p.section === "outline") setOutlineCaret(p.start)
-        else setContentCaret(p.start)
+        setCaret(p.section, p.start)
     })
 
     const suggestFor = (section: Section): LinkSuggestState => section === "outline" ? outlineSuggest : contentSuggest
+    const suggest = suggestFor(focused)
 
-    /** User cancel (Escape or the Cancel button): close the editor and hand focus to the search input. */
-    const cancelToSearch = () => {
+    // Quick Add's results list follows the open `[[query` of the focused field.
+    useEffect(() => setQuery({query: suggest.open ? suggest.query : ""}), [suggest.open, suggest.query])
+
+    /** Escape / ✕ / backdrop: close Quick Add; the Append draft stays for next time. */
+    const close = () => leave({kind: "cancelled"})
+    /** Discard (Cancel for Alt-Edit): drop the session and its pasted attachments, then close. */
+    const discard = () => {
         void cancel()
-        focusSearch(n => n + 1)
+        close()
     }
 
     escapeRef.current = () => {
@@ -177,11 +180,11 @@ export function InlineEditor({state}: { state: EditorState }) {
         if (contentSuggest.open) return contentSuggest.dismiss()
         if (active !== null && rootRef.current?.querySelector(".ts-editor-content")?.contains(document.activeElement)) {
             update(s => ({...s, activeContent: null}))
-            pending.current = {section: "outline", start: outlineCaret, end: outlineCaret}
+            pending.current = {section: "outline", start: state.caret, end: state.caret}
             setFocused("outline")
             return
         }
-        cancelToSearch()
+        close()
     }
 
     scopeKeyRef.current = ev => {
@@ -203,7 +206,7 @@ export function InlineEditor({state}: { state: EditorState }) {
     }
 
     function setCaret(section: Section, caret: number) {
-        if (section === "outline") setOutlineCaret(caret)
+        if (section === "outline") update(s => s.caret === caret ? s : {...s, caret})
         else setContentCaret(caret)
     }
 
@@ -233,16 +236,19 @@ export function InlineEditor({state}: { state: EditorState }) {
             const {[s.activeContent]: _dropped, ...contents} = s.contents
             return {...s, contents, contentOrder: s.contentOrder.filter(k => k !== s.activeContent), activeContent: null}
         })
-        pending.current = {section: "outline", start: outlineCaret, end: outlineCaret}
+        pending.current = {section: "outline", start: state.caret, end: state.caret}
         setFocused("outline")
     }
 
-    function accept(section: Section, row: CoreTreeNode) {
+    function accept(section: Section, row: TreeNode) {
         const h = fieldOf(section)
         const sug = suggestFor(section)
         if (!h) return
         const {text, start} = fieldState(h)
-        applyEdit(section, acceptLink(text, sug.start, start, reverseMarkdownParsing(row.node)))
+        let edit = acceptLink(text, sug.start, start, reverseMarkdownParsing(row.node))
+        // A pick keeps the Append outline's caret line a list item.
+        if (section === "outline" && append) edit = ensureBullet(edit.text, edit.caret)
+        applyEdit(section, edit)
     }
 
     /** Plain Enter in the outline: a new bullet (Append) or save (Edit). */
@@ -266,14 +272,17 @@ export function InlineEditor({state}: { state: EditorState }) {
         const {text, start, end} = fieldState(h)
         const sug = suggestFor(section)
 
-        if (sug.open && sug.rows.length > 0) {
-            if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
-                const n = sug.rows.length
-                sug.setSelected((sug.selected + (ev.key === "ArrowDown" ? 1 : n - 1)) % n)
+        if (sug.open && rowCount > 0 && picked && !picked.archiveRow) {
+            if (ev.key === "ArrowDown") {
+                arrowDown()
+                return true
+            }
+            if (ev.key === "ArrowUp") {
+                arrowUp()
                 return true
             }
             if ((ev.key === "Enter" || ev.key === "Tab") && !ev.shiftKey) {
-                accept(section, sug.rows[sug.selected])
+                accept(section, picked)
                 return true
             }
         }
@@ -442,16 +451,13 @@ export function InlineEditor({state}: { state: EditorState }) {
         .split("\n").slice(0, PREVIEW_LINES).join("\n")
     const previewSource = focused === "content" && active !== null ? contentSourcePath(active) : state.sourcePath
 
-    return <div
+    return <>
+    <div
         className="ts-inline-editor"
         ref={rootRef}
         onFocus={pushScope}
         onBlur={ev => { if (!rootRef.current?.contains(ev.relatedTarget as Node | null)) popScope() }}
     >
-        <div className="ts-editor-header">{append
-            ? `Appending to ${basenameOf(state.sourcePath)}`
-            : `Editing ${basenameOf(state.sourcePath)}:${(state.line ?? 0) + 1}`}</div>
-
         <div className="ts-editor-field">
             <MarkdownField
                 handleRef={outlineRef}
@@ -459,7 +465,6 @@ export function InlineEditor({state}: { state: EditorState }) {
                 value={state.outline}
                 {...fieldProps("outline")}
             />
-            {focused === "outline" && <LinkSuggest state={outlineSuggest} onAccept={row => accept("outline", row)}/>}
         </div>
 
         {active !== null && <div className="ts-editor-content-section">
@@ -481,7 +486,6 @@ export function InlineEditor({state}: { state: EditorState }) {
                     value={contentText}
                     {...fieldProps("content")}
                 />
-                {focused === "content" && <LinkSuggest state={contentSuggest} onAccept={row => accept("content", row)}/>}
             </div>
         </div>}
 
@@ -494,9 +498,11 @@ export function InlineEditor({state}: { state: EditorState }) {
                 {hints.map((h, i) => <div key={i} className={`ts-editor-hint ${h.blocking ? "is-blocking" : ""}`}>{h.text}</div>)}
             </div>
             <div className="ts-editor-buttons">
-                <button className="ts-editor-button" onClick={cancelToSearch}>Cancel</button>
+                <button className="ts-editor-button" onClick={discard}>{append ? "Discard" : "Cancel"}</button>
                 <button className="ts-editor-button ts-editor-save" disabled={blocked || state.saving} onClick={() => void save()}>Save</button>
             </div>
         </div>
     </div>
+    <LinkResults open={suggest.open} query={suggest.query} onPick={row => { if (!row.archiveRow) accept(focused, row) }}/>
+    </>
 }

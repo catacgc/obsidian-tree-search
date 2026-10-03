@@ -113,7 +113,6 @@
     outline: none;
 }
 
-.ts-editor-header,
 .ts-editor-footer,
 .ts-editor-content-header {
     font-size: var(--font-ui-smaller);
@@ -189,12 +188,8 @@
     color: var(--text-error);
 }
 
-/* Positioning only; the surface and rows are the shared `.ts-suggest` / `.ts-action-panel-item` (ActionPanel.css). */
-.ts-suggest.ts-link-suggest {
-    top: calc(100% + 4px);
-    right: 0;
-}
-
-.ts-link-suggest .ts-action-panel-item.is-muted {
+.ts-link-results-empty {
+    padding: 8px 12px;
     color: var(--text-muted);
+    font-size: var(--font-ui-small);
 }

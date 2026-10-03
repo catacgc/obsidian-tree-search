@@ -65,8 +65,8 @@ function truncateActionTitle(title: string): string {
     return title.substring(0, 57) + "...";
 }
 
-/** Which surface the actions are for: Insert Link adds the plain-Enter insertLink action; Quick Add frees plain Enter for Append. */
-export type NodeActionMode = "default" | "insertLink" | "quickAdd"
+/** Which surface the actions are for: Insert Link adds the plain-Enter insertLink action. */
+export type NodeActionMode = "default" | "insertLink"
 
 export function getTreeNodeActions(app: App, treeNode: TreeNode, mode: NodeActionMode = "default"): RaycastAction[] {
     const vault = app.vault.getName()
@@ -80,7 +80,7 @@ export function getTreeNodeActions(app: App, treeNode: TreeNode, mode: NodeActio
     let allActions = [...reordered, ...defaults]
 
     if (mode !== "default") {
-        // Insert Link's insert-at-cursor, or Quick Add's Append, owns plain Enter; demote any other.
+        // Insert Link's insert-at-cursor owns plain Enter; demote any other.
         allActions = allActions.map(a =>
             a.shortcut?.key === "enter" && a.shortcut.modifiers.length === 0
                 ? { ...a, shortcut: undefined }

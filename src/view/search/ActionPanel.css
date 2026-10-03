@@ -213,8 +213,8 @@
 	color: var(--text-faint);
 }
 
-/* The two autocomplete dropdowns share the panel's surface and item rows: the search box's
-   is:/in:/has: list (SearchAutocomplete.tsx) and the editor's [[ link tree (LinkSuggest.tsx). */
+/* The search box's is:/in:/has: autocomplete dropdown (SearchAutocomplete.tsx) shares the panel's
+   surface and item rows. */
 .ts-suggest {
 	position: absolute;
 	top: 100%;

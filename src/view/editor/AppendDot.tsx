@@ -19,7 +19,7 @@ export function AppendDot({target}: { target: AppendTarget }) {
         onClick={ev => {
             ev.preventDefault()
             ev.stopPropagation()
-            void openAppend(target.target, target.parentName)
+            openAppend(target.parentName)
         }}
     >
         {hover && <CirclePlus size={16}/>}

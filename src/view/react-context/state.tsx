@@ -1,6 +1,7 @@
 import {TreeNode} from '../search/SearchViewFlatten'
 import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, linkTargetTree, type QueryExpr, partitionArchived, extractArchiveReveal, suggestAt, type Suggestion, buildTimeline, fileParent, parseDuration, flattenIndex, defaultVisibility} from '@mdtree/core'
-import {atom, useAtomValue} from 'jotai'
+import {atom, useAtomValue, type Getter, type Setter} from 'jotai'
+import {findTargetRow, revealRow, type RowTarget} from '../search/select-target'
 import {ParsedNode} from '@mdtree/core'
 
 type SearchQuery = { query: string; file?: string; heading?: string }
@@ -117,15 +118,13 @@ export const GlobalAppMolecule = molecule((_, scope) => {
         }
     })
 
-    const lastSearchAtom = atom<SearchQuery>({query: ""})
-
     return {
         appAtom: GlobalAtoms.appAtom,
         isGraphLoadingAtom: GlobalAtoms.isGraphLoadingAtom,
         searchForActiveFileAtom,
         searchParentsFnAtom,
         searchTasksAtom,
-        lastSearchAtom
+        lastSearchAtom: GlobalAtoms.lastSearchAtom
     }
 })
 
@@ -167,16 +166,20 @@ export const SearchViewMolecule = molecule((mol, scope) => {
 
     const { lastSearchAtom } = mol(GlobalAppMolecule)
 
-    const searchQueryAtom = atomWithDefault<SearchQuery>(get => {
-        if (scp.isModal) {
-            return get(lastSearchAtom)
-        }
-
-        return {query: ""}
-    })
+    // Quick Add's list is the editor's `[[` autocomplete: it starts empty, never with Search's query.
+    const searchQueryAtom = atomWithDefault<SearchQuery>(get =>
+        scp.isModal && !scp.isQuickAdd ? get(lastSearchAtom) : {query: ""})
 
     const actualQueryAtom = atom<string>(get => get(searchQueryAtom).query)
-    const selectedLineAtom = atom(-1)
+    const selectedLineValueAtom = atom(-1)
+    /** Row to re-find on every recompute while the query is unchanged (a save's follow-up reindexes, a modal's mount-time rebuild); any user selection drops it. */
+    const selectAnchorAtom = atom<{targets: RowTarget[]; flash: boolean; query: string} | null>(null)
+    const selectedLineAtom = atom(get => get(selectedLineValueAtom), (_get, set, line: number) => {
+        set(selectAnchorAtom, null)
+        set(selectedLineValueAtom, line)
+    })
+    /** Row index that is flashing (just saved); cleared by the view after the animation. */
+    const flashLineAtom = atom<number | null>(null)
     const searchVisibleAtom = atom(scp.showSearch)
     const hoveredLineAtom = atom(0)
     const treeNodesAtom = atom<TreeNode[]>([])
@@ -258,6 +261,39 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     // without re-running the search.
     const lastResultsAtom = atom<{ results: ResultNode[]; archivedCount: number }>({ results: [], archivedCount: 0 })
 
+    /** Installs recomputed `nodes`, selecting the pending/anchored row if present, else the first row. */
+    const settleSelection = (get: Getter, set: Setter, nodes: TreeNode[]) => {
+        const query = get(actualQueryAtom)
+        const pending = get(GlobalAtoms.pendingSelectAtom)
+        if (pending?.view === scp.name) {
+            set(GlobalAtoms.pendingSelectAtom, null)
+            set(selectAnchorAtom, {targets: pending.targets, flash: pending.flash, query})
+        }
+        let anchor = get(selectAnchorAtom)
+        if (anchor && anchor.query !== query) {
+            set(selectAnchorAtom, null)
+            anchor = null
+        }
+        const i = anchor ? findTargetRow(nodes, anchor.targets) : -1
+        if (anchor && i >= 0) {
+            const revealed = revealRow(nodes, i)
+            let visiblePos = 0
+            for (let j = 0; j < i; j++) if (revealed[j].visible) visiblePos++
+            set(treeNodesAtom, revealed)
+            set(pagesAtom, Math.max(1, Math.ceil((visiblePos + 1) / get(pageSizeAtom))))
+            set(selectedLineValueAtom, nodes[i].index)
+            if (anchor.flash) {
+                set(flashLineAtom, nodes[i].index)
+                set(selectAnchorAtom, {...anchor, flash: false})
+            }
+        } else {
+            set(treeNodesAtom, nodes)
+            set(pagesAtom, 1)
+            set(selectedLineValueAtom, get(searchVisibleAtom) ? 0 : -1)
+        }
+        set(hoveredLineAtom, -1)
+    }
+
     const updateSearchResultsAtom = atom(null, (get, set, result: ResultNode[], archivedCount: number = 0) => {
         set(lastResultsAtom, { results: result, archivedCount })
 
@@ -295,10 +331,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
                     timeline: { breadcrumb: parent ? [parent] : item.breadcrumb, pinned: item.pinned, ageDays: item.ageDays }
                 }
             })
-            set(treeNodesAtom, nodes)
-            set(selectedLineAtom, get(searchVisibleAtom) ? 0 : -1)
-            set(hoveredLineAtom, -1)
-            set(pagesAtom, 1)
+            settleSelection(get, set, nodes)
             return
         }
 
@@ -355,10 +388,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             nodesWithVisibility.push(archiveNode)
         }
 
-        set(treeNodesAtom, nodesWithVisibility)
-        set(selectedLineAtom, searchVisible ? 0 : -1)
-        set(hoveredLineAtom, -1)
-        set(pagesAtom, 1)
+        settleSelection(get, set, nodesWithVisibility)
     })
 
     const rebuildResultsAtom = atom(null, (get, set) => {
@@ -564,7 +594,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             actionPanelAtom, openActionPanelAtom, closeActionPanelAtom, toggleActionPanelAtom,
             allowTimeline: scp.allowTimeline,
             allowEditing: scp.allowEditing,
-            isQuickAdd: scp.isQuickAdd
+            flashLineAtom,
     }
 })
 

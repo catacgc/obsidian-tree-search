@@ -20,9 +20,7 @@ export const ActionsMolecule = molecule((mol, scope) => {
      */
     const closeModalAtom = atom(null, (get, set) => {
         const modal = get(GlobalAtoms.currentModalAtom)
-        if (modal) {
-            modal.close()
-        }
+        if (modal) modal.close()
     })
 
     const selectHoveredLineAtom = atom(null, async (get, set) => {
@@ -67,12 +65,6 @@ export const ActionsMolecule = molecule((mol, scope) => {
     })
 
     const handleDefaultActionAtom = atom(null, async (get, set) => {
-        // Quick Add: plain Enter opens the Append editor for the selected row (like Alt+A).
-        if (scp.isQuickAdd) {
-            await set(openAppendForSelectedAtom)
-            return
-        }
-
         const actions = get(selectedTreeNodeActionsAtom)
         if (actions.length == 0) return
 
@@ -89,7 +81,7 @@ export const ActionsMolecule = molecule((mol, scope) => {
 
         if (!node || !app) return []
 
-        return getTreeNodeActions(app, node, scp.isQuickLink ? "insertLink" : scp.isQuickAdd ? "quickAdd" : "default")
+        return getTreeNodeActions(app, node, scp.isQuickLink ? "insertLink" : "default")
     })
 
     const executeActionAtom = atom(null, async (get, set, action: RaycastAction) => {

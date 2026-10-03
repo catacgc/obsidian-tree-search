@@ -1,12 +1,14 @@
 // Obsidian-side appliers for editor mode (EDITOR.md). Every editor-mode vault
 // write goes through here; the content transforms themselves are pure and live
 // in @mdtree/core (edit/outline-edit.ts, edit/attachments.ts). Each applier
-// returns the markdown files it touched so the caller can reindex them.
+// returns the markdown files it touched so the caller can reindex them, except
+// `appendToDailyNote`, which returns its one file and the line it appended at.
 import type {App, TFile} from "obsidian"
 import {moment, normalizePath} from "obsidian"
 import {
     appendContent,
     appendOutline,
+    firstAppendedLine,
     cutSubtree,
     pasteAtOutlineEnd,
     pasteUnderLinkBullet,
@@ -114,10 +116,15 @@ export async function writeNoteContents(app: App, name: string, text: string, ne
     return app.vault.create(path, text.endsWith("\n") ? text : text + "\n")
 }
 
-export async function appendToDailyNote(app: App, outline: OutlineLine[], cfg: DailyNoteConfig, now: MomentLike = nowMoment()): Promise<TFile[]> {
+export async function appendToDailyNote(app: App, outline: OutlineLine[], cfg: DailyNoteConfig, now: MomentLike = nowMoment()): Promise<{ file: TFile; line: number | null }> {
     const daily = await getOrCreateDailyNote(app, cfg, now)
-    await app.vault.process(daily, c => appendOutline(c, outline))
-    return [daily]
+    let line: number | null = null
+    await app.vault.process(daily, c => {
+        const out = appendOutline(c, outline)
+        line = firstAppendedLine(c, out)
+        return out
+    })
+    return {file: daily, line}
 }
 
 export async function editLine(app: App, path: string, line: number, expectedLine: string, newLine: string): Promise<TFile[]> {

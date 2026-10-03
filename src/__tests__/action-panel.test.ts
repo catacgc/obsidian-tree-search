@@ -36,7 +36,7 @@ const ACTIONS: RaycastAction[] = [
 
 const ctx = (over: Partial<PanelContext> = {}): PanelContext => ({
     rowActions: ACTIONS, rows: tree, selectedPos: 1,
-    allowEditing: true, allowTimeline: true, timelineActive: false, ownPath, appendOnEnter: false, ...over,
+    allowEditing: true, allowTimeline: true, timelineActive: false, ownPath, ...over,
 })
 const titles = (c: PanelContext, section?: string) => panelItems(c).filter(i => !section || i.section === section).map(i => i.title)
 
@@ -67,11 +67,8 @@ describe("panelItems", () => {
         expect(titles(ctx({ selectedPos: 0 }), "edit")).toEqual(["Append to [[Project X]]"])
     })
 
-    it("Append shows Enter's keycap when Enter appends (Quick Add), its own key otherwise", () => {
+    it("Append shows its own key", () => {
         const append = (c: PanelContext) => panelItems(c).find(i => i.id === "append")
-        const onEnter = append(ctx({ appendOnEnter: true }))
-        expect(onEnter?.key?.label).toBe("Enter")
-        expect(onEnter?.key?.alt).toBeFalsy()
         expect(append(ctx())?.key?.label).toBe("A")
     })
 

@@ -7,7 +7,7 @@ import {
 } from "../view/editor/row-editing"
 import {
     outlineIndent, linkQueryAt, acceptLink, linkAt, insertAttachmentBullets, outlineBaseNote,
-    outlineBackspace, replaceOutlineParent, pasteOutline, changedRange, pasteLink, pastedUrl,
+    outlineBackspace, pasteOutline, changedRange, pasteLink, pastedUrl, ensureBullet, insertLinkAtCaret,
 } from "../view/editor/textarea-ops"
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -199,18 +199,35 @@ describe("outlineBackspace", () => {
     })
 })
 
-describe("replaceOutlineParent", () => {
-    it("swaps a link-only first line and keeps the rest", () => {
-        expect(replaceOutlineParent("- [[A]]\n    - x", "B")).toBe("- [[B]]\n    - x")
+describe("ensureBullet", () => {
+    it("bullets a plain line after its indent, caret shifted", () => {
+        expect(ensureBullet("- a\nfoo", 7)).toEqual({ text: "- a\n- foo", caret: 9 })
+        expect(ensureBullet("    foo", 7)).toEqual({ text: "    - foo", caret: 9 })
     })
 
-    it("prefills a blank outline", () => {
-        expect(replaceOutlineParent("- ", "B")).toBe("- [[B]]\n    - ")
+    it("leaves a list line alone and spaces a bare marker", () => {
+        expect(ensureBullet("* foo", 5)).toEqual({ text: "* foo", caret: 5 })
+        expect(ensureBullet("    -", 5)).toEqual({ text: "    - ", caret: 6 })
+    })
+})
+
+describe("insertLinkAtCaret", () => {
+    it("links on the caret line, never replacing the outline's top line", () => {
+        expect(insertLinkAtCaret("- [[A]]\n    - ", 14, "B")).toEqual({ text: "- [[A]]\n    - [[B]]", caret: 19 })
     })
 
-    it("prepends the parent, nesting a root-level outline under it", () => {
-        expect(replaceOutlineParent("- x\n- y", "B")).toBe("- [[B]]\n    - x\n    - y")
-        expect(replaceOutlineParent("    - x", "B")).toBe("- [[B]]\n    - x")
+    it("spaces the link off adjacent text", () => {
+        expect(insertLinkAtCaret("- note", 6, "B")).toEqual({ text: "- note [[B]]", caret: 12 })
+        expect(insertLinkAtCaret("- note", 2, "B")).toEqual({ text: "- [[B]] note", caret: 7 })
+    })
+
+    it("bullets an unbulleted line first", () => {
+        expect(insertLinkAtCaret("x", 1, "B")).toEqual({ text: "- x [[B]]", caret: 9 })
+    })
+
+    it("never lands inside the indent, marker or checkbox", () => {
+        expect(insertLinkAtCaret("    - foo", 0, "B")).toEqual({ text: "    - [[B]] foo", caret: 11 })
+        expect(insertLinkAtCaret("- [ ] ", 6, "B")).toEqual({ text: "- [ ] [[B]]", caret: 11 })
     })
 })
 

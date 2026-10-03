@@ -343,14 +343,4 @@ describe("insert-link (quick-link) actions", () => {
         const actions = getTreeNodeActions(mockApp, createPageNode())
         expect(actions.some(a => a.type === "insertLink")).toBe(false)
     })
-
-    describe("quick-add actions", () => {
-        it("frees plain Enter for Append, keeping Open without a key and Shift+Enter", () => {
-            const actions = getTreeNodeActions(mockApp, createPageNode(), "quickAdd")
-            expect(actions.some(a => a.shortcut?.key === "enter" && a.shortcut.modifiers.length === 0)).toBe(false)
-            expect(actions.some(a => a.type === "insertLink")).toBe(false)
-            expect(actions.some(a => a.title === "Open Page Name")).toBe(true)
-            expect(actions.some(a => a.shortcut?.key === "enter" && a.shortcut.modifiers.includes("shift"))).toBe(true)
-        })
-    })
 })

@@ -107,15 +107,33 @@ export function outlineBackspace(text: string, caret: number): TextEdit | null {
     return {text: text.slice(0, start - 1) + text.slice(end), caret: start - 1}
 }
 
-/** Swap the outline's parent: blank outline → appendPrefill(p); first line `- [[X]]` (no indent, link only) → replaced by `- [[p]]`;
- *  otherwise prepend `- [[p]]`, and if the first original line has no indent, indent every non-blank original line by 4 spaces. */
-export function replaceOutlineParent(text: string, parentName: string): string {
-    const lines = text.split("\n")
-    if (lines.every(l => /^\s*(?:[-*+]\s*)?$/.test(l))) return appendPrefill(parentName)
-    const head = `- [[${parentName}]]`
-    if (/^- \[\[[^\]\n]+\]\]\s*$/.test(lines[0])) return [head, ...lines.slice(1)].join("\n")
-    const body = /^\s/.test(lines[0]) ? lines : lines.map(l => (l.trim() ? "    " + l : l))
-    return [head, ...body].join("\n")
+const BARE_MARKER_LINE_RE = /^[ \t]*(?:[-*+]|\d+\.)$/
+const MARKER_PREFIX_RE = /^[ \t]*(?:[-*+]|\d+\.)[ \t]+(?:\[[ xX]\][ \t]+)?/
+
+/** Makes the caret line a list item: a line without a list marker gets `- ` after its indent; a bare marker (`-`, `*`, `+`, `1.`)
+ *  at line end gets a trailing space. Caret shifts with the insertion. Unchanged otherwise. */
+export function ensureBullet(text: string, caret: number): TextEdit {
+    const ls = lineStartAt(text, caret)
+    const le = lineEndAt(text, caret)
+    const line = text.slice(ls, le)
+    let at: number, insert: string
+    if (BARE_MARKER_LINE_RE.test(line)) [at, insert] = [le, " "]
+    else if (LIST_MARKER_LINE_RE.test(line)) return {text, caret}
+    else [at, insert] = [ls + /^[ \t]*/.exec(line)![0].length, "- "]
+    return {text: text.slice(0, at) + insert + text.slice(at), caret: caret >= at ? caret + insert.length : caret}
+}
+
+/** Search pick into a draft: `[[name]]` inline at `caret` on a bulleted line (ensureBullet first). Never inside the
+ *  indent/marker; a space is added where the link would touch text. Caret after `]]`. */
+export function insertLinkAtCaret(text: string, caret: number, name: string): TextEdit {
+    const e = ensureBullet(text, caret)
+    const ls = lineStartAt(e.text, e.caret)
+    const markerEnd = ls + (MARKER_PREFIX_RE.exec(e.text.slice(ls, lineEndAt(e.text, e.caret)))?.[0].length ?? 0)
+    const pos = Math.max(e.caret, markerEnd)
+    const before = pos > markerEnd && !/\s/.test(e.text[pos - 1]) ? " " : ""
+    const after = pos < e.text.length && !/\s/.test(e.text[pos]) ? " " : ""
+    const link = `${before}[[${name}]]`
+    return {text: e.text.slice(0, pos) + link + after + e.text.slice(pos), caret: pos + link.length}
 }
 
 /** Pasted text as outline lines: blanks dropped, plain lines bulleted, indents mapped to 4-space levels relative to the first line. */

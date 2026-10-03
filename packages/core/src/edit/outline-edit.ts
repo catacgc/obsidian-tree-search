@@ -223,6 +223,20 @@ export function appendOutline(content: string, outline: OutlineLine[]): string {
   return out
 }
 
+/** Line of the item `appendOutline` added when turning `before` into `after`: the first inserted line, or the line after it when that is a new bare `[[X]]` root heading deeper inserted lines. Null when nothing was inserted. */
+export function firstAppendedLine(before: string, after: string): number | null {
+  const beforeLines = splitLines(before).lines
+  const afterLines = splitLines(after).lines
+  let i = 0
+  while (i < afterLines.length && i < beforeLines.length && afterLines[i] === beforeLines[i]) i++
+  if (i >= afterLines.length) return null
+  const inserted = afterLines.length - beforeLines.length
+  const item = afterLines[i].match(LIST_ITEM_RE)
+  if (item && linkOnlyTarget(item[2]) !== null && inserted > 1 && i + 1 < afterLines.length
+    && indentWidth(afterLines[i + 1]) > indentWidth(afterLines[i])) return i + 1
+  return i
+}
+
 /** Appends `text` as a new paragraph: one blank line before it (unless already there), ending with a newline. */
 export function appendContent(content: string, text: string): string {
   const { eol } = splitLines(content)

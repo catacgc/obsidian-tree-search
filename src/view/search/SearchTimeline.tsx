@@ -54,13 +54,14 @@ type TimelineRowProps = {
 }
 
 export const TimelineRow = ({node, editable, appendDot, editHint}: TimelineRowProps) => {
-    const {selectedLineAtom, updateHoveredLineAtom, matchTermsAtom} = useMolecule(SearchViewMolecule)
+    const {selectedLineAtom, flashLineAtom, updateHoveredLineAtom, matchTermsAtom} = useMolecule(SearchViewMolecule)
     const {appAtom} = useMolecule(GlobalAppMolecule)
     const {selectHoveredLineAtom} = useMolecule(ActionsMolecule)
     const editGestures = useRowGestures(node, editable ?? false)
 
     const nodeRef = useRef<HTMLDivElement>(null)
     const selectedLine = useAtomValue(selectedLineAtom)
+    const flashing = useAtomValue(flashLineAtom) === node.index ? "ts-row-flash" : ""
     const matchTerms = useAtomValue(matchTermsAtom)
     const app = useAtomValue(appAtom)
 
@@ -103,7 +104,7 @@ export const TimelineRow = ({node, editable, appendDot, editHint}: TimelineRowPr
 
     return <div className="tree-node" onMouseMove={handleMouseMove} onMouseOver={handleMouseOver} onClick={handleClick} {...editGestures}>
         <div ref={nodeRef}
-             className={`ts-timeline-row ${highlighted} ${node.archived ? "ts-node-archived" : ""}`}
+             className={`ts-timeline-row ${highlighted} ${flashing} ${node.archived ? "ts-node-archived" : ""}`}
              title={node.node.location.path}>
             <div className="ts-timeline-body">
                 <div className="ts-timeline-line">

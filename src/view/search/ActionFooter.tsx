@@ -9,34 +9,22 @@ import {ActionsMolecule} from "../react-context/actions";
 import {ActionPanel, Keycaps, truncateMiddle} from "./ActionPanel";
 import {SHORTCUTS} from "./shortcuts";
 import {nodeLabel} from "./timeline-utils";
-import {appendTargetAt} from "../editor/row-editing";
 
 const keyOf = (id: string) => SHORTCUTS.find(s => s.id === id)?.keys[0]
 
 export const ActionFooter = () => {
-    const {
-        selectedNodeAtom, actionPanelAtom, toggleActionPanelAtom,
-        isQuickAdd, renderableTreeNodesAtom, selectedLineAtom, timelineActiveAtom,
-    } = useMolecule(SearchViewMolecule)
-    const {selectedTreeNodeActionsAtom, executeActionAtom, handleDefaultActionAtom} = useMolecule(ActionsMolecule)
+    const {selectedNodeAtom, actionPanelAtom, toggleActionPanelAtom} = useMolecule(SearchViewMolecule)
+    const {selectedTreeNodeActionsAtom, executeActionAtom} = useMolecule(ActionsMolecule)
     const selected = useAtomValue(selectedNodeAtom)
     const rowActions = useAtomValue(selectedTreeNodeActionsAtom)
-    const rows = useAtomValue(renderableTreeNodesAtom)
-    const selectedLine = useAtomValue(selectedLineAtom)
-    const timelineActive = useAtomValue(timelineActiveAtom)
     const panelOpen = useAtomValue(actionPanelAtom) !== null
     const toggle = useSetAtom(toggleActionPanelAtom)
     const execute = useSetAtom(executeActionAtom)
-    const handleDefault = useSetAtom(handleDefaultActionAtom)
     const dockRef = useRef<HTMLDivElement>(null)
 
-    // Quick Add: Enter appends to the selected row's page; elsewhere it runs the plain-Enter row action.
-    const pos = rows.findIndex(r => r.index === selectedLine)
-    const appendTarget = isQuickAdd && pos >= 0 ? appendTargetAt(rows, pos, timelineActive) : null
-    const enterAction = isQuickAdd ? undefined : rowActions.find(a => a.shortcut?.key === "enter" && a.shortcut.modifiers.length === 0)
-    const main: {title: string; run: () => void} | null = isQuickAdd
-        ? appendTarget && {title: `Append to [[${appendTarget.parentName}]]`, run: () => void handleDefault()}
-        : enterAction ? {title: enterAction.title, run: () => void execute(enterAction)} : null
+    // Enter runs the row's plain-Enter action.
+    const enterAction = rowActions.find(a => a.shortcut?.key === "enter" && a.shortcut.modifiers.length === 0)
+    const main: {title: string; run: () => void} | null = enterAction ? {title: enterAction.title, run: () => void execute(enterAction)} : null
     const title = selected ? truncateMiddle(nodeLabel(selected.node), 60) : ""
 
     return <div ref={dockRef} className="ts-action-dock">

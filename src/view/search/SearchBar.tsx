@@ -4,6 +4,7 @@ import {useUrlOpener} from "./useUrlOpener";
 import {useAtom, useAtomValue, useSetAtom} from "jotai";
 import {useMolecule} from "bunshi/react";
 import {GlobalAppMolecule, SearchViewMolecule} from "../react-context/state";
+import {GlobalAtoms} from "../react-context/global";
 import {spliceSuggestion, type Suggestion} from "@mdtree/core";
 import {SearchAutocomplete} from "./SearchAutocomplete";
 
@@ -18,7 +19,7 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
         searchQueryAtom,
         searchPlaceholderAtom, suggestionsAtom, suggestionIndexAtom, cursorPosAtom, dismissSuggestionsAtom,
         resetSuggestionsAtom, repositionSuggestionsAtom, focusSearchInputAtom,
-        allowTimeline, timelineActiveAtom, toggleViewModeAtom,
+        allowTimeline, timelineActiveAtom, toggleViewModeAtom, scopeName,
     } = useMolecule(SearchViewMolecule)
 
     const timelineActive = useAtomValue(timelineActiveAtom)
@@ -46,6 +47,18 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
         // type="search" inputs reject setSelectionRange in some engines — best effort.
         try { const n = el.value.length; el.setSelectionRange(n, n) } catch { /* ignore */ }
     }, [focusSignal])
+
+    // Back from Quick Add or the editor: focus the input with the whole query selected. Deferred so it
+    // runs after Obsidian restores focus on a closing modal.
+    const [selectQuery, setSelectQuery] = useAtom(GlobalAtoms.selectQueryAtom)
+    useEffect(() => {
+        if (selectQuery?.view !== scopeName.name) return
+        setSelectQuery(null)
+        window.setTimeout(() => {
+            inputRef.current?.focus()
+            inputRef.current?.select()
+        }, 0)
+    }, [selectQuery])
 
     const setSearch = (search: string) => {
         setSearchQuery({ query: search })

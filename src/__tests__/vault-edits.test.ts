@@ -84,11 +84,12 @@ describe("appendToDailyNote", () => {
         const { app, files, folders } = makeFakeApp({ "Templates/Daily.md": "# {{date}} {{title}} {{time}}\n" })
 
         const outline = [{ depth: 0, marker: "- ", text: "[[Project X]]" }, { depth: 1, marker: "- ", text: "[[A]] hi" }]
-        const touched = await appendToDailyNote(app, outline, cfg, now)
+        const result = await appendToDailyNote(app, outline, cfg, now)
 
         expect(folders.has("Daily")).toBe(true)
         expect(files.get("Daily/2026-09-30.md")).toBe("# 2026-09-30 2026-09-30 09:00\n- [[Project X]]\n    - [[A]] hi\n")
-        expect(touched.map(f => f.path)).toEqual(["Daily/2026-09-30.md"])
+        expect(result.file.path).toBe("Daily/2026-09-30.md")
+        expect(result.line).toBe(2)
     })
 
     it("creates an empty daily note when the template is missing", async () => {

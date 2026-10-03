@@ -19,6 +19,16 @@
 	background-color: hsla(var(--interactive-accent-hsl), 0.1);
 }
 
+/* The row a save just wrote; fades into the .highlight tint. */
+.ts-row-flash {
+	animation: ts-row-flash 1.5s ease-out;
+}
+
+@keyframes ts-row-flash {
+	from { background-color: hsla(var(--interactive-accent-hsl), 0.45); }
+	to { background-color: hsla(var(--interactive-accent-hsl), 0.1); }
+}
+
 .obsidian-link {
 	text-decoration: none;
 }

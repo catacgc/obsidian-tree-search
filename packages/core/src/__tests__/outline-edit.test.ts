@@ -7,6 +7,7 @@ import {
   findLinkBullet,
   appendUnderLinkBullet,
   appendOutline,
+  firstAppendedLine,
   appendContent,
   splitEditableLine,
   lineHasIdentity,
@@ -148,6 +149,26 @@ describe("appendOutline", () => {
 
   it("keeps tab indentation in a tab-indented note", () => {
     expect(appendOutline("- [[P]]\n\t- a\n", outline("- [[P]]\n    - b"))).toBe("- [[P]]\n\t- a\n\t- b\n")
+  })
+})
+
+describe("firstAppendedLine", () => {
+  const appendAndLocate = (before: string, typed: string) => firstAppendedLine(before, appendOutline(before, outline(typed)))
+
+  it("points at the child merged into an existing [[P]] bullet's subtree", () => {
+    expect(appendAndLocate("- [[P]]\n    - a\n", "- [[P]]\n    - x")).toBe(2)
+  })
+
+  it("skips a new bare [[P]] root line to its first child", () => {
+    expect(appendAndLocate("", "- [[P]]\n    - x")).toBe(1)
+  })
+
+  it("points at a plain root added at the outline end", () => {
+    expect(appendAndLocate("- a\n", "- y")).toBe(1)
+  })
+
+  it("is null when nothing changed", () => {
+    expect(firstAppendedLine("- a\n", "- a\n")).toBeNull()
   })
 })
 

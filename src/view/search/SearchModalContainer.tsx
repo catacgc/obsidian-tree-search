@@ -3,6 +3,7 @@ import {SearchModalMolecule, SearchViewScope} from "../react-context/state";
 import {SearchViewFlatten} from "./SearchViewFlatten";
 import {ScopeProvider, useMolecule} from "bunshi/react";
 import {KeyComboWrapper} from "./KeyComboWrapper";
+import {QuickAddView} from "../editor/QuickAddView";
 
 export type SearchModalKind = "search" | "insertLink" | "quickAdd"
 
@@ -12,14 +13,17 @@ export const SearchModalContainer = ({ kind }: { kind: SearchModalKind }) => {
         name: kind === "quickAdd" ? "quickAdd" : "modal",
         isQuickLink: kind === "insertLink",
         isQuickAdd: kind === "quickAdd",
+        // Quick Add keeps showSearch: its link list selects row 0 like a search result list.
         showSearch: true,
         isModal: true,
-        allowTimeline: kind !== "insertLink",
-        allowEditing: kind !== "insertLink",
+        allowTimeline: kind === "search",
+        allowEditing: kind === "search",
     }}>
-        <KeyComboWrapper>
-            <_SearchModalContainer/>
-        </KeyComboWrapper>
+        {kind === "quickAdd"
+            ? <QuickAddView/>
+            : <KeyComboWrapper>
+                <_SearchModalContainer/>
+            </KeyComboWrapper>}
     </ScopeProvider>
 }
 

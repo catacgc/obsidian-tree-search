@@ -76,6 +76,7 @@ export {
   findLinkBullet,
   appendUnderLinkBullet,
   appendOutline,
+  firstAppendedLine,
   linkOnlyTarget,
   appendContent,
   splitEditableLine,

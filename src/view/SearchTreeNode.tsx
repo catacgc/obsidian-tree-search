@@ -21,11 +21,14 @@ type SearchTreeNodePropsFlatten = {
     editable?: boolean;
     appendDot?: AppendTarget;
     editHint?: boolean;
+    /** Quick Add's link list: a click picks the row instead of selecting/opening it (its links included), and the
+     *  row never takes focus from the editor. */
+    onPick?: (node: TreeNode) => void;
 };
 
 export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
 
-    const {expandNodeAtom, selectedLineAtom, updateHoveredLineAtom, matchTermsAtom, allowEditing, renderableTreeNodesAtom} = useMolecule(SearchViewMolecule)
+    const {expandNodeAtom, selectedLineAtom, flashLineAtom, updateHoveredLineAtom, matchTermsAtom, allowEditing, renderableTreeNodesAtom} = useMolecule(SearchViewMolecule)
     const {appAtom} = useMolecule(GlobalAppMolecule)
     const {selectHoveredLineAtom} = useMolecule(ActionsMolecule)
     const {dragIndexAtom, dropTargetAtom, reparentAtom, clearDragAtom} = useMolecule(EditorMolecule)
@@ -40,6 +43,7 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
 
     const nodeRef = useRef<HTMLDivElement>(null);
     const selectedLine = useAtomValue(selectedLineAtom);
+    const flashing = useAtomValue(flashLineAtom) === props.node.index ? "ts-row-flash" : "";
     const matchTerms = useAtomValue(matchTermsAtom);
     const app = useAtomValue(appAtom);
 
@@ -131,6 +135,17 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
         },
     } : {}
 
+    // Picking: the capture phase beats the row's links; the guides' expand click still goes through.
+    const pickHandlers: React.HTMLAttributes<HTMLDivElement> = props.onPick ? {
+        onMouseDown: ev => ev.preventDefault(),
+        onClickCapture: ev => {
+            if ((ev.target as Element).closest(".ts-list-guides")) return
+            ev.preventDefault()
+            ev.stopPropagation()
+            props.onPick!(props.node)
+        },
+    } : editGestures
+
     return (
         <div className="tree-node"
                 onMouseMove={(ev) => handleMouseMove(ev)}
@@ -138,11 +153,11 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
                 onClick={handleTreeNodeClick}
                 draggable={drag.draggable || undefined}
                 {...dragHandlers}
-                {...editGestures}
+                {...pickHandlers}
         >
             <div
                 ref={nodeRef}
-                className={`ts-list-line ${highlighted} ${expandableClass} ${dimClass} ${archivedClass} ${dropTarget === props.pos ? "ts-drop-target" : ""}`}
+                className={`ts-list-line ${highlighted} ${flashing} ${expandableClass} ${dimClass} ${archivedClass} ${dropTarget === props.pos ? "ts-drop-target" : ""}`}
                 dir="ltr"
                 style={{ '--indent-level': indentLevel } as React.CSSProperties}
             >
