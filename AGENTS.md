@@ -32,6 +32,8 @@ bun test packages/core/src/__tests__/graph.test.ts   # single file
 bun test packages/cli/src/__tests__                  # CLI tests
 ```
 
+The same commands are defined as mise tasks in `mise.toml` (`mise tasks` lists them). `mise run build` builds the plugin and `dist/mdtree` in parallel, after `bun install`, and skips any target whose sources haven't changed (`--force` rebuilds). Other tasks: `build:plugin`, `build:cli`, `typecheck`, `dev`, `test`, `test:core`, and `mdtree -- <args>`, which runs the CLI from source.
+
 CLI examples (the global `--dir` option can be repeated for multi-vault use):
 
 ```bash

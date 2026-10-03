@@ -165,6 +165,15 @@ describe("archive/unarchive actions", () => {
             expect(unarchiveAction.url).toContain("filepath=test.md")
         }
     })
+
+    it("offers no actions for the synthetic Archive row, which has no line to act on", () => {
+        const archiveRow = {
+            ...createTreeNode([{ tokenType: "text", text: "Archive (3 items)" }]),
+            archiveRow: true,
+        }
+        archiveRow.node.location = { file: "", line: 0 }
+        expect(getTreeNodeActions(mockApp, archiveRow)).toEqual([])
+    })
 })
 
 describe("archive/unarchive actions for pages", () => {

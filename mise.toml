@@ -1,0 +1,61 @@
+# Tool versions live in .tool-versions (bun, nodejs); mise reads it alongside this file.
+
+[tasks.install]
+description = "Install workspace dependencies"
+run = "bun install"
+sources = ["package.json", "bun.lock", "packages/*/package.json"]
+outputs = { auto = true }
+
+[tasks.typecheck]
+description = "Type-check the plugin and core (tsc --noEmit)"
+depends = ["install"]
+run = "node_modules/.bin/tsc -noEmit -skipLibCheck"
+
+[tasks."build:plugin"]
+description = "Type-check and bundle the Obsidian plugin into dist/ (main.js, styles.css, manifests)"
+depends = ["install"]
+run = [
+  "node_modules/.bin/tsc -noEmit -skipLibCheck",
+  "node esbuild.config.mjs production",
+]
+sources = [
+  "src/**/*",
+  "packages/core/src/**/*",
+  "esbuild.config.mjs",
+  "tsconfig.json",
+  "manifest.json",
+  "manifest-beta.json",
+  ".hotreload",
+]
+outputs = ["dist/main.js", "dist/styles.css", "dist/manifest.json"]
+
+[tasks."build:cli"]
+description = "Compile the standalone mdtree CLI to dist/mdtree"
+depends = ["install"]
+run = "bun build --compile --target=bun packages/cli/src/main.ts --outfile=dist/mdtree"
+sources = ["packages/cli/src/**/*", "packages/core/src/**/*"]
+outputs = ["dist/mdtree"]
+
+[tasks.build]
+description = "Build the plugin and the mdtree CLI"
+depends = ["build:plugin", "build:cli"]
+
+[tasks.dev]
+description = "Rebuild the plugin into dist/ on change"
+depends = ["install"]
+run = "node esbuild.config.mjs"
+
+[tasks.test]
+description = "Run all tests (preloads the obsidian mock)"
+depends = ["install"]
+run = "bun test"
+
+[tasks."test:core"]
+description = "Run @mdtree/core tests only"
+depends = ["install"]
+run = "bun test packages/core/src/__tests__"
+
+[tasks.mdtree]
+description = "Run the mdtree CLI from source; extra args are passed through"
+depends = ["install"]
+run = "bun run packages/cli/src/main.ts"

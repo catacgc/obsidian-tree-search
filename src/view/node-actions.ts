@@ -69,6 +69,8 @@ function truncateActionTitle(title: string): string {
 export type NodeActionMode = "default" | "insertLink"
 
 export function getTreeNodeActions(app: App, treeNode: TreeNode, mode: NodeActionMode = "default"): RaycastAction[] {
+    // The synthetic "Archive (N items)" row stands for no note or line.
+    if (treeNode.archiveRow) return []
     const vault = app.vault.getName()
     const actions: RaycastAction[] = []
     const title = renderTitle(treeNode, actions, app)
