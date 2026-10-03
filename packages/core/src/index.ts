@@ -48,6 +48,7 @@ export { suggestAt, spliceSuggestion, type Suggestion } from "./search/suggest.t
 export { describeQuerySyntax, type QuerySyntaxEntry, type QuerySyntaxGroup } from "./search/syntax.ts"
 export { flattenIndex, defaultVisibility, type TreeNode } from "./search/flatten.ts"
 export { buildTimeline, fileParent, type TimelineItem } from "./search/timeline.ts"
+export { pruneToRecency } from "./search/recency.ts"
 export { reverseMarkdownParsing } from "./search/copy.ts"
 export { isArchived, partitionArchived } from "./search/archive.ts"
 export {

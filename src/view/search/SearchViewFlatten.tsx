@@ -7,7 +7,7 @@ import {SearchTreeNode} from "../SearchTreeNode";
 import {SearchBar} from "./SearchBar";
 import {ActionFooter} from "./ActionFooter";
 import {SearchHelp} from "./SearchHelp";
-import {TimelineFilterBar, TimelineRow} from "./SearchTimeline";
+import {RecencyFilterBar, TimelineRow} from "./SearchTimeline";
 import React, {useEffect, useMemo, useState} from "react";
 import {EditorMolecule} from "../editor/EditorMolecule";
 import {appendTargetAt, isEditableRow, type AppendTarget} from "../editor/row-editing";
@@ -26,14 +26,14 @@ export type TreeNode = {
 }
 
 export const SearchViewFlatten = () => {
-    const {searchViewStateAtom, incrementPagesAtom, timelineActiveAtom, timelineWindowAtom, rebuildResultsAtom, actualQueryAtom,
-        allowEditing, hoveredLineAtom, selectedLineAtom, flashLineAtom} = useMolecule(SearchViewMolecule)
+    const {searchViewStateAtom, incrementPagesAtom, timelineActiveAtom, recencyWindowAtom, rebuildResultsAtom, actualQueryAtom,
+        allowEditing, allowTimeline, hoveredLineAtom, selectedLineAtom, flashLineAtom} = useMolecule(SearchViewMolecule)
     const {altHeldAtom, ownPathAtom} = useMolecule(EditorMolecule)
 
     const viewState = useAtomValue(searchViewStateAtom)
     const incrementPages = useSetAtom(incrementPagesAtom)
     const timelineActive = useAtomValue(timelineActiveAtom)
-    const timelineWindow = useAtomValue(timelineWindowAtom)
+    const recencyWindow = useAtomValue(recencyWindowAtom)
     const actualQuery = useAtomValue(actualQueryAtom)
     const rebuild = useSetAtom(rebuildResultsAtom)
     const [flashLine, setFlashLine] = useAtom(flashLineAtom)
@@ -45,7 +45,7 @@ export const SearchViewFlatten = () => {
 
     // Re-project the stored results when the mode (possibly flipped from another
     // open view) or the recency window changes; idempotent on mount.
-    useEffect(() => { rebuild() }, [timelineActive, timelineWindow])
+    useEffect(() => { rebuild() }, [timelineActive, recencyWindow])
 
     // A selection that flashes (the row a save just wrote) stops flashing after the animation.
     useEffect(() => {
@@ -95,7 +95,7 @@ export const SearchViewFlatten = () => {
     return <>
         {(viewState.showSearch) && <div className="tw-reset ts-search-block">
                 <SearchBar isQuickLink={viewState.isQuickLink}/>
-                {timelineActive && <TimelineFilterBar/>}
+                {allowTimeline && <RecencyFilterBar/>}
             </div>
         }
 
@@ -107,8 +107,8 @@ export const SearchViewFlatten = () => {
             {viewState.isLoading ? (
                 <LoadingDots />
             ) : viewState.searchResults.renderableNodes.length === 0 ? (
-                timelineActive && actualQuery.trim().length >= 3
-                    ? <div className="ts-timeline-empty">No dated matches{timelineWindow !== "all" ? ` in the last ${timelineWindow}` : ""}</div>
+                actualQuery.trim().length >= 3 && (timelineActive || recencyWindow !== "all")
+                    ? <div className="ts-timeline-empty">No {timelineActive ? "dated " : ""}matches{recencyWindow !== "all" ? ` in the last ${recencyWindow}` : ""}</div>
                     // Only the main search modal shows the syntax cheat sheet; auxiliary
                     // panes (file context, parents, tasks, inline results) stay blank.
                     : viewState.isModal ? <SearchHelp /> : null
