@@ -85,8 +85,9 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
     // was recorded. Anchors (wikilinks) stop propagation so they preview their
     // own target instead. Page Preview enforces the mod-key gating via the
     // registered source's `defaultMod`, so we always forward the native event.
+    // The synthetic Archive row has no source location, so it never previews.
     function handleMouseOver(ev: React.MouseEvent<HTMLDivElement>) {
-        if (!app) return;
+        if (!app || props.node.archiveRow) return;
         triggerLocationPreview(app, ev.nativeEvent, ev.currentTarget, props.node.node.location);
     }
 
