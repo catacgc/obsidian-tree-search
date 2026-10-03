@@ -3,7 +3,7 @@ import {useAtom, useAtomValue, useSetAtom} from "jotai";
 import {useMolecule} from "bunshi/react";
 import {isUndated} from "@mdtree/core";
 import {Pencil} from "lucide-react";
-import {GlobalAppMolecule, SearchViewMolecule, TIMELINE_WINDOWS} from "../react-context/state";
+import {GlobalAppMolecule, SearchViewMolecule, RECENCY_WINDOWS} from "../react-context/state";
 import {ActionsMolecule} from "../react-context/actions";
 import {triggerLocationPreview} from "../hover-preview";
 import {BaseNodeRender, highlightText} from "../NodeRenderer";
@@ -13,27 +13,27 @@ import {AppendDot} from "../editor/AppendDot";
 import type {AppendTarget} from "../editor/row-editing";
 import {useRowGestures} from "./row-gestures";
 
-// Recency chips (All / 7d / 30d / 1y). Filters the timeline locally with `in:`
-// semantics without touching the query. Divs, not <button>s: Obsidian's button
-// chrome breaks the layout (see SearchHelp's SyntaxRow).
-export const TimelineFilterBar = () => {
-    const {timelineWindowAtom} = useMolecule(SearchViewMolecule)
-    const [timelineWindow, setTimelineWindow] = useAtom(timelineWindowAtom)
+// Recency chips (All / 7d / 30d / 1y), in Tree and Timeline mode. Filters the
+// results locally with `in:` semantics without touching the query. Divs, not
+// <button>s: Obsidian's button chrome breaks the layout (see SearchHelp's SyntaxRow).
+export const RecencyFilterBar = () => {
+    const {recencyWindowAtom} = useMolecule(SearchViewMolecule)
+    const [recencyWindow, setRecencyWindow] = useAtom(recencyWindowAtom)
 
     return <div className="ts-timeline-filters">
-        {TIMELINE_WINDOWS.map(w => <div
+        {RECENCY_WINDOWS.map(w => <div
             key={w}
             role="button"
             tabIndex={0}
-            className={`ts-timeline-chip ${timelineWindow === w ? "is-active" : ""}`}
+            className={`ts-timeline-chip ${recencyWindow === w ? "is-active" : ""}`}
             title={w === "all" ? "Any date" : `in:${w}`}
-            onClick={() => setTimelineWindow(w)}
+            onClick={() => setRecencyWindow(w)}
             onKeyDown={ev => {
                 if (ev.key === "Enter" || ev.key === " ") {
                     // Keep KeyComboWrapper's Enter (open selection) from also firing.
                     ev.preventDefault()
                     ev.stopPropagation()
-                    setTimelineWindow(w)
+                    setRecencyWindow(w)
                 }
             }}
         >{w === "all" ? "All" : w}</div>)}

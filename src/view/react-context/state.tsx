@@ -1,5 +1,5 @@
 import {TreeNode} from '../search/SearchViewFlatten'
-import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, linkTargetTree, type QueryExpr, partitionArchived, extractArchiveReveal, suggestAt, type Suggestion, buildTimeline, fileParent, parseDuration, flattenIndex, defaultVisibility} from '@mdtree/core'
+import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, linkTargetTree, type QueryExpr, partitionArchived, extractArchiveReveal, suggestAt, type Suggestion, buildTimeline, fileParent, parseDuration, flattenIndex, defaultVisibility, pruneToRecency} from '@mdtree/core'
 import {atom, useAtomValue, type Getter, type Setter} from 'jotai'
 import {findTargetRow, revealRow, type RowTarget} from '../search/select-target'
 import {ParsedNode} from '@mdtree/core'
@@ -56,8 +56,8 @@ export const SearchViewScope = createScope({
     allowEditing: false
 })
 
-export type TimelineWindow = "all" | "7d" | "30d" | "1y"
-export const TIMELINE_WINDOWS: TimelineWindow[] = ["all", "7d", "30d", "1y"]
+export type RecencyWindow = "all" | "7d" | "30d" | "1y"
+export const RECENCY_WINDOWS: RecencyWindow[] = ["all", "7d", "30d", "1y"]
 /** The action panel's list: the main actions, or the Move under… page list. */
 export type ActionPanelPage = "main" | "moveUnder"
 
@@ -267,8 +267,9 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     const timelineActiveAtom = atom(get => scp.allowTimeline === true && get(viewModeAtom) === "timeline")
     const toggleViewModeAtom = atom(null, (get, set) =>
         set(searchViewModesAtom, {...get(searchViewModesAtom), [scp.name]: get(viewModeAtom) === "timeline" ? "tree" : "timeline"}))
-    // View-local recency filter; narrows the timeline without touching the query.
-    const timelineWindowAtom = atom<TimelineWindow>("all")
+    // View-local recency filter; narrows the timeline, or prunes the tree to
+    // in-window branches (pruneToRecency), without touching the query.
+    const recencyWindowAtom = atom<RecencyWindow>("all")
     // Raw results of the last search, kept so mode/window changes can re-project
     // without re-running the search.
     const lastResultsAtom = atom<{ results: ResultNode[]; archivedCount: number }>({ results: [], archivedCount: 0 })
@@ -309,8 +310,8 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     const updateSearchResultsAtom = atom(null, (get, set, result: ResultNode[], archivedCount: number = 0) => {
         set(lastResultsAtom, { results: result, archivedCount })
 
+        const w = get(recencyWindowAtom)
         if (get(timelineActiveAtom)) {
-            const w = get(timelineWindowAtom)
             // Undated items take the ctime of the file their line lives in
             // (timeline-only; the index itself deliberately ignores fs times).
             // Age counts local calendar days so the row's rebuilt date is exact.
@@ -346,6 +347,9 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             settleSelection(get, set, nodes)
             return
         }
+
+        // Tree-mode recency: prune to in-window branches before flattening.
+        if (w !== "all") result = pruneToRecency(result, parseDuration(w)!)
 
         // Calculate dynamic expand level first
         const dynamicExpand = get(searchQueryAtom).query
@@ -602,7 +606,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             cursorPosAtom, suggestionsAtom, suggestionIndexAtom, dismissSuggestionsAtom, resetSuggestionsAtom,
             repositionSuggestionsAtom,
             focusSearchInputAtom, appendQueryTokenAtom,
-            timelineActiveAtom, toggleViewModeAtom, timelineWindowAtom, rebuildResultsAtom,
+            timelineActiveAtom, toggleViewModeAtom, recencyWindowAtom, rebuildResultsAtom,
             actionPanelAtom, openActionPanelAtom, closeActionPanelAtom, toggleActionPanelAtom,
             allowTimeline: scp.allowTimeline,
             allowEditing: scp.allowEditing,

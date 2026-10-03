@@ -46,7 +46,7 @@ export const SHORTCUTS: Shortcut[] = [
     {
         id: "recency", group: "View", needs: "timeline",
         keys: [alt("Digit1", "1"), alt("Digit2", "2"), alt("Digit3", "3"), alt("Digit4", "4")],
-        description: "Timeline: all / 7d / 30d / 1y",
+        description: "Recency: all / 7d / 30d / 1y",
     },
     {id: "expand", group: "View", keys: [alt("Equal", "=")], description: "Tree: expand one level"},
     {id: "collapse", group: "View", keys: [alt("Minus", "-")], description: "Tree: collapse one level"},
