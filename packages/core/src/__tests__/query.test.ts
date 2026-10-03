@@ -401,6 +401,22 @@ describe("outline: field", () => {
   })
 })
 
+describe("tree: field", () => {
+  it("keeps a quoted name whole and exact, separator and spaces included", () => {
+    expect(parseQuery("tree:\"Daily 2026.10.03\" is:page", ".")).toEqual([{
+      type: "and",
+      exprs: [
+        { type: "modifier", field: "tree", value: "daily 2026.10.03", exact: true },
+        { type: "modifier", field: "is", value: "page" },
+      ],
+    }])
+  })
+
+  it("leaves a bare name a fragment", () => {
+    expect(parseQuery("tree:sep", ".")[0]).toEqual({ type: "modifier", field: "tree", value: "sep" })
+  })
+})
+
 describe("legacy bare shortcuts", () => {
   it("resolves :p to is:page", () => {
     expect(parseQuery(":p", ".")[0]).toEqual({ type: "modifier", field: "is", value: "page" })

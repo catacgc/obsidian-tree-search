@@ -1,6 +1,6 @@
 // The inline editor shared by Append and Alt-Edit (EDITOR.md §3): outline section, optional
 // content section, live preview and footer hints. Sits at the top of Quick Add, keyed by
-// session, with its link results (LinkResults: `[[` matches, else the daily outline) filling the modal below it.
+// session, with its link results (LinkResults: `[[` matches, else the parent's tree or the daily outline) filling the modal below it.
 import React, {useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
 import {useAtomValue, useSetAtom} from "jotai";
 import {useMolecule} from "bunshi/react";
@@ -8,7 +8,7 @@ import {htmlToMarkdown, Notice, Platform, Scope, type Modifier} from "obsidian";
 import {Brackets, ClipboardPaste, IndentDecrease, IndentIncrease, ListTodo, Paperclip} from "lucide-react";
 import {attachmentExt, attachmentKind, attachmentName, reverseMarkdownParsing} from "@mdtree/core";
 import {GlobalAtoms} from "../react-context/global";
-import {DAILY_OUTLINE_QUERY, SearchViewMolecule} from "../react-context/state";
+import {quickAddDefaultQuery, SearchViewMolecule} from "../react-context/state";
 import {leaveQuickAddAtom} from "../react-context/quick-add-flow";
 import {openFileByName} from "../../obsidian-utils";
 import {newNotePath, pasteAttachment, trashSessionAttachments} from "../../editing/vault-edits";
@@ -203,8 +203,13 @@ export function InlineEditor({state}: { state: EditorState }) {
     const suggestFor = (section: Section): LinkSuggestState => section === "outline" ? outlineSuggest : contentSuggest
     const suggest = suggestFor(focused)
 
-    // Quick Add's results list follows the open `[[query` of the focused field, else shows today's daily outline.
-    useEffect(() => setQuery({query: suggest.open ? suggest.query : DAILY_OUTLINE_QUERY}), [suggest.open, suggest.query])
+    // The outline's first parent: the first link on its first line (Append's `[[P]]` root as typed or switched, or
+    // the edited line's first link), so the list follows edits to it.
+    const firstParent = firstLinkOnLine(state.outline, 0) ?? undefined
+    // Quick Add's results list follows the open `[[query` of the focused field, else shows the first parent's full
+    // tree (`tree:"P"`), or today's daily outline without one.
+    useEffect(() => setQuery({query: suggest.open ? suggest.query : quickAddDefaultQuery(firstParent)}),
+        [suggest.open, suggest.query, firstParent])
 
     /** Escape / ✕ / backdrop: close Quick Add; the Append draft stays for next time. */
     const close = () => leave({kind: "cancelled"})
@@ -636,6 +641,7 @@ export function InlineEditor({state}: { state: EditorState }) {
             </div>
         </div>
     </div>
-    <LinkResults open={suggest.open} query={suggest.query} onPick={row => { if (!row.archiveRow) accept(focused, row) }}/>
+    <LinkResults open={suggest.open} query={suggest.query} parentName={firstParent}
+        onPick={row => { if (!row.archiveRow) accept(focused, row) }}/>
     </>
 }

@@ -1,7 +1,7 @@
 import type { ParsedNode } from "../graph/types.ts"
 import { isUndated } from "../graph/boost.ts"
 
-export type QueryModifierField = "is" | "has" | "in" | "outline"
+export type QueryModifierField = "is" | "has" | "in" | "outline" | "tree"
 
 export type QueryExpr =
   | { type: "contains"; value: string }
@@ -10,7 +10,7 @@ export type QueryExpr =
   | { type: "not"; expr: QueryExpr }
   | { type: "and"; exprs: QueryExpr[] }
   | { type: "or"; exprs: QueryExpr[] }
-  // `exact`: a quoted `outline:"name"` (or `:daily`), matched whole rather than as a fragment.
+  // `exact`: a quoted `outline:"name"` / `tree:"name"` (or `:daily`), matched whole rather than as a fragment.
   | { type: "modifier"; field: QueryModifierField; value: string; exact?: true }
 
 export const IS_VALUES = ["page", "header", "text", "folder", "attachment", "task", "completed", "undated", "archived"]
@@ -126,9 +126,9 @@ function tokenize(input: string, separator: string): Token[] {
       value += input[j]
       j++
     }
-    // `outline:"name with spaces"`: the quoted name belongs to the field, and
+    // `outline:"name with spaces"` / `tree:"…"`: the quoted name belongs to the field, and
     // keeps its quotes so matchField can tell an exact name from a fragment.
-    if (value === "outline:" && input[j] === '"') {
+    if ((value === "outline:" || value === "tree:") && input[j] === '"') {
       const close = input.indexOf('"', j + 1)
       value += `"${input.slice(j + 1, close === -1 ? input.length : close)}"`
       j = close === -1 ? input.length : close + 1
@@ -154,15 +154,15 @@ function tokenize(input: string, separator: string): Token[] {
 // so a partially-typed query never crashes live search.
 
 function matchField(word: string): { field: QueryModifierField; value: string; exact?: true } | null {
-  const m = /^(is|has|in|outline):(.+)$/.exec(word)
+  const m = /^(is|has|in|outline|tree):(.+)$/.exec(word)
   if (!m) return null
   const field = m[1] as QueryModifierField
   const typedValue = m[2]
   // `in:` values are open-ended durations, not an enum — keep the raw string
-  // and validate it at match time via parseDuration. `outline:` names a note:
+  // and validate it at match time via parseDuration. `outline:`/`tree:` name a note:
   // quoted, the exact name; bare, a fragment (searchIndex picks the latest match).
   if (field === "in") return { field, value: typedValue }
-  if (field === "outline") {
+  if (field === "outline" || field === "tree") {
     return typedValue.startsWith('"') ? { field, value: typedValue.slice(1, -1), exact: true } : { field, value: typedValue }
   }
   const values = field === "is" ? IS_VALUES : HAS_VALUES
@@ -285,9 +285,9 @@ function matchModifier(attrs: ParsedNode, field: QueryModifierField, value: stri
     const days = parseDuration(value)
     return days !== null && attrs.ageDays <= days
   }
-  // `outline:` scopes the whole search (searchIndex) rather than testing one
-  // node, so every node it lets through satisfies it.
-  if (field === "outline") return true
+  // `outline:`/`tree:` scope the whole search (searchIndex) rather than testing
+  // one node, so every node they let through satisfies them.
+  if (field === "outline" || field === "tree") return true
   // field === "has"
   switch (value) {
     case "emoji": return containsEmoji(attrs.searchKey)
@@ -421,30 +421,34 @@ export function extractArchiveReveal(stages: QueryExpr[]): { reveal: boolean; st
   return { reveal, stages: out }
 }
 
-// ── Outline scope ───────────────────────────────────────────────────────────────
+// ── Outline / tree scope ────────────────────────────────────────────────────────
 //
 // `outline:<note>` / `:daily` is not a per-node matcher either: it restricts the
-// whole search to one note's own outline (searchIndex). Its targets are collected
-// from anywhere in the query and the modifiers stripped, so the rest of each stage
-// matches as usual; a stage holding only the scope collapses to empty (matches
-// all). A negated `-outline:` is dropped without scoping.
+// whole search to one note's own outline (searchIndex). `tree:<note>` restricts
+// it to the note's full subtree: all edges the search would follow, from any
+// file. Their targets are collected from anywhere in the query and the modifiers
+// stripped, so the rest of each stage matches as usual; a stage holding only the
+// scope collapses to empty (matches all). A negated `-outline:`/`-tree:` is
+// dropped without scoping.
 
-/** A note named by `outline:`: `exact` names it whole (quoted, or `:daily`); otherwise `value` is a fragment. */
-export type OutlineTarget = { value: string; exact: boolean }
+/** A note named by `outline:`/`tree:`: `exact` names it whole (quoted, or `:daily`); otherwise `value` is a fragment. */
+export type ScopeTarget = { value: string; exact: boolean }
 
-function stripOutline(expr: QueryExpr, targets: OutlineTarget[], negated: boolean): QueryExpr {
+type ScopeTargets = { outline: ScopeTarget[]; tree: ScopeTarget[] }
+
+function stripScope(expr: QueryExpr, scopes: ScopeTargets, negated: boolean): QueryExpr {
   switch (expr.type) {
     case "modifier":
-      if (expr.field !== "outline") return expr
-      if (!negated) targets.push({ value: expr.value, exact: expr.exact === true })
+      if (expr.field !== "outline" && expr.field !== "tree") return expr
+      if (!negated) scopes[expr.field].push({ value: expr.value, exact: expr.exact === true })
       return { type: "empty" }
     case "not": {
-      const inner = stripOutline(expr.expr, targets, true)
+      const inner = stripScope(expr.expr, scopes, true)
       return inner.type === "empty" ? inner : { type: "not", expr: inner }
     }
     case "and":
     case "or": {
-      const kept = expr.exprs.map(e => stripOutline(e, targets, negated)).filter(e => e.type !== "empty")
+      const kept = expr.exprs.map(e => stripScope(e, scopes, negated)).filter(e => e.type !== "empty")
       if (kept.length === 0) return { type: "empty" }
       if (kept.length === 1) return kept[0]
       return { type: expr.type, exprs: kept }
@@ -454,8 +458,8 @@ function stripOutline(expr: QueryExpr, targets: OutlineTarget[], negated: boolea
   }
 }
 
-export function extractOutlineScope(stages: QueryExpr[]): { targets: OutlineTarget[]; stages: QueryExpr[] } {
-  const targets: OutlineTarget[] = []
-  const out = stages.map(stage => stripOutline(stage, targets, false))
-  return { targets, stages: out }
+export function extractScope(stages: QueryExpr[]): { outline: ScopeTarget[]; tree: ScopeTarget[]; stages: QueryExpr[] } {
+  const scopes: ScopeTargets = { outline: [], tree: [] }
+  const out = stages.map(stage => stripScope(stage, scopes, false))
+  return { ...scopes, stages: out }
 }

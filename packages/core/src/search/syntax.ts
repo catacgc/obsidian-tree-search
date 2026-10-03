@@ -74,11 +74,12 @@ export function describeQuerySyntax(): QuerySyntaxGroup[] {
       ],
     },
     {
-      title: "Scope — outline:",
+      title: "Scope — outline:, tree:",
       entries: [
         { syntax: "outline:<note>", description: "outline of the latest note matching <note>" },
         { syntax: "outline:\"my note\"", description: "outline of exactly “my note”" },
-        { syntax: ":daily", description: "outline of today's daily note", insertText: ":daily" },
+        { syntax: "tree:<note>", description: "latest note matching <note> with all its children, from any note" },
+        { syntax: "tree:\"my note\"", description: "exactly “my note” with all its children, from any note" },
       ],
     },
     {
@@ -92,7 +93,7 @@ export function describeQuerySyntax(): QuerySyntaxGroup[] {
       ],
     },
     {
-      title: "Legacy",
+      title: "Shortcuts",
       entries: [
         { syntax: ":page", description: "pages", insertText: ":page" },
         { syntax: ":header", description: "headings", insertText: ":header" },
@@ -101,6 +102,7 @@ export function describeQuerySyntax(): QuerySyntaxGroup[] {
         { syntax: ":task", description: "open tasks", insertText: ":task" },
         { syntax: ":archived", description: "reveal archived (greyed)", insertText: ":archived" },
         { syntax: ":emoji", description: "has an emoji", insertText: ":emoji" },
+        { syntax: ":daily", description: "outline of today's daily note", insertText: ":daily" }
       ],
     },
   ]

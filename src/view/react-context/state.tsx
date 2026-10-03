@@ -128,8 +128,16 @@ export const GlobalAppMolecule = molecule((_, scope) => {
     }
 })
 
-/** Quick Add's results list while no `[[` is open: the outline of today's daily note. */
+/** Quick Add's results list without a parent and no `[[` open: the outline of today's daily note. */
 export const DAILY_OUTLINE_QUERY = ":daily :page"
+
+/** Quick Add's results list while no `[[` is open: the full tree of the editor's first parent, or today's daily outline
+ *  without one. A typed name with `"` can't be a note (nor be quoted), so it counts as none. */
+export const quickAddDefaultQuery = (parentName: string | undefined): string =>
+    parentName && !parentName.includes('"') ? `tree:"${parentName}"` : DAILY_OUTLINE_QUERY
+
+/** True for a query quickAddDefaultQuery produces; such queries run through searchIndex, not linkTargetTree. */
+export const isQuickAddDefaultQuery = (q: string): boolean => q === DAILY_OUTLINE_QUERY || /^tree:"[^"]*"$/.test(q)
 
 export const SearchModalMolecule = molecule((mol, scope) => {
     const scp = scope(SearchViewScope)
@@ -144,7 +152,7 @@ export const SearchModalMolecule = molecule((mol, scope) => {
         const separator = get(separatorAtom)
         const options = get(GlobalAtoms.indexAtom)?.searchOptions()
 
-        if (scp.isQuickLink || (scp.isQuickAdd && searchQuery !== DAILY_OUTLINE_QUERY)) {
+        if (scp.isQuickLink || (scp.isQuickAdd && !isQuickAddDefaultQuery(searchQuery))) {
             // Insert Link and Quick Add offer only link targets: notes and headers whose
             // own name/alias/heading matches the query, archived rows hidden.
             set(searchMol.updateSearchResultsAtom, linkTargetTree(graph, searchQuery, separator), 0)

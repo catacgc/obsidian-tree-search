@@ -8,8 +8,7 @@ import {GlobalAtoms} from "./global"
 import {appendDraftAtom} from "./settings"
 import type {EditorState} from "../editor/EditorMolecule"
 import {dailyConfigOf, newAppendState} from "../editor/draft"
-import {insertLinkAtCaret} from "../editor/textarea-ops"
-import {dailyNotePath} from "../../editing/vault-edits"
+import {dailyNotePath, trashSessionAttachments} from "../../editing/vault-edits"
 import type {RowTarget} from "../search/select-target"
 
 export type QuickAddSession = {
@@ -26,7 +25,8 @@ export type QuickAddSession = {
 export type EditorRequest =
     /** Show the Append draft; start a blank one (`- `) if none. */
     | {kind: "draft"}
-    /** `[[name]]` into the draft at its caret, or a new draft prefilled `- [[name]]\n    - `. */
+    /** Keep the draft when it already appends to `name`; else replace it (trashing its pasted attachments) with a
+     *  new draft prefilled `- [[name]]\n    - `. */
     | {kind: "link"; name: string}
     /** A transient Alt-Edit session over the draft. */
     | {kind: "edit"; state: EditorState}
@@ -46,10 +46,11 @@ export const openQuickAddAtom = atom(null, (get, set, {request, session}: {reque
     if (request.kind === "edit") {
         set(GlobalAtoms.editSessionAtom, request.state)
     } else if (request.kind === "link") {
-        if (draft) {
-            const e = insertLinkAtCaret(draft.outline, draft.caret, request.name)
-            set(appendDraftAtom, {...draft, sourcePath: today, outline: e.text, caret: e.caret})
+        // Link names are case-insensitive, like Obsidian's links and the graph's page keys.
+        if (draft && draft.parentName?.toLowerCase() === request.name.toLowerCase()) {
+            set(appendDraftAtom, {...draft, sourcePath: today})
         } else {
+            if (draft) void trashSessionAttachments(get(GlobalAtoms.appAtom), draft.attachments)
             set(appendDraftAtom, newAppendState(today, request.name))
         }
     } else {

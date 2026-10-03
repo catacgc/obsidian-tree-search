@@ -156,7 +156,7 @@ export const EditorMolecule = molecule((mol, scope) => {
         })
     })
 
-    /** Links `parentName` into the Append draft at its caret (a new draft prefilled under it if none). */
+    /** Appends under `parentName`: the draft if it already targets it, else a fresh draft prefilled under it. */
     const openAppendAtom = atom(null, (_get, set, parentName: string) => set(handOffAtom, {kind: "link", name: parentName}))
 
     /** Shows the Append draft (a blank one if none); its roots go to today's daily note. */

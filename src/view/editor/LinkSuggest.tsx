@@ -1,6 +1,6 @@
 // The inline editor's `[[` autocomplete (EDITOR.md §3.4): useLinkSuggest tracks the open
 // `[[query` in a text field; LinkResults draws its matches as Search results below the editor,
-// or today's daily outline while no `[[` is open.
+// or, while no `[[` is open, the parent's full tree (today's daily outline without a parent).
 import React, {useEffect, useState} from "react";
 import {useAtomValue, useSetAtom} from "jotai";
 import {useMolecule} from "bunshi/react";
@@ -35,14 +35,21 @@ export function useLinkSuggest(text: string, caret: number, active: boolean): Li
 }
 
 /** The `[[` autocomplete as Search results: Quick Add's link-target tree (SearchModalMolecule, query = the open
- *  `[[query`), or the daily outline (DAILY_OUTLINE_QUERY) when none is open, drawn with SearchTreeNode. */
-export function LinkResults({open, query, onPick}: { open: boolean; query: string; onPick: (row: TreeNode) => void }) {
+ *  `[[query`), or the default list (quickAddDefaultQuery: the parent's tree or the daily outline) when none is open,
+ *  drawn with SearchTreeNode. */
+export function LinkResults({open, query, parentName, onPick}: {
+    open: boolean
+    query: string
+    /** The Append parent whose tree the list shows while no `[[` is open. */
+    parentName: string | undefined
+    onPick: (row: TreeNode) => void
+}) {
     const {renderableTreeNodesAtom, hasMoreTreeNodesAtom, incrementPagesAtom} = useMolecule(SearchViewMolecule)
     const rows = useAtomValue(renderableTreeNodesAtom)
     const hasMore = useAtomValue(hasMoreTreeNodesAtom)
     const incrementPages = useSetAtom(incrementPagesAtom)
 
-    const empty = !open ? (rows.length === 0 ? "Today's daily note has no outline yet" : null)
+    const empty = !open ? (rows.length > 0 ? null : parentName ? `No results for [[${parentName}]]` : "Today's daily note has no outline yet")
         : query.length < 3 ? "Type 3+ characters"
         : rows.length === 0 ? "No matching notes"
         : null

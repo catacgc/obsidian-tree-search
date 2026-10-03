@@ -352,3 +352,41 @@ describe("outline:<note> / :daily", () => {
     expect(search(g, "outline:nowhere")).toEqual([])
   })
 })
+
+describe("tree:<note>", () => {
+  const g = loadFixture("outline")
+
+  it("is the note's full subtree, including children written in other notes", () => {
+    const results = search(g, "tree:\"project x\"")
+    expect(results.map(r => r.node.searchKey)).toEqual(["project x|"])
+    expect(collectKeysFromResults(results).sort())
+      .toEqual(["budget review #finance", "kickoff with [[bob]]", "milestone [[q4]]", "project x|"])
+    // Unlike its own outline, which stops at Project X.md.
+    expect(searchKeys(g, "outline:\"project x\" is:page")).toEqual(["project x|", "milestone [[q4]]"])
+  })
+
+  it("reaches past the note's own file into linked notes' children", () => {
+    expect(searchKeys(g, "tree:\"2026-10-03\"")).toContain("budget review #finance")
+  })
+
+  it("targets a note that exists only as a link", () => {
+    const results = search(g, "tree:\"bob\"")
+    expect(results.map(r => r.node.searchKey)).toEqual(["bob"])
+    expect(results[0].children.map(c => c.node.searchKey)).toEqual(["kickoff with [[bob]]"])
+  })
+
+  it("other terms only match inside the tree", () => {
+    expect(searchKeys(g, "tree:\"project x\" budget")).toEqual(["budget review #finance"])
+  })
+
+  it("intersects with outline:", () => {
+    const keys = searchKeys(g, "outline:2026-10-03 tree:\"project x\"")
+    expect(keys).toContain("kickoff with [[bob]]")
+    expect(keys).not.toContain("budget review #finance")
+    expect(keys).not.toContain("milestone [[q4]]")
+  })
+
+  it("an unknown note matches nothing", () => {
+    expect(search(g, "tree:nowhere")).toEqual([])
+  })
+})

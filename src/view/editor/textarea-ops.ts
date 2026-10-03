@@ -168,19 +168,6 @@ export function toggleTask(text: string, caret: number): TextEdit {
     return {text: e.text.slice(0, at) + "[ ] " + e.text.slice(at), caret: Math.max(e.caret, at) + 4}
 }
 
-/** Search pick into a draft: `[[name]]` inline at `caret` on a bulleted line (ensureBullet first). Never inside the
- *  indent/marker; a space is added where the link would touch text. Caret after `]]`. */
-export function insertLinkAtCaret(text: string, caret: number, name: string): TextEdit {
-    const e = ensureBullet(text, caret)
-    const ls = lineStartAt(e.text, e.caret)
-    const markerEnd = ls + (MARKER_PREFIX_RE.exec(e.text.slice(ls, lineEndAt(e.text, e.caret)))?.[0].length ?? 0)
-    const pos = Math.max(e.caret, markerEnd)
-    const before = pos > markerEnd && !/\s/.test(e.text[pos - 1]) ? " " : ""
-    const after = pos < e.text.length && !/\s/.test(e.text[pos]) ? " " : ""
-    const link = `${before}[[${name}]]`
-    return {text: e.text.slice(0, pos) + link + after + e.text.slice(pos), caret: pos + link.length}
-}
-
 /** Pasted text as outline lines: blanks dropped, plain lines bulleted, indents mapped to 4-space levels relative to the first line. */
 function outlineBlock(pasted: string): string[] {
     const lines = pasted.replace(/\r\n?/g, "\n").replace(/\t/g, "    ").split("\n").filter(l => l.trim() !== "")
