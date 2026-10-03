@@ -7,6 +7,8 @@ Status: **implemented.** Read this document before changing result rows (`src/vi
 - **Escape scope:** the editor's Obsidian `Scope` is pushed only while focus is inside the editor, so Escape elsewhere (a note, the search box) keeps its usual meaning.
 - **Insert Link** hides archived targets with no "Archive (N)" row and ignores `is:archived` (it now calls `linkTargetTree`).
 - **Action panel:** the footer bar and action panel (`docs/superpowers/specs/2026-09-30-search-actions-panel-design.md`) are the entry points on mobile and a keyboard/mouse alternative on desktop (§1, §3.1, §4.1, §5, §6, §8). The mobile long-press has not yet been checked on a device.
+- **Quick Add** (`tree-search:quick-add-modal`, scope name `"quickAdd"`): a third editing surface. It reuses `SearchModal` with `SearchModalKind` `"quickAdd"`, shows Insert Link's results (`linkTargetTree`) in Tree or Timeline mode, and has the Search modal's editor mode and shortcuts. Plain Enter opens Append for the selected row (like Alt+A): `getTreeNodeActions(…, "quickAdd")` leaves no row action on plain Enter, `handleDefaultActionAtom` calls `openAppendForSelectedAtom`, and the footer and the action panel show **Append to [[P]]** with the ↵ keycap. After a save the modal stays open. Its Tree/Timeline mode is persisted under `searchViewModes.quickAdd`.
+- **Header roots:** in Tree mode, a header row with no page ancestor (promoted to a root by `pruneResultTree` because its page didn't match) appends to its own page (`appendTargetAt`), so it gets a ⊕ dot in every editing surface.
 
 Editor mode lets you change the vault from search results without opening notes:
 
@@ -25,8 +27,8 @@ Link autocomplete in both sections uses the Insert Link (Quick Link) tree, inclu
 
 ## 1. Where it applies
 
-- **Surfaces:** the Search pane (`tree-search:parse-tree`, scope name `"Search"`) and the Search modal (`tree-search:search-modal`, scope name `"modal"`). Quick Link, File context, `tree-context` code blocks and the Consolidate notes pane stay read-only.
-- **Gate:** add `allowEditing: boolean` to `SearchViewScope` (`src/view/react-context/state.tsx`). Set it `true` in exactly the places that set `allowTimeline: true` today: `SearchViewPanel.tsx` (`sectionName="Search"`) and `SearchModalContainer.tsx` when `!isQuickLink`. It defaults to `false`.
+- **Surfaces:** the Search pane (`tree-search:parse-tree`, scope name `"Search"`), the Search modal (`tree-search:search-modal`, scope name `"modal"`) and Quick Add (`tree-search:quick-add-modal`, scope name `"quickAdd"`). Quick Link, File context, `tree-context` code blocks and the Consolidate notes pane stay read-only.
+- **Gate:** add `allowEditing: boolean` to `SearchViewScope` (`src/view/react-context/state.tsx`). Set it `true` in exactly the places that set `allowTimeline: true` today: `SearchViewPanel.tsx` (`sectionName="Search"`) and `SearchModalContainer.tsx` for every `SearchModalKind` except `"insertLink"`. It defaults to `false`.
 - **Excluded rows:** the synthetic Archive row appended by `updateSearchResultsAtom` has a fake location and never gets a ⊕, an edit hint or drag.
 - **Mobile** (`Platform.isMobile`, since `isDesktopOnly` is `false`): the action panel is the entry point (spec `2026-09-30-search-actions-panel-design.md` §4).
   - A tap selects a row; the footer then offers its main action and **Actions**. A long-press (500 ms) on any row selects it and opens the action panel.
@@ -63,17 +65,17 @@ Link autocomplete in both sections uses the Insert Link (Quick Link) tree, inclu
 
 ### 3.1 Layout
 
-**Placement:** one editor per view, rendered at the **top of the view, above the search block** (`SearchBar` / `TimelineFilterBar`), outside the scrolling results container, so it is always in view in both the pane and the modal. The action footer and panel sit at the bottom of the view (spec `2026-09-30-search-actions-panel-design.md`). It is styled like the search block and search input: `--color-base-00` background, a 1 px `--background-modifier-border` border, the textarea's border turning `--background-modifier-border-hover` on hover/focus, no focus ring, and plain text buttons (Save in the accent color).
+**Placement:** one editor per view, rendered at the **top of the view, above the search block** (`SearchBar` / `TimelineFilterBar`), outside the scrolling results container, so it is always in view in both the pane and the modal. The action footer and panel sit at the bottom of the view (spec `2026-09-30-search-actions-panel-design.md`). Neither the editor nor the search block is boxed: both paint the view's tone (`--ts-surface`: `--modal-background` in the modal, else `--background-primary`; set on `.ts-search-view` in `styles.css`; the plugin's panes paint their leaf `--background-primary` too, the modal's white / dark, not a sidebar's gray) and are separated by a soft 1 px `--background-modifier-border` divider below each, like the action footer's top border. The text fields keep a 1 px `--background-modifier-border` border turning `--background-modifier-border-hover` on hover/focus, with no focus ring; the buttons are plain text (Save in the accent color).
 
 From top to bottom:
 
-1. **Header line** (Edit only, small, muted): `Editing <file basename>:<1-based line>`. Append has no header; its parent is the outline's first bullet (§3.2).
-2. **Outline section**: a `<textarea>`, always shown (§3.2).
-3. **Content section**: a second `<textarea>`, shown only after a note link is clicked (§3.3).
+1. **Header line** (small, muted): Append shows `Appending to <basename of today's periodic note>` (the file the outline is written to, §4.2, e.g. `2026-Oct-W40` with a weekly format); Edit shows `Editing <file basename>:<1-based line>`. Append's parent is the outline's first bullet (§3.2).
+2. **Outline section**: a markdown field, always shown (§3.2).
+3. **Content section**: a second markdown field, shown only after a note link is clicked (§3.3).
 4. **Preview**: a live preview of the focused section, rendered with `MarkdownRenderer.render` and at most 6 lines. It reuses the `MarkdownLine` component from `src/view/organise-notes/PullTreeView.tsx`. Move `MarkdownLine` to `src/view/editor/MarkdownLine.tsx` and import it from both places. Pasted attachments are already on disk (§3.5), so their embeds render in the preview.
 5. **Footer hints** (§3.6).
 
-Both textareas are `<textarea>`, not `<input>`: the modal and `activateView` focus the first `input` in the container, so an `<input>` placed before the search box would steal focus. Each one starts at one row and auto-grows up to 8 rows. The outline gets focus on open (`autoFocus` plus `focus()` in an effect), with the caret at the end. Only one editor can be open at a time. Opening an Edit, or an Append while an Edit is open, cancels the open editor (§3.7); choosing a parent while an Append is open re-targets it instead (§4.1).
+Both fields are `MarkdownField` (`src/view/editor/MarkdownField.tsx`): Obsidian's own markdown editor (CodeMirror 6 with live preview), recovered from a throwaway markdown embed in `src/view/editor/obsidian-editor.ts` the way the Kanban plugin does it (private API; if a future Obsidian removes it, the editor shows a Notice and has no fields). The editor sees a proxied `app` that hides line numbers and fold indicators, ignores the editor's `workspace.activeEditor = owner` on focus (so the field never becomes the active editor), and hands it an inert `workspace.editorSuggest` (so Obsidian's own `[[` suggest and other plugins' editor suggests never open; links use the compact tree, §3.4). Obsidian's hotkeys still see a focused CodeMirror field as an editor, so the editor's keys are claimed first in its Scope (§3.6). Capture listeners on the field's host run before CodeMirror and Obsidian: the owner handles file pastes and drops (§3.5), outline text pastes (§3.2) and link clicks (§3.3); Obsidian never opens a link clicked in the field. Other keys stay inside the field (they don't reach the search view's shortcuts), except Escape. Enter that arrives through CodeMirror's keymap rather than a keydown (e.g. from an Android keyboard) gets the same outline handling. Each field starts at one line and grows up to 8 lines, then scrolls. The content field is re-created per buffer, so undo never crosses buffers. The outline gets focus on open (`focus()` in an effect), with the caret at the end. Only one editor can be open at a time. Opening an Edit, or an Append while an Edit is open, cancels the open editor (§3.7); choosing a parent while an Append is open re-targets it instead (§4.1).
 
 ### 3.2 Outline section
 
@@ -83,9 +85,9 @@ The outline holds the bullets that Append writes under the parent (§4) or the s
   - Enter starts a new sibling bullet at the same indent, inserting `- `.
   - Tab and Shift+Tab indent and outdent the current bullet by 4 spaces, but never deeper than the previous line's indent + 4.
   - Backspace on a line (not the first) that holds only an indent and a bare marker (`-`, `*`, `+`, optionally `[ ]`/`[x]`) deletes the whole line and puts the caret at the end of the previous line.
-  - Pasted multi-line text keeps list lines as they are. Plain lines get a `- ` prefix, and tabs become 4 spaces.
+  - Pasted text (`pasteOutline`) is converted from the clipboard's HTML to markdown when Obsidian's "Auto convert HTML" setting is on (Mod+Shift+V pastes the plain text), so nested lists keep their structure. Blank lines are dropped, plain lines get a `- ` prefix, and indents (tabs, 2/3/4-space units) become 4-space levels relative to the first pasted line. At a bare bullet the first line fills it and the rest follow at the caret line's indent; a single line is inserted inline without its marker; on a blank line the block replaces it; otherwise the block goes below the caret line as its siblings.
   - On save, empty bullets are dropped.
-- **Edit** shows only the editable part of one line (§5). Enter saves, and the line cannot be split.
+- **Edit** shows only the editable part of one line (§5). Enter saves, and the line cannot be split: pasted line breaks become spaces.
 - **Text-only appends are not allowed.** An Append needs at least one non-empty bullet beyond the untouched prefilled `- [[P]]` line (`appendOutlineEmpty`). Otherwise Save is disabled, with no hint.
 - Bullets may be plain text. They are written, but the footer warns that they won't show up in results.
 - A line whose text is a heading (`^#{1,6}\s+\S`) blocks Save. Headings belong in a note's content section.
@@ -94,7 +96,7 @@ The outline holds the bullets that Append writes under the parent (§4) or the s
 
 The content section edits the free-text **content of one note**. It is hidden until the user opens it for a note:
 
-- by clicking a `[[X]]` or `[[X#Header]]` link in the outline textarea (a click whose caret lands inside the link's brackets);
+- by clicking a `[[X]]` or `[[X#Header]]` link rendered in the outline field (a `.cm-hmd-internal-link` span; the link around its position is used);
 - or with Alt+Enter while the caret is on an outline line: this opens the link under the caret, else the first link on the line, else (in Append) the parent `P`.
 
 Only the page part `X` of the link is used, and headers are ignored. Mod+click on a link opens the note in Obsidian instead, as in the rest of the plugin.
@@ -102,7 +104,7 @@ Only the page part `X` of the link is used, and headers are ignored. Mod+click o
 Behavior:
 - **Header:** `Content for [[X]]` with a ✕ button. ✕ clears X's buffer and hides the section.
 - **Buffers:** there is one text buffer per note name, kept until the editor closes. Clicking another link switches the section to that note's buffer. Notes whose buffer is not empty are shown as small chips (`[[X]]`, `[[Y]]`) in the section header, and clicking a chip switches to that buffer.
-- **Text:** free markdown, written verbatim. It can include paragraphs, headings, prose, quotes, tables and embeds. Enter inserts a newline.
+- **Text:** free markdown, written verbatim. It can include paragraphs, headings, prose, quotes, tables and embeds. Editing is Obsidian's own: Enter continues lists, Tab follows the vault's indent settings, and pasted HTML converts per "Auto convert HTML".
 - **Where it goes on save** (§4.2): if `X` has no file, the text becomes the body of a new `X.md`. Otherwise it is appended at the end of `X`'s file.
 
 ### 3.4 Link autocomplete: the compact Insert Link tree
@@ -118,13 +120,13 @@ It works in both sections.
 - Flatten with `flattenIndex(results, Infinity)`: the pruned tree only holds matching page/header nodes, so it is shown fully expanded. Keep the first 50 rows.
 - For queries shorter than 3 characters (`searchIndex` returns nothing), show one muted row: `Type 3+ characters`.
 
-**Compact rendering** (a new `src/view/editor/LinkSuggest.tsx`, not `SearchAutocomplete` and not `SearchTreeNode`):
-- A dropdown absolutely positioned under the active textarea, as wide as the editor, with `max-height` of 8 rows and its own scrolling. It stacks above the search bar that follows the editor (`z-index: 40` over the bar's sticky `z-30`). CSS class `.ts-link-suggest`.
-- Rows are 22 px high with `var(--font-ui-small)`, a 12 px indent per tree level, and a 12 px lucide icon: `FileText` for a page with a file, `File` (muted) for a reference page with no file, `Hash` for a header.
+**Compact rendering** (a new `src/view/editor/LinkSuggest.tsx`, not `SearchAutocomplete` and not `SearchTreeNode`), styled exactly like the search box's `is:`/`in:` list:
+- A dropdown absolutely positioned under the active field, as wide as the editor, with its own scrolling. It stacks above the search bar that follows the editor (`z-index: 40` over the bar's sticky `z-30`). Both lists use the shared `.ts-suggest` surface (`--ts-surface`, 1 px border, `--radius-m`, `--shadow-s`, 4 px padding); `.ts-link-suggest` only positions it.
+- Rows are the action panel's `.ts-action-panel-item` (32 px, 44 px on phones, `var(--font-ui-small)`, `--background-modifier-hover` highlight), with a 12 px indent per tree level and a 14 px muted lucide icon: `FileText` for a page with a file, `File` (row muted) for a reference page with no file, `Hash` for a header. `Type 3+ characters` uses the panel's empty-row style.
 - The label is the page name or the header text, with matched terms highlighted like the result rows. Rows have no age, breadcrumbs, action buttons, chevrons or hover preview.
 - The highlighted row has `.is-selected`, and the first row is highlighted by default.
 
-**Keys** (while the list is open): ArrowUp/ArrowDown move the highlight, Enter or Tab accepts (Shift+Enter still saves, Shift+Tab still outdents), and Escape closes the list. Hovering highlights a row, and mousedown accepts it (with `preventDefault` so the textarea keeps focus).
+**Keys** (while the list is open): ArrowUp/ArrowDown move the highlight, Enter or Tab accepts (Shift+Enter still saves, Shift+Tab still outdents), and Escape closes the list. Hovering highlights a row, and mousedown accepts it (with `preventDefault` so the field keeps focus).
 
 **Accept:** replace the text from `[[` to the caret, plus a directly following `]]` if there is one, with `reverseMarkdownParsing(node)`, which gives `[[Page]]` or `[[Page#Header]]`. The caret goes after the closing `]]`.
 
@@ -183,20 +185,20 @@ Desired names follow the filename rule in §7.
 
 ### 3.6 Keys
 
-All keys are handled in the textareas' `onKeyDown`, always with `stopPropagation()` so `KeyComboWrapper` never sees them. An open autocomplete list takes precedence (§3.4).
+The editor's keys go through `onKeyDown`, first from a catch-all handler in the editor's Obsidian Scope (it runs before Obsidian's hotkeys, which would otherwise run editor commands such as `editor:toggle-bold` or `editor:follow-link` on the field), then from the field's host capture listener. A handled key never reaches CodeMirror; an unhandled one goes to CodeMirror and Obsidian. The field stops every key but Escape from bubbling, so `KeyComboWrapper` never sees them. Keys during an IME composition are left to the IME. An open autocomplete list takes precedence (§3.4).
 
 | Key | Outline | Content |
 |---|---|---|
-| Enter | Append: new sibling bullet. Edit: save. | Newline |
+| Enter | Append: new sibling bullet. Edit: save. | Obsidian (continues lists) |
 | Mod+Enter / Shift+Enter | Save | Save |
-| Tab / Shift+Tab | Append: indent / outdent the bullet | Browser default |
-| Backspace | Append: on a bare-bullet line, delete the whole line (§3.2) | Browser default |
-| Alt+Enter | Open the content section for the link at or near the caret (§3.3) | — |
+| Tab / Shift+Tab | Append: indent / outdent the bullet. Edit: Obsidian | Obsidian |
+| Backspace | Append: on a bare-bullet line, delete the whole line (§3.2) | Obsidian |
+| Alt+Enter | Open the content section for the link at or near the caret (§3.3) | Not handled (goes to Obsidian) |
 | Escape | Cancel the editor and focus the search input (the Cancel button does the same) | Hide the section and return focus to the outline (the buffer is kept) |
 | Mod+B / Mod+I | Wrap the selection in `**…**` / `*…*` | same |
 | Mod+K | Wrap the selection as `[selection](url)` and select `url` | same |
 
-Escape must **not** close the modal. While the editor is mounted, push an Obsidian `Scope` with `app.keymap.pushScope(scope)`, register `scope.register([], "Escape", () => { handleEscape(); return false })`, and `popScope` on unmount.
+Escape must **not** close the modal. While focus is inside the editor, it pushes an Obsidian `Scope` with `app.keymap.pushScope(scope)`, registers `scope.register([], "Escape", () => { handleEscape(); return false })` plus the catch-all key handler above, and pops it on blur and unmount.
 
 ### 3.7 Hints, errors, save and cancel
 
@@ -251,7 +253,7 @@ Escape must **not** close the modal. While the editor is mounted, push an Obsidi
 
 **Insert After:** in views with editor mode, the `Insert After` action (Ctrl+I or Alt+I) opens Append for the selected row, exactly like Alt+A, instead of inserting a line in the Obsidian note. The modal stays open to host the editor. The action panel lists it only in views without editor mode, where **Append to [[P]]** doesn't exist. Views without editor mode, and Raycast, keep the Obsidian insert.
 
-All search-view shortcuts, including the editor ones (Alt+A, Alt+Enter, Alt+N, Alt+I) and ⌘K / Ctrl+K for the action panel, are defined once in `src/view/search/shortcuts.ts`. `KeyComboWrapper` and the action panel both run them through `useShortcutHandlers` (`src/view/search/shortcut-handlers.ts`), and the Shortcuts section of the Search modal's help panel lists them. Alt shortcuts are matched by `event.code`. On macOS, Option+N and Option+I are dead keys: their `˜`/`ˆ` composition ignores keydown `preventDefault` and arrives after the editor has taken focus. So every handled Alt shortcut calls `swallowDeadKey` (`src/view/editor/dead-key.ts`), which ends that composition and restores the field it landed in. Inside the editor's textareas Option+N/Option+I are left alone, so `ñ`/`î` can still be typed.
+All search-view shortcuts, including the editor ones (Alt+A, Alt+Enter, Alt+N, Alt+I) and ⌘K / Ctrl+K for the action panel, are defined once in `src/view/search/shortcuts.ts`. `KeyComboWrapper` and the action panel both run them through `useShortcutHandlers` (`src/view/search/shortcut-handlers.ts`), and the Shortcuts section of the Search modal's help panel lists them. Alt shortcuts are matched by `event.code`. On macOS, Option+N and Option+I are dead keys: their `˜`/`ˆ` composition ignores keydown `preventDefault` and arrives after the editor has taken focus. So every handled Alt shortcut calls `swallowDeadKey` (`src/view/editor/dead-key.ts`), which ends that composition and restores the field it landed in: an `<input>`/`<textarea>`, or one of the editor's CodeMirror fields (its doc and selection are reset in one CodeMirror transaction). Inside the editor's fields Option+N/Option+I are left alone, so `ñ`/`î` can still be typed.
 
 ### 4.2 What gets written
 
@@ -477,7 +479,7 @@ export function resolveAttachmentEmbeds(buffers: Record<string, string>, session
 **Obsidian appliers** in `src/editing/vault-edits.ts`: `pasteAttachment`, `applyAttachmentPlan`, `trashSessionAttachments`, `writeNoteContents`, `appendToDailyNote`, `editLine`, `reparent`, `getOrCreateDailyNote`. They are the only callers of `vault.process`/`create`/`createBinary`/`processFrontMatter`/`renameFile`/`trashFile` for editor mode, and they return the list of touched markdown `TFile`s so the UI can reindex them.
 
 **UI:**
-- `src/view/editor/InlineEditor.tsx` (Edit header, both sections, preview, footer), `src/view/editor/LinkSuggest.tsx` (the compact tree), `src/view/editor/MarkdownLine.tsx` (moved), `src/view/editor/editor.css`, `src/view/editor/textarea-ops.ts` (pure textarea edits: `appendPrefill`, `outlineBackspace`, `replaceOutlineParent`, …).
+- `src/view/editor/InlineEditor.tsx` (Edit header, both sections, preview, footer), `src/view/editor/MarkdownField.tsx` (the field: Obsidian's markdown editor plus the owner's capture hooks), `src/view/editor/obsidian-editor.ts` (the private-API access to Obsidian's editor class), `src/view/editor/LinkSuggest.tsx` (the compact tree), `src/view/editor/MarkdownLine.tsx` (moved), `src/view/editor/editor.css`, `src/view/editor/textarea-ops.ts` (pure text edits: `appendPrefill`, `outlineBackspace`, `replaceOutlineParent`, `pasteOutline`, …).
 - Editor state atoms go in a new `EditorMolecule` scoped like `SearchViewMolecule`. The editor state is `{ mode: "append" | "edit"; target?: TreeNode; parentName?: string; originalLine?: string; outline: string; contents: Record<string, string>; activeContent: string | null; attachments: SessionAttachment[]; doneSteps: string[]; focusNonce: number } | null`. `isSaveBlocked` combines blocking hints and `appendOutlineEmpty`. `GlobalAtoms.editorRequestAtom` carries the `open-editor` command to the Search modal.
 - The ⊕ and drag wiring live in `SearchTreeNode.tsx`, `SearchTimeline.tsx` and `SearchViewFlatten.tsx`, gated on `allowEditing`. Row gestures (Alt+click edit on desktop, long-press opening the action panel on mobile) live in `useRowGestures` (`src/view/search/row-gestures.ts`). The action footer and panel are `ActionFooter.tsx` / `ActionPanel.tsx`, with the pure item builder `panelItems` in `src/view/search/action-panel.ts`, which uses `appendTargetAt`, `isEditableRow`, `dragInfo` and `isValidDropTarget` for its Edit section.
 

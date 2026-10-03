@@ -18,7 +18,7 @@ export const settingsAtom = atom<TreeSearchSettings>({
 export const separatorAtom = atom((get) => get(settingsAtom).searchSeparator)
 
 export type SearchViewMode = "tree" | "timeline"
-// Keyed by SearchViewScope name ("modal", "Search").
+// Keyed by SearchViewScope name ("modal", "Search", "quickAdd").
 export type SearchViewModes = Record<string, SearchViewMode>
 
 // Kept apart from settingsAtom: SettingsTab mutates the settings object in

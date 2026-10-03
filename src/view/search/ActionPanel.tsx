@@ -52,7 +52,7 @@ export const ActionPanel = ({dockRef}: {dockRef: React.RefObject<HTMLDivElement 
 const PanelBody = ({page, dockRef}: {page: "main" | "moveUnder"; dockRef: React.RefObject<HTMLDivElement | null>}) => {
     const {
         renderableTreeNodesAtom, selectedLineAtom, timelineActiveAtom, actualQueryAtom, focusSearchInputAtom,
-        openActionPanelAtom, closeActionPanelAtom, allowEditing, allowTimeline,
+        openActionPanelAtom, closeActionPanelAtom, allowEditing, allowTimeline, isQuickAdd,
     } = useMolecule(SearchViewMolecule)
     const {selectedTreeNodeActionsAtom, executeActionAtom} = useMolecule(ActionsMolecule)
     const {ownPathAtom, reparentAtom} = useMolecule(EditorMolecule)
@@ -89,7 +89,7 @@ const PanelBody = ({page, dockRef}: {page: "main" | "moveUnder"; dockRef: React.
                 run: () => { close(true); void reparent(selectedPos, t) },
             }))
         }
-        const items = panelItems({rowActions, rows, selectedPos, allowEditing, allowTimeline, timelineActive, ownPath})
+        const items = panelItems({rowActions, rows, selectedPos, allowEditing, allowTimeline, timelineActive, ownPath, appendOnEnter: isQuickAdd})
         const runItem = (item: PanelItem) => {
             if (item.run.kind === "moveUnder") { setFilter(""); openPanel("moveUnder"); return }
             // Actions that open the inline editor leave focus to it; everything else returns to the search.

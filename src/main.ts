@@ -86,6 +86,9 @@ export default class TreeSearchPlugin extends Plugin {
         const searchModal = new SearchModal(this.globalStore);
         searchModal.setTitle("Search");
 
+        const quickAddModal = new SearchModal(this.globalStore, "quickAdd");
+        quickAddModal.setTitle("Quick Add");
+
         this.addCommand({
             id: "quick-link-modal",
             name: "Quick Link",
@@ -99,6 +102,14 @@ export default class TreeSearchPlugin extends Plugin {
             name: "Search",
             callback: () => {
                 searchModal.open();
+            },
+        });
+
+        this.addCommand({
+            id: "quick-add-modal",
+            name: "Quick Add",
+            callback: () => {
+                quickAddModal.open();
             },
         });
 
@@ -134,15 +145,7 @@ export default class TreeSearchPlugin extends Plugin {
                 // Always the active note itself - never a wikilink under the
                 // cursor, which silently retargeted the pane at that sub-topic
                 // and pulled its children up into this (their grandparent) note.
-                const rootKey = `[[${activeFile.basename.toLowerCase()}]]`
-
-                // Reindex the organising note before building the preview, so a
-                // run shortly after a previous one (e.g. from a different root)
-                // sees the sections that run just wrote - otherwise resolveHome
-                // and the preview's tree can miss content that's already there.
-                await this.index.refreshPage(activeFile)
-
-                await this.openOrganiseView(rootKey, activeFile.path)
+                await this.consolidateNote(activeFile)
             }
         });
 
@@ -209,13 +212,11 @@ export default class TreeSearchPlugin extends Plugin {
             } else if (uri.raycastaction === "unarchive") {
                 await unarchiveLine(this.app, location)
             } else if (uri.raycastaction === "pullChildren") {
-                const destinationFile = this.app.workspace.getActiveFile()
-                if (!destinationFile) {
-                    new Notice("Open a note before organising it")
-                } else {
-                    await this.index.refreshPage(destinationFile)
-                    await this.openOrganiseView(uri.filepath, destinationFile.path)
-                }
+                // The selected page's own note, never the active one: pairing the page's key with
+                // whatever note was open gathered its children into that unrelated note.
+                const file = this.app.vault.getFileByPath(uri.filepath)
+                if (!file) new Notice(`Tree Search: note "${uri.filepath}" not found`)
+                else await this.consolidateNote(file)
             } else {
                 await highlightLine(this.app, location)
             }
@@ -224,6 +225,16 @@ export default class TreeSearchPlugin extends Plugin {
         await this.index.refresh()
 
         return true
+    }
+
+    /** Opens the Consolidate pane for `file`: everything nested under or mentioning it, gathered into it. */
+    async consolidateNote(file: TFile): Promise<void> {
+        // Reindex the organising note before building the preview, so a
+        // run shortly after a previous one (e.g. from a different root)
+        // sees the sections that run just wrote - otherwise resolveHome
+        // and the preview's tree can miss content that's already there.
+        await this.index.refreshPage(file)
+        await this.openOrganiseView(`[[${file.basename.toLowerCase()}]]`, file.path)
     }
 
     async openOrganiseView(rootKey: string, notePath: string): Promise<void> {

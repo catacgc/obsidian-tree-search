@@ -18,7 +18,7 @@ type SearchPageProps = {
     children?: React.ReactNode
 }
 const SearchPage = (props: SearchPageProps) => {
-    return <ScopeProvider scope={SearchViewScope} value={{showSearch: props.showSearch || false, isQuickLink: false, name: props.sectionName, isModal: false, allowTimeline: props.allowTimeline ?? false, allowEditing: props.allowEditing ?? false}}>
+    return <ScopeProvider scope={SearchViewScope} value={{showSearch: props.showSearch || false, isQuickLink: false, isQuickAdd: false, name: props.sectionName, isModal: false, allowTimeline: props.allowTimeline ?? false, allowEditing: props.allowEditing ?? false}}>
         <_SearchPage {...props}/>
     </ScopeProvider>
 }

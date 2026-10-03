@@ -273,6 +273,16 @@ describe("archive/unarchive actions for pages", () => {
         expect(titles).not.toContain("Archive")
         expect(titles).not.toContain("Move To")
     })
+
+    it("consolidates a child page into its own note, not the note that is open or holds its link", () => {
+        const consolidate = getTreeNodeActions(mockApp, childPageTreeNode("Child")).find(a => a.title === "Consolidate notes")
+        expect(consolidate?.type === "browse" && new URL(consolidate.url).searchParams.get("filepath")).toBe("Child.md")
+    })
+
+    it("offers no Consolidate notes for a page without a note", () => {
+        const titles = getTreeNodeActions(mockApp, childPageTreeNode("Missing")).map(a => a.title)
+        expect(titles).not.toContain("Consolidate notes")
+    })
 })
 
 describe("insert-link (quick-link) actions", () => {
@@ -307,7 +317,7 @@ describe("insert-link (quick-link) actions", () => {
     }
 
     it("makes insert-link the first, default (plain Enter) action for a page", () => {
-        const actions = getTreeNodeActions(mockApp, createPageNode(), true)
+        const actions = getTreeNodeActions(mockApp, createPageNode(), "insertLink")
         const first = actions[0]
         expect(first.type).toBe("insertLink")
         if (first.type === "insertLink") expect(first.text).toBe("[[Page Name]]")
@@ -315,14 +325,14 @@ describe("insert-link (quick-link) actions", () => {
     })
 
     it("builds [[Page#Header]] for a header node", () => {
-        const actions = getTreeNodeActions(mockApp, createHeaderNode(), true)
+        const actions = getTreeNodeActions(mockApp, createHeaderNode(), "insertLink")
         const insert = actions.find(a => a.type === "insertLink")
         expect(insert?.type).toBe("insertLink")
         if (insert?.type === "insertLink") expect(insert.text).toBe("[[Page Name#Header]]")
     })
 
     it("leaves exactly one plain-Enter action but keeps Shift+Enter", () => {
-        const actions = getTreeNodeActions(mockApp, createPageNode(), true)
+        const actions = getTreeNodeActions(mockApp, createPageNode(), "insertLink")
         const plainEnter = actions.filter(a => a.shortcut?.key === "enter" && a.shortcut.modifiers.length === 0)
         expect(plainEnter.length).toBe(1)
         expect(plainEnter[0].type).toBe("insertLink")
@@ -332,5 +342,15 @@ describe("insert-link (quick-link) actions", () => {
     it("does not add an insert-link action outside quick-link mode", () => {
         const actions = getTreeNodeActions(mockApp, createPageNode())
         expect(actions.some(a => a.type === "insertLink")).toBe(false)
+    })
+
+    describe("quick-add actions", () => {
+        it("frees plain Enter for Append, keeping Open without a key and Shift+Enter", () => {
+            const actions = getTreeNodeActions(mockApp, createPageNode(), "quickAdd")
+            expect(actions.some(a => a.shortcut?.key === "enter" && a.shortcut.modifiers.length === 0)).toBe(false)
+            expect(actions.some(a => a.type === "insertLink")).toBe(false)
+            expect(actions.some(a => a.title === "Open Page Name")).toBe(true)
+            expect(actions.some(a => a.shortcut?.key === "enter" && a.shortcut.modifiers.includes("shift"))).toBe(true)
+        })
     })
 })

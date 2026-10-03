@@ -22,7 +22,7 @@ export class QuickLinkModal extends Modal {
             <GraphContextProvider store={this.store}>
                 <div className="tree-search-modal-container">
                     <div className="workspace-leaf-content">
-                        <SearchModalContainer isQuickLink={true} />
+                        <SearchModalContainer kind="insertLink"/>
                     </div>
                 </div>
             </GraphContextProvider>

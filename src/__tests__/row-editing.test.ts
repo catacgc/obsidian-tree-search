@@ -6,8 +6,8 @@ import {
     treeParentPos, type OwnPath,
 } from "../view/editor/row-editing"
 import {
-    normalizePastedOutline, outlineIndent, linkQueryAt, acceptLink, linkAt, insertAttachmentBullets, outlineBaseNote,
-    outlineBackspace, replaceOutlineParent,
+    outlineIndent, linkQueryAt, acceptLink, linkAt, insertAttachmentBullets, outlineBaseNote,
+    outlineBackspace, replaceOutlineParent, pasteOutline, changedRange,
 } from "../view/editor/textarea-ops"
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -80,6 +80,11 @@ describe("appendTargetAt", () => {
         expect(appendTargetAt(rows, 0, false)).toBeNull()
         expect(appendTargetAt(rows, 1, false)).toBeNull()
         expect(appendTargetAt(rows, 1, true)).toBeNull()
+    })
+
+    it("Tree: a header promoted to a root appends to its own page", () => {
+        const rows = rowsOf(row(header("Project X", "Decisions", "Project X.md", 4), 0))
+        expect(appendTargetAt(rows, 0, false)).toMatchObject({ dotPos: 0, parentName: "Project X" })
     })
 
     it("Timeline: row page, then last breadcrumb page, then file basename", () => {
@@ -209,9 +214,39 @@ describe("replaceOutlineParent", () => {
     })
 })
 
-describe("normalizePastedOutline", () => {
-    it("prefixes plain lines, keeps bullets, expands tabs and drops blanks", () => {
-        expect(normalizePastedOutline("- a\r\n\tplain\r\n\r\n1. num\n  text")).toBe("- a\n    - plain\n1. num\n  - text")
+describe("pasteOutline", () => {
+    it("at a bare bullet: the first line fills it, nested lines keep their relative depth", () => {
+        expect(pasteOutline("- [[P]]\n    - ", 14, 14, "- a\n    - b\n        - c\n- d"))
+            .toEqual({ text: "- [[P]]\n    - a\n        - b\n            - c\n    - d", caret: 51 })
+    })
+    it("bullets plain lines, maps tabs to one level and drops blanks", () => {
+        expect(pasteOutline("- [[P]]\n    - ", 14, 14, "a\n\tb\n\nc")?.text).toBe("- [[P]]\n    - a\n        - b\n    - c")
+    })
+    it("maps 2-space indent units to 4-space levels and keeps other markers", () => {
+        expect(pasteOutline("- ", 2, 2, "* a\n  * b\n    * c")?.text).toBe("- a\n    * b\n        * c")
+    })
+    it("a single line is inserted inline without its marker", () => {
+        expect(pasteOutline("- foo ", 6, 6, "- bar")).toEqual({ text: "- foo bar", caret: 9 })
+    })
+    it("after text on the caret line: siblings below it at its indent", () => {
+        expect(pasteOutline("    - foo\n- z", 9, 9, "- a\n    - b")).toEqual({ text: "    - foo\n    - a\n        - b\n- z", caret: 29 })
+    })
+    it("a blank caret line is replaced", () => {
+        expect(pasteOutline("", 0, 0, "a\n    b")).toEqual({ text: "- a\n    - b", caret: 11 })
+    })
+    it("replaces the selection first", () => {
+        expect(pasteOutline("- [[P]]\n    - old", 14, 17, "x\ny")).toEqual({ text: "- [[P]]\n    - x\n    - y", caret: 23 })
+    })
+    it("is null for blank text", () => {
+        expect(pasteOutline("- ", 2, 2, "\n \n")).toBeNull()
+    })
+})
+
+describe("changedRange", () => {
+    it("keeps the common prefix and suffix without overlap", () => {
+        expect(changedRange("abc", "abXc")).toEqual({ from: 2, to: 2, insert: "X" })
+        expect(changedRange("aaa", "aa")).toEqual({ from: 2, to: 3, insert: "" })
+        expect(changedRange("x", "x")).toEqual({ from: 1, to: 1, insert: "" })
     })
 })
 

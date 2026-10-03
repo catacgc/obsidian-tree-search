@@ -65,7 +65,10 @@ function truncateActionTitle(title: string): string {
     return title.substring(0, 57) + "...";
 }
 
-export function getTreeNodeActions(app: App, treeNode: TreeNode, isQuickLink = false): RaycastAction[] {
+/** Which surface the actions are for: Insert Link adds the plain-Enter insertLink action; Quick Add frees plain Enter for Append. */
+export type NodeActionMode = "default" | "insertLink" | "quickAdd"
+
+export function getTreeNodeActions(app: App, treeNode: TreeNode, mode: NodeActionMode = "default"): RaycastAction[] {
     const vault = app.vault.getName()
     const actions: RaycastAction[] = []
     const title = renderTitle(treeNode, actions, app)
@@ -76,7 +79,15 @@ export function getTreeNodeActions(app: App, treeNode: TreeNode, isQuickLink = f
     const defaults = getDefaultActions(app, treeNode, vault)
     let allActions = [...reordered, ...defaults]
 
-    if (isQuickLink) {
+    if (mode !== "default") {
+        // Insert Link's insert-at-cursor, or Quick Add's Append, owns plain Enter; demote any other.
+        allActions = allActions.map(a =>
+            a.shortcut?.key === "enter" && a.shortcut.modifiers.length === 0
+                ? { ...a, shortcut: undefined }
+                : a)
+    }
+
+    if (mode === "insertLink") {
         const wikilink = reverseMarkdownParsing(treeNode.node)
         const insertLink: RaycastAction = {
             type: "insertLink",
@@ -85,11 +96,7 @@ export function getTreeNodeActions(app: App, treeNode: TreeNode, isQuickLink = f
             icon: Icons.pencil,
             shortcut: { modifiers: [], key: "enter" },
         }
-        // Insert-at-cursor is the sole default (plain Enter) action; demote any other.
-        allActions = [insertLink, ...allActions.map(a =>
-            a.shortcut?.key === "enter" && a.shortcut.modifiers.length === 0
-                ? { ...a, shortcut: undefined }
-                : a)]
+        allActions = [insertLink, ...allActions]
     }
 
     return allActions.map(action => ({
@@ -196,9 +203,9 @@ function getDefaultActions(app: App, result: TreeNode, vault: string): RaycastAc
         }
     ] : []
 
-    const pullChildrenAction: RaycastAction[] = result.node.nodeType === "page" ? [{
+    const pullChildrenAction: RaycastAction[] = pageLoc ? [{
         type: "browse",
-        url: pullChildrenUrl(result.node.page, vault),
+        url: pullChildrenUrl(pageLoc.path, vault),
         title: `Consolidate notes`,
         icon: Icons.pencil,
         shortcut: { modifiers: ["ctrl"], key: "p" }
@@ -316,9 +323,9 @@ function unarchivePageUrl(path: string, vault: string): string {
     return `obsidian://tree-search-uri?${encodeURI(uri)}`;
 }
 
-function pullChildrenUrl(pageName: string, vault: string): string {
-    const key = `[[${pageName.toLowerCase()}]]`;
-    const uri = `raycastaction=pullChildren&vault=${vault}&filepath=${key}`;
+/** Consolidates the note at `notePath` (the page's own note) into itself. */
+function pullChildrenUrl(notePath: string, vault: string): string {
+    const uri = `raycastaction=pullChildren&vault=${vault}&filepath=${notePath}`;
     return `obsidian://tree-search-uri?${encodeURI(uri)}`;
 }
 

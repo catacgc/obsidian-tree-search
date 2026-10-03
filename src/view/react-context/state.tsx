@@ -48,6 +48,7 @@ export const GlobalAppScope = createScope<{
 export const SearchViewScope = createScope({
     name: "default",
     isQuickLink: false,
+    isQuickAdd: false,
     showSearch: true,
     isModal: true,
     allowTimeline: false,
@@ -137,13 +138,12 @@ export const SearchModalMolecule = molecule((mol, scope) => {
     const searchResultsComputeAtom = withAtomEffect(searchResultsAtom, (get, set) => {
         get(GlobalAtoms.graphVersionAtom)  // re-run on mutable graph updates from refreshPage
         const searchQuery = get(searchMol.actualQueryAtom)
-        const isQuickLink = scp.isQuickLink
         const graph = get(GlobalAtoms.graphAtom)
         const separator = get(separatorAtom)
 
-        if (isQuickLink) {
-            // Insert Link offers only link targets: notes and headers whose own
-            // name/alias/heading matches the query, archived rows hidden.
+        if (scp.isQuickLink || scp.isQuickAdd) {
+            // Insert Link and Quick Add offer only link targets: notes and headers whose
+            // own name/alias/heading matches the query, archived rows hidden.
             set(searchMol.updateSearchResultsAtom, linkTargetTree(graph, searchQuery, separator), 0)
             return
         }
@@ -563,7 +563,8 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             timelineActiveAtom, toggleViewModeAtom, timelineWindowAtom, rebuildResultsAtom,
             actionPanelAtom, openActionPanelAtom, closeActionPanelAtom, toggleActionPanelAtom,
             allowTimeline: scp.allowTimeline,
-            allowEditing: scp.allowEditing
+            allowEditing: scp.allowEditing,
+            isQuickAdd: scp.isQuickAdd
     }
 })
 

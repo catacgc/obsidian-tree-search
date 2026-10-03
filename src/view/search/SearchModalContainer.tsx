@@ -4,16 +4,26 @@ import {SearchViewFlatten} from "./SearchViewFlatten";
 import {ScopeProvider, useMolecule} from "bunshi/react";
 import {KeyComboWrapper} from "./KeyComboWrapper";
 
-export const SearchModalContainer = ({ isQuickLink = false }: { isQuickLink?: boolean }) => {
+export type SearchModalKind = "search" | "insertLink" | "quickAdd"
 
-    return <ScopeProvider scope={SearchViewScope} value={{name: "modal", isQuickLink, showSearch: true, isModal: true, allowTimeline: !isQuickLink, allowEditing: !isQuickLink}}>
+export const SearchModalContainer = ({ kind }: { kind: SearchModalKind }) => {
+
+    return <ScopeProvider scope={SearchViewScope} value={{
+        name: kind === "quickAdd" ? "quickAdd" : "modal",
+        isQuickLink: kind === "insertLink",
+        isQuickAdd: kind === "quickAdd",
+        showSearch: true,
+        isModal: true,
+        allowTimeline: kind !== "insertLink",
+        allowEditing: kind !== "insertLink",
+    }}>
         <KeyComboWrapper>
-            <_SearchModalContainer isQuickLink={isQuickLink}/>
+            <_SearchModalContainer/>
         </KeyComboWrapper>
     </ScopeProvider>
 }
 
-export const _SearchModalContainer = ({ isQuickLink = false }: { isQuickLink?: boolean }) => {
+export const _SearchModalContainer = () => {
 
     const { searchResultsComputeAtom } = useMolecule(SearchModalMolecule)
 

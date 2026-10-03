@@ -65,6 +65,8 @@ export function appendTargetAt(rows: TreeNode[], pos: number, timeline: boolean)
             return {dotPos: groupEnd(rows, i), parentName: r.node.page, target: r}
         }
     }
+    // A header promoted to a root (its page didn't match) appends to its own page.
+    if (row.node.nodeType === "header") return {dotPos: groupEnd(rows, pos), parentName: row.node.page, target: row}
     return null
 }
 

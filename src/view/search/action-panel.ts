@@ -39,6 +39,8 @@ export type PanelContext = {
     allowTimeline: boolean
     timelineActive: boolean
     ownPath: OwnPath
+    /** Quick Add: plain Enter opens Append, so the Append item shows Enter's keycap. */
+    appendOnEnter: boolean
 }
 
 export const SECTION_TITLES: Record<Exclude<PanelSection, "row">, string> = {edit: "Edit", view: "View"}
@@ -81,7 +83,7 @@ export function panelItems(ctx: PanelContext): PanelItem[] {
 
     if (ctx.allowEditing && row) {
         const target = appendTargetAt(ctx.rows, ctx.selectedPos, ctx.timelineActive)
-        if (target) items.push({id: "append", section: "edit", title: `Append to [[${target.parentName}]]`, icon: "append", key: keyOf("append"), run: {kind: "shortcut", id: "append"}})
+        if (target) items.push({id: "append", section: "edit", title: `Append to [[${target.parentName}]]`, icon: "append", key: ctx.appendOnEnter ? keyOf("open") : keyOf("append"), run: {kind: "shortcut", id: "append"}})
         if (isEditableRow(row, ctx.ownPath, ctx.timelineActive)) items.push({id: "edit", section: "edit", title: "Edit line", icon: "edit", key: keyOf("edit"), run: {kind: "shortcut", id: "edit"}})
         if (!ctx.timelineActive && moveUnderTargets(ctx.rows, ctx.selectedPos).length > 0) {
             items.push({id: "moveUnder", section: "edit", title: "Move under…", icon: "moveUnder", run: {kind: "moveUnder"}})

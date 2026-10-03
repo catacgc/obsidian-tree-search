@@ -36,7 +36,7 @@ const ACTIONS: RaycastAction[] = [
 
 const ctx = (over: Partial<PanelContext> = {}): PanelContext => ({
     rowActions: ACTIONS, rows: tree, selectedPos: 1,
-    allowEditing: true, allowTimeline: true, timelineActive: false, ownPath, ...over,
+    allowEditing: true, allowTimeline: true, timelineActive: false, ownPath, appendOnEnter: false, ...over,
 })
 const titles = (c: PanelContext, section?: string) => panelItems(c).filter(i => !section || i.section === section).map(i => i.title)
 
@@ -65,6 +65,14 @@ describe("panelItems", () => {
         expect(titles(ctx(), "edit")).toEqual(["Append to [[Project X]]", "Edit line", "Move under…"])
         // A root page row: appendable, not editable (its own file), not draggable.
         expect(titles(ctx({ selectedPos: 0 }), "edit")).toEqual(["Append to [[Project X]]"])
+    })
+
+    it("Append shows Enter's keycap when Enter appends (Quick Add), its own key otherwise", () => {
+        const append = (c: PanelContext) => panelItems(c).find(i => i.id === "append")
+        const onEnter = append(ctx({ appendOnEnter: true }))
+        expect(onEnter?.key?.label).toBe("Enter")
+        expect(onEnter?.key?.alt).toBeFalsy()
+        expect(append(ctx())?.key?.label).toBe("A")
     })
 
     it("Timeline: no Move under and no Tree-only view items", () => {

@@ -1,14 +1,14 @@
 import {Modal} from "obsidian";
 import {createRoot, Root} from "react-dom/client";
 import {GraphContextProvider} from "../react-context/GraphContextProvider";
-import {SearchModalContainer} from "../search/SearchModalContainer";
+import {SearchModalContainer, SearchModalKind} from "../search/SearchModalContainer";
 import {GlobalAtoms, GlobalStore} from "../react-context/global";
 
 export class SearchModal extends Modal {
 
     root: Root | null = null;
 
-    constructor(private store: GlobalStore) {
+    constructor(private store: GlobalStore, private kind: SearchModalKind = "search") {
         super(store.get(GlobalAtoms.appAtom));
 
         this.modalEl.addClass("tree-search-modal");
@@ -22,7 +22,7 @@ export class SearchModal extends Modal {
             <GraphContextProvider store={this.store}>
                 <div className="tree-search-modal-container">
                     <div className="workspace-leaf-content">
-                        <SearchModalContainer isQuickLink={false}/>
+                        <SearchModalContainer kind={this.kind}/>
                     </div>
                 </div>
             </GraphContextProvider>
