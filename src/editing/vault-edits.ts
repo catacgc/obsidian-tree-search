@@ -12,6 +12,7 @@ import {
     ensureHeading,
     firstAppendedLine,
     cutSubtree,
+    cutHeadingSection,
     lineHasIdentity,
     localIsoDate,
     pasteAtOutlineEnd,
@@ -233,6 +234,29 @@ export async function editLine(app: App, path: string, line: number, expectedLin
     if (!file) throw new StaleLineError()
     await app.vault.process(file, c => replaceLineText(c, line, expectedLine, newLine))
     return [file]
+}
+
+/** Deletes list line `line` of `path` with every line nested under it; throws StaleLineError if the file is gone or the line changed. */
+export async function deleteSubtree(app: App, path: string, line: number, expectedHead: string): Promise<TFile[]> {
+    const file = app.vault.getFileByPath(path)
+    if (!file) throw new StaleLineError()
+    await app.vault.process(file, c => cutSubtree(c, line, expectedHead).content)
+    return [file]
+}
+
+/** Deletes heading `line` of `path` and its section (cutHeadingSection); throws StaleLineError like deleteSubtree. */
+export async function deleteHeadingSection(app: App, path: string, line: number, expectedHead: string): Promise<TFile[]> {
+    const file = app.vault.getFileByPath(path)
+    if (!file) throw new StaleLineError()
+    await app.vault.process(file, c => cutHeadingSection(c, line, expectedHead))
+    return [file]
+}
+
+/** Moves the file at `path` to the trash (Obsidian's "Deleted files" setting); throws StaleLineError if it is gone. */
+export async function trashVaultFile(app: App, path: string): Promise<void> {
+    const file = app.vault.getAbstractFileByPath(path)
+    if (!file) throw new StaleLineError()
+    await app.fileManager.trashFile(file)
 }
 
 export type TaskChange = { kind: "done"; done: boolean } | { kind: "schedule"; when: RescheduleKind }

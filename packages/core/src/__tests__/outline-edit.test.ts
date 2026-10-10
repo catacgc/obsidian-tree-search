@@ -13,6 +13,7 @@ import {
   lineHasIdentity,
   replaceLineText,
   cutSubtree,
+  cutHeadingSection,
   pasteUnderLinkBullet,
   pasteAtOutlineEnd,
   pasteUnderLine,
@@ -203,6 +204,24 @@ describe("replaceLineText / cutSubtree", () => {
     const r = cutSubtree("- [[A]]\n    - [[C]]\n\n\t\t- d\n- [[B]]\n", 1, "    - [[C]]")
     expect(r.content).toBe("- [[A]]\n- [[B]]\n")
     expect(r.block).toEqual(["- [[C]]", "", "    - d"])
+  })
+})
+
+describe("cutHeadingSection", () => {
+  it("removes the heading up to the next same-level heading", () => {
+    expect(cutHeadingSection("intro\n\n## A\nx\n\n## B\ny\n", 2, "## A")).toBe("intro\n\n## B\ny\n")
+  })
+  it("includes deeper sub-headings in the section", () => {
+    expect(cutHeadingSection("# T\n## A\nx\n### A1\nz\n## B\n", 1, "## A")).toBe("# T\n## B\n")
+  })
+  it("ignores headings inside code fences", () => {
+    expect(cutHeadingSection("## A\nx\n```\n## no\n```\n## B\n", 0, "## A")).toBe("## B\n")
+  })
+  it("runs to the end of the file, keeping the final newline", () => {
+    expect(cutHeadingSection("intro\n## A\nx\n", 1, "## A")).toBe("intro\n")
+  })
+  it("throws StaleLineError when the heading changed", () => {
+    expect(() => cutHeadingSection("## A\nx\n", 0, "## B")).toThrow(StaleLineError)
   })
 })
 

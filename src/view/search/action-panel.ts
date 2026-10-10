@@ -5,7 +5,9 @@ import type {TreeNode} from "./SearchViewFlatten"
 import type {RaycastAction} from "../node-actions"
 import {raycastActionOf} from "../node-actions"
 import {SHORTCUTS, type KeySpec, type ShortcutId} from "./shortcuts"
-import {appendTargetAt, dragInfo, isEditableRow, isValidDropTarget, type OwnPath} from "../editor/row-editing"
+import {
+    appendTargetAt, deleteTargetOf, dragInfo, isEditableRow, isLinkLineRow, isValidDropTarget, type DeleteTarget, type OwnPath,
+} from "../editor/row-editing"
 import {isMovable} from "./chain"
 import type {TaskChange} from "../../editing/vault-edits"
 
@@ -14,7 +16,7 @@ export type PanelSection = "row" | "task" | "edit" | "view"
 export type PanelIcon =
     | "link" | "reveal" | "copy" | "insert" | "moveToFolder" | "archive" | "consolidate"
     | "done" | "schedule"
-    | "append" | "edit" | "moveUnder"
+    | "append" | "edit" | "moveUnder" | "patch" | "rename" | "delete"
     | "openEditor" | "tree" | "timeline" | "expand" | "collapse" | "refresh"
 
 export type PanelRun =
@@ -22,6 +24,9 @@ export type PanelRun =
     | {kind: "action"; action: RaycastAction}
     | {kind: "moveUnder"}
     | {kind: "task"; change: TaskChange}
+    | {kind: "patch"}
+    | {kind: "renameFile"; path: string}
+    | {kind: "delete"}
 
 export type PanelItem = {
     id: string
@@ -43,6 +48,53 @@ export type PanelContext = {
     allowTimeline: boolean
     timelineActive: boolean
     ownPath: OwnPath
+    /** The view's append-chain mode (`chainAtom`), or null with no chain. */
+    chainMode: "append" | "reparent" | null
+    resolveLink: ResolveLink
+}
+
+/** The vault path of the file `linkpath` resolves to from `sourcePath`, or null. */
+export type ResolveLink = (linkpath: string, sourcePath: string) => string | null
+
+export type RenameTarget = {path: string; title: string}
+
+const fileNameOf = (path: string): string => path.slice(path.lastIndexOf("/") + 1)
+const noteName = (path: string): string => fileNameOf(path).replace(/\.md$/i, "")
+
+/** Files a row can rename through a vault rename: a page row's own note; a header link line's note; a text row's
+ *  resolved [[links]] and ![[embeds]] in line order, once per file. */
+export function renameTargets(row: TreeNode, ownPath: OwnPath, resolveLink: ResolveLink, timeline: boolean): RenameTarget[] {
+    if (row.archiveRow) return []
+    const node = row.node
+    if (node.nodeType === "page" || (node.nodeType === "header" && isLinkLineRow(row, ownPath, timeline))) {
+        const p = ownPath(node)
+        return p ? [{path: p, title: `Rename [[${noteName(p)}]]`}] : []
+    }
+    if (node.nodeType !== "text") return []
+    const out: RenameTarget[] = []
+    for (const t of node.parsedTokens) {
+        if (t.tokenType !== "obsidian_link") continue
+        // Parsed from `source`: the parser's pageTarget drops folder paths.
+        const linkpath = t.source.slice(2, -2).split("|")[0].split("#")[0].trim()
+        if (!linkpath) continue
+        const path = resolveLink(linkpath, node.location.path)
+        if (path === null || out.some(r => r.path === path)) continue
+        const display = /\.md$/i.test(path) ? noteName(path) : fileNameOf(path)
+        out.push({path, title: t.embed ? `Rename ![[${display}]]` : `Rename [[${display}]]`})
+    }
+    return out
+}
+
+/** The Delete confirmation page's title and confirm action for `target`; `label` names the row. */
+export function deleteConfirmText(target: DeleteTarget, label: string): {title: string; action: string} {
+    switch (target.kind) {
+        case "line":
+            return {title: `Delete "${label}" and everything nested under it?`, action: "Delete"}
+        case "heading":
+            return {title: `Delete heading "${label}" and its section?`, action: "Delete"}
+        case "file":
+            return {title: `Move "${fileNameOf(target.path)}" to trash?`, action: "Move to trash"}
+    }
 }
 
 export const SECTION_TITLES: Record<Exclude<PanelSection, "row">, string> = {task: "Task", edit: "Edit", view: "View"}
@@ -102,12 +154,23 @@ export function panelItems(ctx: PanelContext): PanelItem[] {
     if (ctx.allowEditing && row) {
         const target = appendTargetAt(ctx.rows, ctx.selectedPos, ctx.timelineActive)
         if (target) items.push({id: "append", section: "edit", title: `Append to [[${target.parentName}]]`, icon: "append", key: keyOf("append"), run: {kind: "shortcut", id: "append"}})
-        if (isEditableRow(row, ctx.ownPath, ctx.timelineActive)) {
-            const rename = row.node.nodeType === "header" || row.node.nodeType === "attachment"
+        const type = row.node.nodeType
+        // Patch: what typing `>` does (`>` is typed text, not a shortcut).
+        if (!row.archiveRow && ctx.chainMode !== "reparent" && (type === "page" || type === "header" || type === "text")) {
+            items.push({id: "patch", section: "edit", title: "Patch", icon: "patch", run: {kind: "patch"}})
+        }
+        if (isEditableRow(row, ctx.ownPath, ctx.timelineActive) && !isLinkLineRow(row, ctx.ownPath, ctx.timelineActive)) {
+            const rename = type === "header" || type === "attachment"
             items.push({id: "edit", section: "edit", title: rename ? "Rename" : "Edit line", icon: "edit", key: keyOf("edit"), run: {kind: "shortcut", id: "edit"}})
+        }
+        for (const t of renameTargets(row, ctx.ownPath, ctx.resolveLink, ctx.timelineActive)) {
+            items.push({id: `rename:${t.path}`, section: "edit", title: t.title, icon: "rename", run: {kind: "renameFile", path: t.path}})
         }
         if (!ctx.timelineActive && moveUnderTargets(ctx.rows, ctx.selectedPos).length > 0) {
             items.push({id: "moveUnder", section: "edit", title: "Move under…", icon: "moveUnder", run: {kind: "moveUnder"}})
+        }
+        if (deleteTargetOf(row, ctx.ownPath, ctx.timelineActive)) {
+            items.push({id: "delete", section: "edit", title: "Delete", icon: "delete", run: {kind: "delete"}})
         }
     }
 

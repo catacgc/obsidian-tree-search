@@ -28,6 +28,9 @@ Editor mode lets you change the vault from search results without opening notes:
 | Append | ⊕ dot at the bottom edge of a note's group, Alt+A, or **Append to [[P]]** in the action panel | yes | yes |
 | Edit | hold **Alt/Option**: an edit hint appears; Alt+click or Alt+Enter, or **Edit line** in the action panel | yes | yes |
 | Drag / reparent | drag a row onto another note row, or **Move under…** in the action panel | yes | no |
+| Patch | **Patch** in the action panel: the same as typing `>` (the selected row becomes the anchor chip); hidden during a `<` move | yes | yes |
+| Rename a file | **Rename [[Note]]** / **Rename ![[file]]** in the action panel: one per note or embedded file on the row (a page row's own note, a link line's note, a line's resolved links and embeds); the Rename editor saves through `renameVaultFile` (`app.fileManager.renameFile`, which updates links). Link-line rows (`- [[Note]]`, `- [[Note#H]]`) get this instead of **Edit line** | yes | yes |
+| Delete | **Delete** in the action panel, then a confirmation page: a list line with every nested line (`cutSubtree`), a heading with its section up to the next same-or-higher heading outside code fences (`cutHeadingSection`), a note's own row or an attachment moved to the trash (`trashVaultFile`). Folder, folder-note, month and reference rows get none. Tree mode selects the row's parent afterwards | yes | yes |
 
 Append and Edit use the same inline editor. It has two sections:
 

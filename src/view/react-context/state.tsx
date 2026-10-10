@@ -63,8 +63,8 @@ export const SearchViewScope = createScope({
 
 export type RecencyWindow = "all" | "7d" | "30d" | "1y"
 export const RECENCY_WINDOWS: RecencyWindow[] = ["all", "7d", "30d", "1y"]
-/** The action panel's list: the main actions, or the Move under… page list. */
-export type ActionPanelPage = "main" | "moveUnder"
+/** The action panel's list: the main actions, the Move under… page list, or the Delete confirmation. */
+export type ActionPanelPage = "main" | "moveUnder" | "confirmDelete"
 
 export const GlobalAppMolecule = molecule((_, scope) => {
 

@@ -2,7 +2,7 @@ import { describe, it, expect } from "bun:test"
 import type { ParsedNode, ParsedTextToken } from "@mdtree/core"
 import type { TreeNode } from "../view/search/SearchViewFlatten"
 import {
-    appendTargetAt, classifyReparent, dragInfo, groupEnd, isEditableRow, isValidDropTarget,
+    appendTargetAt, classifyReparent, deleteTargetOf, dragInfo, groupEnd, isEditableRow, isValidDropTarget,
     treeParentPos, type OwnPath,
 } from "../view/editor/row-editing"
 import {
@@ -117,6 +117,25 @@ describe("isEditableRow", () => {
         const own: OwnPath = n => n.nodeType === "attachment" ? "assets/photo.png" : null
         expect(isEditableRow(row(att, 1), own, false)).toBe(true)
         expect(isEditableRow(row(att, 1), () => null, false)).toBe(false)
+    })
+})
+
+describe("deleteTargetOf", () => {
+    it("deletes link-line and text rows as lines with their nested lines", () => {
+        expect(deleteTargetOf(tree[1], ownPath, false)).toEqual({ kind: "line", path: "2026-09-30.md", line: 3 })
+        expect(deleteTargetOf(tree[2], ownPath, false)).toEqual({ kind: "line", path: "2026-09-30.md", line: 4 })
+    })
+
+    it("trashes a note's own row and deletes a real heading with its section", () => {
+        expect(deleteTargetOf(tree[0], ownPath, false)).toEqual({ kind: "file", path: "Project X.md" })
+        expect(deleteTargetOf(row(header("Project X", "Decisions", "Project X.md", 4), 1), ownPath, false))
+            .toEqual({ kind: "heading", path: "Project X.md", line: 4 })
+    })
+
+    it("offers nothing for the Archive row or folders", () => {
+        expect(deleteTargetOf(row(page("Archive", ""), 0, { archiveRow: true }), ownPath, false)).toBeNull()
+        const folder: ParsedNode = { ...base("Projects", 0), nodeType: "folder", path: "Projects", name: "Projects", folderNote: "" }
+        expect(deleteTargetOf(row(folder, 0), ownPath, false)).toBeNull()
     })
 })
 

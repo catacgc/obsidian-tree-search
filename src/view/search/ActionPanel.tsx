@@ -5,16 +5,19 @@ import {useAtomValue, useSetAtom} from "jotai";
 import {useMolecule} from "bunshi/react";
 import {Platform, Scope} from "obsidian";
 import {
-    Archive, ArrowRightLeft, CalendarArrowUp, CalendarClock, ChevronLeft, ChevronsDownUp, ChevronsUpDown, CirclePlus,
-    Combine, Copy, CornerDownRight, ExternalLink, FileSearch, FileText, FolderInput, ListTree, Pencil, RefreshCw,
-    SquareCheck, SquarePen,
+    Archive, ArrowRightLeft, CalendarArrowUp, CalendarClock, ChevronLeft, ChevronRight, ChevronsDownUp, ChevronsUpDown,
+    CirclePlus, Combine, Copy, CornerDownRight, ExternalLink, FileSearch, FileText, FolderInput, ListTree, Pencil, RefreshCw,
+    SquareCheck, SquarePen, TextCursorInput, Trash2,
     type LucideIcon,
 } from "lucide-react";
 import {GlobalAtoms} from "../react-context/global";
-import {SearchViewMolecule} from "../react-context/state";
+import {SearchViewMolecule, type ActionPanelPage} from "../react-context/state";
 import {ActionsMolecule} from "../react-context/actions";
 import {EditorMolecule} from "../editor/EditorMolecule";
-import {filterPanelItems, moveUnderTargets, panelItems, SECTION_TITLES, type PanelIcon, type PanelItem} from "./action-panel";
+import {deleteTargetOf} from "../editor/row-editing";
+import {
+    deleteConfirmText, filterPanelItems, moveUnderTargets, panelItems, SECTION_TITLES, type PanelIcon, type PanelItem,
+} from "./action-panel";
 import {keyParts, type KeySpec, type ShortcutId} from "./shortcuts";
 import {useShortcutHandlers} from "./shortcut-handlers";
 import {nodeLabel} from "./timeline-utils";
@@ -23,7 +26,7 @@ const ICONS: Record<PanelIcon, LucideIcon> = {
     link: ExternalLink, reveal: FileSearch, copy: Copy, insert: CornerDownRight, moveToFolder: FolderInput,
     archive: Archive, consolidate: Combine, done: SquareCheck, schedule: CalendarArrowUp, append: CirclePlus, edit: Pencil,
     moveUnder: ArrowRightLeft, openEditor: SquarePen, tree: ListTree, timeline: CalendarClock, expand: ChevronsUpDown,
-    collapse: ChevronsDownUp, refresh: RefreshCw,
+    collapse: ChevronsDownUp, refresh: RefreshCw, patch: ChevronRight, rename: TextCursorInput, delete: Trash2,
 }
 
 /** Panel items that open the inline editor, which takes focus; after any other item focus returns to the search. */
@@ -50,13 +53,13 @@ export const ActionPanel = ({dockRef}: {dockRef: React.RefObject<HTMLDivElement 
     return page ? <PanelBody page={page} dockRef={dockRef}/> : null
 }
 
-const PanelBody = ({page, dockRef}: {page: "main" | "moveUnder"; dockRef: React.RefObject<HTMLDivElement | null>}) => {
+const PanelBody = ({page, dockRef}: {page: ActionPanelPage; dockRef: React.RefObject<HTMLDivElement | null>}) => {
     const {
         renderableTreeNodesAtom, selectedLineAtom, timelineActiveAtom, actualQueryAtom, focusSearchInputAtom,
-        openActionPanelAtom, closeActionPanelAtom, allowEditing, allowTimeline,
+        openActionPanelAtom, closeActionPanelAtom, chainAtom, searchVisibleAtom, allowEditing, allowTimeline,
     } = useMolecule(SearchViewMolecule)
     const {selectedTreeNodeActionsAtom, executeActionAtom} = useMolecule(ActionsMolecule)
-    const {ownPathAtom, reparentAtom, editTaskAtom} = useMolecule(EditorMolecule)
+    const {ownPathAtom, reparentAtom, editTaskAtom, pushChainAtom, openRenameFileAtom, deleteRowAtom} = useMolecule(EditorMolecule)
     const app = useAtomValue(GlobalAtoms.appAtom)
     const rows = useAtomValue(renderableTreeNodesAtom)
     const selectedLine = useAtomValue(selectedLineAtom)
@@ -64,12 +67,17 @@ const PanelBody = ({page, dockRef}: {page: "main" | "moveUnder"; dockRef: React.
     const actualQuery = useAtomValue(actualQueryAtom)
     const rowActions = useAtomValue(selectedTreeNodeActionsAtom)
     const ownPath = useAtomValue(ownPathAtom)
+    const chain = useAtomValue(chainAtom)
     const focusSearch = useSetAtom(focusSearchInputAtom)
+    const setSearchVisible = useSetAtom(searchVisibleAtom)
     const openPanel = useSetAtom(openActionPanelAtom)
     const closePanel = useSetAtom(closeActionPanelAtom)
     const executeAction = useSetAtom(executeActionAtom)
     const reparent = useSetAtom(reparentAtom)
     const editTask = useSetAtom(editTaskAtom)
+    const pushChain = useSetAtom(pushChainAtom)
+    const openRenameFile = useSetAtom(openRenameFileAtom)
+    const deleteRow = useSetAtom(deleteRowAtom)
     const handlers = useShortcutHandlers()
 
     const rootRef = useRef<HTMLDivElement>(null)
@@ -84,6 +92,11 @@ const PanelBody = ({page, dockRef}: {page: "main" | "moveUnder"; dockRef: React.
         if (refocusSearch) focusSearch(n => n + 1)
     }
 
+    const deleteTarget = page === "confirmDelete" && selectedRow ? deleteTargetOf(selectedRow, ownPath, timelineActive) : null
+    const deleteText = deleteTarget && selectedRow
+        ? deleteConfirmText(deleteTarget, truncateMiddle(nodeLabel(selectedRow.node), 40))
+        : null
+
     const buildEntries = (): ListEntry[] => {
         if (page === "moveUnder") {
             return moveUnderTargets(rows, selectedPos).map(t => ({
@@ -91,13 +104,29 @@ const PanelBody = ({page, dockRef}: {page: "main" | "moveUnder"; dockRef: React.
                 run: () => { close(true); void reparent(selectedPos, t) },
             }))
         }
-        const items = panelItems({rowActions, rows, selectedPos, allowEditing, allowTimeline, timelineActive, ownPath})
+        if (page === "confirmDelete") {
+            if (!deleteText || !selectedRow) return []
+            return [{id: "confirmDelete", title: deleteText.action, icon: Trash2, run: () => { close(true); void deleteRow(selectedRow) }}]
+        }
+        const items = panelItems({
+            rowActions, rows, selectedPos, allowEditing, allowTimeline, timelineActive, ownPath,
+            chainMode: chain?.mode ?? null,
+            resolveLink: (linkpath, sourcePath) => app?.metadataCache.getFirstLinkpathDest(linkpath, sourcePath)?.path ?? null,
+        })
         const runItem = (item: PanelItem) => {
             if (item.run.kind === "moveUnder") { setFilter(""); openPanel("moveUnder"); return }
+            if (item.run.kind === "delete") { setFilter(""); openPanel("confirmDelete"); return }
+            if (item.run.kind === "patch") {
+                setSearchVisible(true)
+                close(true)
+                void pushChain()
+                return
+            }
             // Actions that open the inline editor leave focus to it; everything else returns to the search.
-            close(!(item.run.kind === "shortcut" && OPENS_EDITOR.has(item.run.id)))
+            close(!(item.run.kind === "renameFile" || item.run.kind === "shortcut" && OPENS_EDITOR.has(item.run.id)))
             if (item.run.kind === "action") void executeAction(item.run.action)
             else if (item.run.kind === "task") { if (selectedRow) void editTask(selectedRow.node, item.run.change) }
+            else if (item.run.kind === "renameFile") openRenameFile(item.run.path)
             else void handlers[item.run.id](0)
         }
         return items.map(item => ({
@@ -133,7 +162,7 @@ const PanelBody = ({page, dockRef}: {page: "main" | "moveUnder"; dockRef: React.
     const scopeRef = useRef<Scope | null>(null)
     const escapeRef = useRef<() => void>(() => {})
     escapeRef.current = () => {
-        if (page === "moveUnder") { setFilter(""); openPanel("main") }
+        if (page !== "main") { setFilter(""); openPanel("main") }
         else close(true)
     }
     const pushScope = () => {
@@ -177,6 +206,7 @@ const PanelBody = ({page, dockRef}: {page: "main" | "moveUnder"; dockRef: React.
 
     const title = page === "moveUnder"
         ? `Move ${truncateMiddle(selectedRow ? nodeLabel(selectedRow.node) : "", 40)} under…`
+        : page === "confirmDelete" ? deleteText?.title ?? null
         : selectedRow ? truncateMiddle(nodeLabel(selectedRow.node), 60) : null
 
     let lastSection: string | undefined
@@ -187,7 +217,7 @@ const PanelBody = ({page, dockRef}: {page: "main" | "moveUnder"; dockRef: React.
         onBlur={ev => { if (!rootRef.current?.contains(ev.relatedTarget as Node | null)) popScope() }}
     >
         {title !== null && <div className="ts-action-panel-title">
-            {page === "moveUnder" && <div role="button" className="ts-action-panel-back" aria-label="Back"
+            {page !== "main" && <div role="button" className="ts-action-panel-back" aria-label="Back"
                                           onClick={() => { setFilter(""); openPanel("main") }}><ChevronLeft size={14}/></div>}
             <span>{title}</span>
         </div>}

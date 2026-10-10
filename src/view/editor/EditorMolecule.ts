@@ -32,10 +32,10 @@ import {
 import {SearchViewMolecule, SearchViewScope} from "../react-context/state"
 import {GlobalAtoms} from "../react-context/global"
 import {applyEditorRequestAtom, leaveQuickAddAtom, type EditorRequest} from "../react-context/quick-add-flow"
-import {type RowTarget} from "../search/select-target"
+import {renamedFileTarget, rowTargets, type RowTarget} from "../search/select-target"
 import {appendDraftAtom, settingsAtom} from "../react-context/settings"
 import type {TreeNode} from "../search/SearchViewFlatten"
-import {basenameOf, dailyConfigOf, emptySession, proseNameFrom} from "./draft"
+import {basenameOf, dailyConfigOf, emptySession, fileRenameState, proseNameFrom} from "./draft"
 import type {PasteData} from "./textarea-ops"
 import {
     appendToDailyNote,
@@ -43,6 +43,8 @@ import {
     applyNotePatch,
     applyAttachmentPlan,
     dailyNotePath,
+    deleteHeadingSection,
+    deleteSubtree,
     editLine,
     editTaskLine,
     newNotePath,
@@ -50,6 +52,7 @@ import {
     renameVaultFile,
     reparent,
     trashSessionAttachments,
+    trashVaultFile,
     writeNoteContents,
     writeWholeNote,
     type EditorAttachment,
@@ -57,7 +60,7 @@ import {
     type TaskChange,
 } from "../../editing/vault-edits"
 import type {DailyNoteConfig} from "../../indexing/indexed-tree"
-import {appendTargetAt, classifyReparent, isEditableRow, type OwnPath} from "./row-editing"
+import {appendTargetAt, classifyReparent, deleteTargetOf, isEditableRow, treeParentPos, type OwnPath} from "./row-editing"
 import {
     chainEditorText,
     chainOutline,
@@ -286,11 +289,7 @@ export const EditorMolecule = molecule((mol, scope) => {
         const app = get(GlobalAtoms.appAtom)
         const node = row.node
         if (node.nodeType === "attachment") {
-            const stem = node.extension ? node.name.slice(0, -(node.extension.length + 1)) : node.name
-            set(showEditorAtom, {kind: "session", state: {
-                ...emptySession(), mode: "edit", editKind: "file",
-                sourcePath: node.location.path, originalLine: node.name, outline: stem, caret: stem.length,
-            }})
+            set(showEditorAtom, {kind: "session", state: fileRenameState(node.location.path, node.name)})
             return
         }
         const path = node.location.path
@@ -316,6 +315,16 @@ export const EditorMolecule = molecule((mol, scope) => {
             nested: node.nodeType === "text" && node.nested === true,
             caret: split.text.length,
         }})
+    })
+
+    /** Rename of the file at `path` (a note or an embedded file); Save renames it through Obsidian, which updates links. */
+    const openRenameFileAtom = atom(null, (get, set, path: string) => {
+        const file = get(GlobalAtoms.appAtom).vault.getFileByPath(path)
+        if (!file) {
+            new Notice(`${path} no longer exists`)
+            return
+        }
+        set(showEditorAtom, {kind: "session", state: fileRenameState(file.path, file.name)})
     })
 
     const selectedPos = (get: Getter): {rows: TreeNode[]; pos: number} => {
@@ -585,7 +594,7 @@ export const EditorMolecule = molecule((mol, scope) => {
         const targets: RowTarget[] = s.mode === "append" ? appendTargets(s, appended)
             : s.prose?.kind === "note" ? [{key: `[[${basenameOf(s.prose.path).toLowerCase()}]]`}]
             : s.prose?.kind === "new" ? [{path: s.prose.link.path, line: s.prose.link.line}, {key: `[[${s.prose.name.trim().toLowerCase()}]]`}]
-            : s.editKind === "file" ? [{key: s.touchedPaths[s.touchedPaths.length - 1].split("/").pop()!.toLowerCase()}]
+            : s.editKind === "file" ? [renamedFileTarget(s.touchedPaths[s.touchedPaths.length - 1])]
             : [{path: s.sourcePath, line: s.line ?? 0}]
         // Quick Add opens the Search modal after it closes; set before the refresh so its recompute re-finds the row.
         if (scp.isQuickAdd) set(GlobalAtoms.pendingSelectAtom, {view: "modal", targets, flash: true})
@@ -736,11 +745,52 @@ export const EditorMolecule = molecule((mol, scope) => {
         }
     })
 
+    /** The panel's Delete (after its confirmation): a list line with its nested lines, a heading with its section, or a
+     *  file to the trash (`deleteTargetOf`). Tree mode selects the row's parent afterwards. */
+    const deleteRowAtom = atom(null, async (get, set, row: TreeNode) => {
+        const timeline = get(view.timelineActiveAtom)
+        const target = deleteTargetOf(row, get(ownPathAtom), timeline)
+        if (!target) return
+        const app = get(GlobalAtoms.appAtom)
+        const index = get(GlobalAtoms.indexAtom)
+        const rows = get(view.renderableTreeNodesAtom)
+        const pos = timeline ? -1 : rows.findIndex(r => r.index === row.index)
+        const parentPos = pos >= 0 ? treeParentPos(rows, pos) : null
+        const selectParent = () => {
+            if (parentPos !== null) set(GlobalAtoms.pendingSelectAtom, {view: scp.name, targets: rowTargets(rows[parentPos]), flash: false})
+        }
+        try {
+            if (target.kind === "file") {
+                await trashVaultFile(app, target.path)
+                selectParent()
+                // The index has no delete handler: rebuild it.
+                await index?.refresh()
+                return
+            }
+            const head = await readLine(app, target.path, target.line)
+            const valid = target.kind === "line"
+                ? isRowLine(head, row.node)
+                : head !== null && HEADER_RE.test(head) && lineHasIdentity(head, row.node)
+            if (!valid || head === null) {
+                await markOutOfDate(app, index, target.path)
+                return
+            }
+            const touched = target.kind === "line"
+                ? await deleteSubtree(app, target.path, target.line, head)
+                : await deleteHeadingSection(app, target.path, target.line, head)
+            selectParent()
+            await refreshPaths(app, index, touched.map(f => f.path))
+        } catch (err) {
+            if (err instanceof StaleLineError) await markOutOfDate(app, index, target.path)
+            else new Notice(err instanceof Error ? err.message : String(err))
+        }
+    })
+
     return {
         editorStateAtom, altHeldAtom, dragIndexAtom, dropTargetAtom, ownPathAtom,
-        updateEditorAtom, cancelEditorAtom, closeEditorAtom, openAppendAtom, openBlankEditorAtom, openEditAtom,
+        updateEditorAtom, cancelEditorAtom, closeEditorAtom, openAppendAtom, openBlankEditorAtom, openEditAtom, openRenameFileAtom,
         openAppendForSelectedAtom, openEditForSelectedAtom, saveEditorAtom,
-        clearDragAtom, reparentAtom, editTaskAtom,
+        clearDragAtom, reparentAtom, editTaskAtom, deleteRowAtom,
         reparentChainAtom, openProseAtom,
         pendingPasteAtom, pushChainAtom, commitChainAtom, openChainEditorAtom, pasteIntoChainAtom,
     }

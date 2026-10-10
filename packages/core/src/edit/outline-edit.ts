@@ -296,6 +296,30 @@ export function cutSubtree(content: string, headLine: number, expectedHead: stri
   return { content: lines.join(eol), block }
 }
 
+/** Removes heading `headLine` and its section: every line up to the next heading of the same or a higher level
+ *  (outside ``` / ~~~ fences), else to the end of the file, keeping the file's final newline. */
+export function cutHeadingSection(content: string, headLine: number, expectedHead: string): string {
+  const { lines, eol } = splitLines(content)
+  const head = lines[headLine] === expectedHead ? HEADER_RE.exec(expectedHead) : null
+  if (!head) throw new StaleLineError()
+  const level = head[1].length
+  let end = -1
+  let inFence = false
+  for (let i = headLine + 1; i < lines.length; i++) {
+    if (/^\s*(```|~~~)/.test(lines[i])) inFence = !inFence
+    else if (!inFence) {
+      const m = HEADER_RE.exec(lines[i])
+      if (m && m[1].length <= level) {
+        end = i
+        break
+      }
+    }
+  }
+  if (end < 0) end = lines[lines.length - 1] === "" ? lines.length - 1 : lines.length
+  lines.splice(headLine, end - headLine)
+  return lines.join(eol)
+}
+
 /** Inserts `block` as the last children of the leading-outline `[[pageName]]` bullet (`pageName` may be `page#header`), adding that bullet at the outline end if missing. */
 export function pasteUnderLinkBullet(content: string, pageName: string, block: string[]): string {
   const { lines, eol } = splitLines(content)

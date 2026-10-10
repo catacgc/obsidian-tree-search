@@ -12,6 +12,13 @@ export function rowTargets(row: TreeNode): RowTarget[] {
     return [{path, line: position.start.line}, {key: getKey(row.node)}]
 }
 
+/** Target that re-finds the row of the file renamed to `path`: a note's page key, else the attachment's file name. */
+export function renamedFileTarget(path: string): RowTarget {
+    const name = path.slice(path.lastIndexOf("/") + 1).toLowerCase()
+    const note = /\.(md|canvas)$/.exec(name)
+    return note ? {key: `[[${name.slice(0, note.index)}]]`} : {key: name}
+}
+
 function matches(row: TreeNode, target: RowTarget): boolean {
     if ("key" in target) return getKey(row.node) === target.key
     const {path, position} = row.node.location

@@ -65,6 +65,7 @@ The same move is **Move to…** (<kbd>Alt</kbd>+<kbd>M</kbd>, or the action pane
 ## More editing
 
 - **Reparent by dragging.** In Tree mode on desktop, drag a row onto a note row to move it under that note. You can also use **Move under…**.
+- **Patch, Rename, Delete.** The action panel's Edit section also has **Patch** (the same as typing <kbd>&gt;</kbd> on the row), **Rename [[Note]]** for each note or embedded file on the row (Obsidian updates the links to it), and **Delete**, which asks first. Delete removes a line with everything nested under it, a heading with its section, or moves a note's own row or an attachment to the trash.
 - **Note content.** Clicking a link in the editor (or pressing <kbd>Alt</kbd>+<kbd>Enter</kbd> on it) opens a content section that is appended to that note. The note is created if it doesn't exist yet.
 - **Pasting.** Pasted files are saved into your vault and named after the note. Pasted URLs become markdown links.
 - **Indenting.** Press <kbd>Tab</kbd> and <kbd>Shift</kbd>+<kbd>Tab</kbd> to indent and outdent.

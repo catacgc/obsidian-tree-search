@@ -35,6 +35,13 @@ export function newUnderLineState(sourcePath: string, underLine: UnderLine): Edi
     return {...emptySession(), mode: "append", sourcePath, underLine, outline: "- ", caret: 2}
 }
 
+/** A Rename session for the file at `path` named `name`: the outline holds the name without its extension. */
+export function fileRenameState(path: string, name: string): EditorState {
+    const dot = name.lastIndexOf(".")
+    const stem = dot > 0 ? name.slice(0, dot) : name
+    return {...emptySession(), mode: "edit", editKind: "file", sourcePath: path, originalLine: name, outline: stem, caret: stem.length}
+}
+
 const INVALID_NAME_CHARS = new RegExp(INVALID_NAME_RE.source, "g")
 
 /** A new note's name from pasted prose: its first non-blank line without heading/bullet/checkbox markers or

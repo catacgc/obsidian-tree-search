@@ -95,6 +95,7 @@ export {
   lineHasIdentity,
   replaceLineText,
   cutSubtree,
+  cutHeadingSection,
   pasteUnderLinkBullet,
   pasteAtOutlineEnd,
   pasteUnderLine,

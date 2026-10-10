@@ -1,22 +1,24 @@
 import { describe, it, expect } from "bun:test"
-import type { ParsedNode } from "@mdtree/core"
+import type { ParsedNode, ParsedTextToken } from "@mdtree/core"
 import type { TreeNode } from "../view/search/SearchViewFlatten"
 import type { RaycastAction } from "../view/node-actions"
-import type { OwnPath } from "../view/editor/row-editing"
-import { filterPanelItems, moveUnderTargets, panelItems, type PanelContext } from "../view/search/action-panel"
+import { deleteTargetOf, type OwnPath } from "../view/editor/row-editing"
+import { deleteConfirmText, filterPanelItems, moveUnderTargets, panelItems, type PanelContext } from "../view/search/action-panel"
 
 const loc = (path: string, line: number) => ({ path, position: { start: { line, ch: 0 }, end: { line, ch: 0 } } })
 const base = (path: string, line: number) => ({ searchKey: "", location: loc(path, line), boost: 0, ageDays: 0 })
 const page = (name: string, path: string, line = 0): ParsedNode =>
     ({ ...base(path, line), nodeType: "page", isReference: false, page: name, aliases: [], tags: [] })
-const text = (key: string, path: string, line: number): ParsedNode =>
-    ({ ...base(path, line), searchKey: key, nodeType: "text", parsedTokens: [], tags: [], isTask: false, isCompleted: false })
+const text = (key: string, path: string, line: number, parsedTokens: ParsedTextToken[] = []): ParsedNode =>
+    ({ ...base(path, line), searchKey: key, nodeType: "text", parsedTokens, tags: [], isTask: false, isCompleted: false })
+const link = (source: string, embed = false): ParsedTextToken =>
+    ({ tokenType: "obsidian_link", source, pageTarget: "", ...(embed ? { embed: true as const } : {}) })
 const row = (node: ParsedNode, indent: number, extra: Partial<TreeNode> = {}): TreeNode =>
     ({ node, indent, hasChildren: false, visible: true, selected: false, index: 0, matched: true, ...extra })
 const rowsOf = (...rs: TreeNode[]) => rs.map((r, i) => ({ ...r, index: i }))
 
 const OWN: Record<string, string> = { "project x": "Project X.md", "new": "New.md" }
-const ownPath: OwnPath = n => n.nodeType === "page" ? OWN[n.page.toLowerCase()] ?? null : null
+const ownPath: OwnPath = n => n.nodeType === "page" || n.nodeType === "header" ? OWN[n.page.toLowerCase()] ?? null : null
 
 // 0 Project X · 1   loose text (in Project X.md) · 2 New
 const tree = rowsOf(
@@ -36,7 +38,7 @@ const ACTIONS: RaycastAction[] = [
 
 const ctx = (over: Partial<PanelContext> = {}): PanelContext => ({
     rowActions: ACTIONS, rows: tree, selectedPos: 1,
-    allowEditing: true, allowTimeline: true, timelineActive: false, ownPath, ...over,
+    allowEditing: true, allowTimeline: true, timelineActive: false, ownPath, chainMode: null, resolveLink: () => null, ...over,
 })
 const titles = (c: PanelContext, section?: string) => panelItems(c).filter(i => !section || i.section === section).map(i => i.title)
 
@@ -85,10 +87,32 @@ describe("panelItems", () => {
         expect(titles(ctx(), "task")).toEqual([])
     })
 
-    it("Edit: Append to names the target page; Edit line and Move under only where they apply", () => {
-        expect(titles(ctx(), "edit")).toEqual(["Append to [[Project X]]", "Edit line", "Move under…"])
-        // A root page row: appendable, not editable (its own file), not draggable.
-        expect(titles(ctx({ selectedPos: 0 }), "edit")).toEqual(["Append to [[Project X]]"])
+    it("Edit: Append to names the target page; Patch, Edit line, Move under and Delete only where they apply", () => {
+        expect(titles(ctx(), "edit")).toEqual(["Append to [[Project X]]", "Patch", "Edit line", "Move under…", "Delete"])
+        // A root page row: appendable, its own note renamed/trashed, not line-editable, not draggable.
+        expect(titles(ctx({ selectedPos: 0 }), "edit")).toEqual(["Append to [[Project X]]", "Patch", "Rename [[Project X]]", "Delete"])
+    })
+
+    it("a link-line page row renames its note instead of offering Edit line", () => {
+        const rows = rowsOf(row(page("New", "New.md"), 0), row(page("Project X", "Daily.md", 3), 1))
+        const items = panelItems(ctx({ rows, selectedPos: 1 })).filter(i => i.section === "edit")
+        expect(items.map(i => i.title)).toContain("Rename [[Project X]]")
+        expect(items.map(i => i.title)).not.toContain("Edit line")
+        expect(items.find(i => i.title === "Rename [[Project X]]")?.run).toEqual({ kind: "renameFile", path: "Project X.md" })
+    })
+
+    it("a text row renames each resolved link and embed once, in line order", () => {
+        const tokens = [link("[[Alpha]]"), link("[[img.png]]", true), link("[[Alpha|a]]"), link("[[Ghost]]")]
+        const rows = rowsOf(row(page("Project X", "Project X.md"), 0), row(text("t", "Project X.md", 2, tokens), 1))
+        const resolveLink = (l: string) => ({ Alpha: "Alpha.md", "img.png": "assets/img.png" } as Record<string, string>)[l] ?? null
+        const items = panelItems(ctx({ rows, selectedPos: 1, resolveLink })).filter(i => i.icon === "rename")
+        expect(items.map(i => i.title)).toEqual(["Rename [[Alpha]]", "Rename ![[img.png]]"])
+        expect(items[1].run).toEqual({ kind: "renameFile", path: "assets/img.png" })
+    })
+
+    it("hides Patch during a reparent chain", () => {
+        expect(titles(ctx({ chainMode: "reparent" }), "edit")).not.toContain("Patch")
+        expect(titles(ctx({ chainMode: "append" }), "edit")).toContain("Patch")
     })
 
     it("names Edit Rename for a heading", () => {
@@ -106,8 +130,18 @@ describe("panelItems", () => {
     it("Timeline: no Move under and no Tree-only view items", () => {
         const tl = rowsOf(row(text("loose", "Project X.md", 7), 0, { timeline: { breadcrumb: [page("Project X", "Project X.md")], pinned: false, ageDays: 0 } }))
         const c = ctx({ rows: tl, selectedPos: 0, timelineActive: true })
-        expect(titles(c, "edit")).toEqual(["Append to [[Project X]]", "Edit line"])
+        expect(titles(c, "edit")).toEqual(["Append to [[Project X]]", "Patch", "Edit line", "Delete"])
         expect(titles(c, "view")).toEqual(["Open editor", "Show tree", "Rebuild index"])
+    })
+})
+
+describe("deleteConfirmText", () => {
+    it("names what each kind of Delete removes", () => {
+        const confirm = (pos: number, rows = tree) => deleteConfirmText(deleteTargetOf(rows[pos], ownPath, false)!, "L")
+        expect(confirm(1)).toEqual({ title: `Delete "L" and everything nested under it?`, action: "Delete" })
+        expect(confirm(0)).toEqual({ title: `Move "Project X.md" to trash?`, action: "Move to trash" })
+        const h = rowsOf(row({ ...base("Project X.md", 3), nodeType: "header", page: "Project X", header: "Plan", indent: 1 } as ParsedNode, 0))
+        expect(confirm(0, h)).toEqual({ title: `Delete heading "L" and its section?`, action: "Delete" })
     })
 })
 

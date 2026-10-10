@@ -31,6 +31,40 @@ export function isEditableRow(row: TreeNode, ownPath: OwnPath, timeline: boolean
     }
 }
 
+/** What Delete removes for a row: a list line with its nested lines, a heading with its section, or a file (to the trash). */
+export type DeleteTarget =
+    | { kind: "line"; path: string; line: number }
+    | { kind: "heading"; path: string; line: number }
+    | { kind: "file"; path: string }
+
+/** A page/header row written as a link line (`- [[Note]]`, `- [[Note#H]]`) in another file, not the note or heading itself. */
+export function isLinkLineRow(row: TreeNode, ownPath: OwnPath, timeline: boolean): boolean {
+    const node = row.node
+    return (node.nodeType === "page" || node.nodeType === "header") && !row.archiveRow
+        && (row.indent > 0 || timeline) && node.location.path !== ownPath(node)
+}
+
+export function deleteTargetOf(row: TreeNode, ownPath: OwnPath, timeline: boolean): DeleteTarget | null {
+    if (row.archiveRow) return null
+    const node = row.node
+    const path = node.location.path
+    const line = node.location.position.start.line
+    switch (node.nodeType) {
+        case "text":
+            return {kind: "line", path, line}
+        case "page":
+            if (isLinkLineRow(row, ownPath, timeline)) return {kind: "line", path, line}
+            return ownPath(node) === path ? {kind: "file", path} : null
+        case "header":
+            if (isLinkLineRow(row, ownPath, timeline)) return {kind: "line", path, line}
+            return ownPath(node) === path ? {kind: "heading", path, line} : null
+        case "attachment":
+            return ownPath(node) === path ? {kind: "file", path} : null
+        default:
+            return null
+    }
+}
+
 /** Nearest earlier row with a smaller indent. */
 export function treeParentPos(rows: TreeNode[], pos: number): number | null {
     const indent = rows[pos].indent

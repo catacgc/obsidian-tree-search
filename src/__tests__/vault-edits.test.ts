@@ -8,9 +8,11 @@ import {
     appendToDailyNote,
     appendUnderLine,
     dailyNotePath,
+    deleteSubtree,
     editLine,
     editTaskLine,
     renameVaultFile,
+    trashVaultFile,
     reparent,
     writeNoteContents,
     writeWholeNote,
@@ -187,6 +189,27 @@ describe("editLine", () => {
         const { app, files } = makeFakeApp({ "a.md": "- one\n- two\n" })
         await expect(editLine(app, "a.md", 1, "- three", "- 3")).rejects.toBeInstanceOf(StaleLineError)
         expect(files.get("a.md")).toBe("- one\n- two\n")
+    })
+})
+
+describe("deleteSubtree / trashVaultFile", () => {
+    it("deleteSubtree removes the line with every nested line", async () => {
+        const { app, files } = makeFakeApp({ "a.md": "- a\n    - a1\n        - a2\n- b\n" })
+        await deleteSubtree(app, "a.md", 0, "- a")
+        expect(files.get("a.md")).toBe("- b\n")
+    })
+
+    it("deleteSubtree throws StaleLineError and writes nothing when the line changed", async () => {
+        const { app, files } = makeFakeApp({ "a.md": "- a\n    - a1\n- b\n" })
+        await expect(deleteSubtree(app, "a.md", 0, "- x")).rejects.toBeInstanceOf(StaleLineError)
+        expect(files.get("a.md")).toBe("- a\n    - a1\n- b\n")
+    })
+
+    it("trashVaultFile trashes the file, or throws StaleLineError when it is gone", async () => {
+        const { app, trashed } = makeFakeApp({ "P.md": "x" })
+        await trashVaultFile(app, "P.md")
+        expect(trashed).toEqual(["P.md"])
+        await expect(trashVaultFile(app, "P.md")).rejects.toBeInstanceOf(StaleLineError)
     })
 })
 
