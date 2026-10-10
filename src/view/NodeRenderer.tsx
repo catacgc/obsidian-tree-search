@@ -1,6 +1,6 @@
 import { highlightLine, openFileByName } from "../obsidian-utils";
 import { triggerLinkPreview } from "./hover-preview";
-import { ParsedNode, ParsedTextToken, Location, stripUrlQueryStrings, isUndated } from "@mdtree/core";
+import { ParsedNode, ParsedTextToken, Location, stripUrlQueryStrings, formatRelativeDate, textSourceDate } from "@mdtree/core";
 import {useMolecule} from "bunshi/react";
 import {GlobalAppMolecule, SearchViewMolecule} from "./react-context/state";
 import {useAtomValue} from "jotai";
@@ -34,10 +34,10 @@ function renderLinkName(display: string, href: string, terms: string[]): React.R
 export const NodeRenderer = (
     props: { node: ParsedNode; matchTerms: string[] }
 ) => {
-
+    const date = formatRelativeDate(props.node.ageDays, textSourceDate(props.node))
     return <>
         <BaseNodeRender {...props}/>
-        {!isUndated(props.node.ageDays) && <span> ({props.node.ageDays} days ago) </span>}
+        {date && <span title={date.absolute}> ({date.label}) </span>}
     </>
 }
 

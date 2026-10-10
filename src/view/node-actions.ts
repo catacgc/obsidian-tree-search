@@ -1,8 +1,8 @@
 import { reverseMarkdownParsing } from "./copy";
 import { TreeNode } from "./search/SearchViewFlatten";
-import { ObsidianLinkToken, ParsedTextToken, isArchived, Location, isUndated } from "@mdtree/core";
+import { ObsidianLinkToken, ParsedTextToken, isArchived, Location, isUndated, formatRelativeDate, textSourceDate } from "@mdtree/core";
 import {App} from "obsidian";
-import {formatTimelineDate, resolveThumbnail, stripDateAnnotations, textSourceDate, timelineCrumbs, type FileUrl} from "./search/timeline-utils";
+import {resolveThumbnail, stripDateAnnotations, timelineCrumbs, type FileUrl} from "./search/timeline-utils";
 
 export interface VaultResults {
     vault: string;
@@ -21,7 +21,7 @@ export interface IndividualListItemModel {
 }
 
 export interface TimelineRowInfo {
-    /** Row date ("Today", "3d ago", "2026-09-01") and its YYYY-MM-DD form; absent when undated. */
+    /** Row date ("Today", "3d", "2w", "5m", "2025") and its YYYY-MM-DD form; absent when undated. */
     date?: { label: string; absolute: string }
     /** Days since the row date; sort key when merging vaults. */
     ageDays: number
@@ -132,8 +132,9 @@ export function createRaycastResponse(app: App, results: TreeNode[]): VaultResul
         vault,
         results: results.map((result, index) => {
             const actions = getTreeNodeActions(app, result)
+            const date = formatRelativeDate(result.node.ageDays, textSourceDate(result.node))
             return {
-                title: renderTitle(result, [], app) + (isUndated(result.node.ageDays) ? "" : ` (${result.node.ageDays} days ago)`),
+                title: renderTitle(result, [], app) + (date ? ` (${date.label})` : ""),
                 level: result.indent,
                 index: result.index,
                 nodeType: result.node.nodeType,
@@ -158,7 +159,7 @@ export function createRaycastTimelineResponse(app: App, rows: TreeNode[], fileUr
                 nodeType: row.node.nodeType,
                 actions: getTreeNodeActions(app, row),
                 timeline: {
-                    date: formatTimelineDate(ageDays, sourceDate) ?? undefined,
+                    date: formatRelativeDate(ageDays, sourceDate) ?? undefined,
                     ageDays,
                     fromFile: isUndated(row.node.ageDays),
                     breadcrumb: timelineCrumbs(row),

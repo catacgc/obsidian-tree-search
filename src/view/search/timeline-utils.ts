@@ -1,38 +1,8 @@
 import type { App, TFile } from "obsidian"
-import { buildTimeline, fileParent, isUndated, type NotesGraph, type ParsedNode, type QueryExpr, type ResultNode } from "@mdtree/core"
+import { buildTimeline, fileParent, type NotesGraph, type ParsedNode, type QueryExpr, type ResultNode } from "@mdtree/core"
 import type { TreeNode } from "./SearchViewFlatten"
 
 export const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif"]
-
-// The first `YYYY-MM-DD` in a text line's own text. It takes precedence in the
-// indexer's age computation, so it is exactly the date the row shows.
-export function textSourceDate(node: ParsedNode): string | null {
-    if (node.nodeType !== "text") return null
-    return /\d{4}-\d{2}-\d{2}/.exec(node.searchKey)?.[0] ?? null
-}
-
-// Relative date label for a timeline row. `sourceDate` (the line's own date)
-// is used verbatim as the absolute date; otherwise it is rebuilt from
-// whole-day `ageDays`, which may be off by one near midnight across timezones.
-export function formatTimelineDate(ageDays: number, sourceDate: string | null): { label: string; absolute: string } | null {
-    if (isUndated(ageDays)) return null
-    const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    let absolute = sourceDate
-    if (absolute === null) {
-        const d = new Date(today)
-        d.setDate(d.getDate() - ageDays)
-        absolute = ymd(d)
-    }
-    // The index clamps future dates to age 0; show them verbatim, not "Today".
-    const label = absolute > ymd(today) ? absolute
-        : ageDays === 0 ? "Today"
-        : ageDays === 1 ? "Yesterday"
-        : ageDays < 7 ? `${ageDays}d ago`
-        : absolute
-    return { label, absolute }
-}
 
 // Drop the annotations that repeat the row's date from a text line's plain
 // text tokens: bare `date` occurrences and inline fields holding only that date

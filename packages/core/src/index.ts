@@ -49,6 +49,7 @@ export { describeQuerySyntax, type QuerySyntaxEntry, type QuerySyntaxGroup } fro
 export { flattenIndex, defaultVisibility, type TreeNode } from "./search/flatten.ts"
 export { buildTimeline, fileParent, type TimelineItem } from "./search/timeline.ts"
 export { pruneToRecency } from "./search/recency.ts"
+export { formatRelativeDate, textSourceDate } from "./search/relative-date.ts"
 export { reverseMarkdownParsing } from "./search/copy.ts"
 export { isArchived, partitionArchived } from "./search/archive.ts"
 export {

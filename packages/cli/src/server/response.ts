@@ -1,5 +1,5 @@
 import type { TreeNode, ParsedTextToken, ObsidianLinkToken } from "@mdtree/core"
-import { reverseMarkdownParsing, isArchived, isUndated } from "@mdtree/core"
+import { reverseMarkdownParsing, isArchived, formatRelativeDate, textSourceDate } from "@mdtree/core"
 
 // ── Response model (matches existing Raycast plugin contract) ─────────────────
 
@@ -300,7 +300,8 @@ export function createVaultResults(vault: string, results: TreeNode[], archivedC
     vault,
     results: results.map((result, index) => {
       const actions: RaycastAction[] = []
-      const title = renderTitle(result, actions, vault) + (isUndated(result.node.ageDays) ? "" : ` (${result.node.ageDays} days ago)`)
+      const date = formatRelativeDate(result.node.ageDays, textSourceDate(result.node))
+      const title = renderTitle(result, actions, vault) + (date ? ` (${date.label})` : "")
       return {
         title,
         level: result.indent,
