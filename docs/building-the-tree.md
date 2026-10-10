@@ -46,7 +46,8 @@ The key is `parent` by default. You can change it in [Settings](panes-and-integr
 A few rules decide what ends up in the tree:
 
 - **Only the leading outline is indexed.** Tree Search reads the bullets at the start of a note. The first line that is neither a bullet nor a heading ends the outline; blank lines don't. Put your bullets first and any prose after them.
-- **A bullet needs a link, a tag or a URL.** Plain bullets without `[[`, `#tag` or `http` are not indexed on their own.
+- **A bullet needs a link, a tag or a URL, unless it is a task.** Plain bullets without `[[`, `#tag` or `http` are not indexed on their own. Task lines (`- [ ] …`, `- [x] …`) are always indexed.
+- **Nested lines.** A line nested under another text line is a *subtask* (an open task) or *subtext* (anything else), and the line above it is a *list*. Find them with `is:subtask`, `is:subtext` and `is:list`. A bullet that is only a link (`- [[Note]]`) does not make its children nested.
 - **Aliases are searchable.** A note with `aliases: [Apollo]` is found when you search for `apollo`.
 - **Folders, canvases and attachments are indexed too.** Search for `is:folder` to see folders.
 - **Dates.** A line or note gets its date from a `YYYY-MM-DD` in the file name or the line itself. If there is none, Tree Search uses the frontmatter `updated` or `created` field, then your Daily Notes format.

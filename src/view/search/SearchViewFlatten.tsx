@@ -1,5 +1,5 @@
 import {useAtom, useAtomValue, useSetAtom} from "jotai";
-import {ParsedNode} from "@mdtree/core";
+import {type BlockLine, ParsedNode} from "@mdtree/core";
 import {useMolecule} from "bunshi/react";
 import {Platform} from "obsidian";
 import {SearchViewMolecule} from "../react-context/state";
@@ -11,6 +11,7 @@ import {RecencyFilterBar, TimelineRow} from "./SearchTimeline";
 import React, {useEffect, useMemo, useState} from "react";
 import {EditorMolecule} from "../editor/EditorMolecule";
 import {appendTargetAt, isEditableRow, type AppendTarget} from "../editor/row-editing";
+import {BlockMoreFooter} from "./BlockMore";
 
 export type TreeNode = {
     node: ParsedNode,
@@ -21,13 +22,15 @@ export type TreeNode = {
     index: number
     matched: boolean
     archived?: boolean
+    /** Hidden only because its list is compacted; a "+N more" footer reveals it. */
+    compacted?: boolean
     archiveRow?: boolean
-    timeline?: { breadcrumb: ParsedNode[]; pinned: boolean; ageDays: number }
+    timeline?: { breadcrumb: ParsedNode[]; pinned: boolean; ageDays: number; block?: BlockLine[] }
 }
 
 export const SearchViewFlatten = () => {
     const {searchViewStateAtom, incrementPagesAtom, timelineActiveAtom, recencyWindowAtom, rebuildResultsAtom, actualQueryAtom,
-        allowEditing, allowTimeline, hoveredLineAtom, selectedLineAtom, flashLineAtom} = useMolecule(SearchViewMolecule)
+        allowEditing, allowTimeline, hoveredLineAtom, selectedLineAtom, flashLineAtom, blockFootersAtom} = useMolecule(SearchViewMolecule)
     const {altHeldAtom, ownPathAtom} = useMolecule(EditorMolecule)
 
     const viewState = useAtomValue(searchViewStateAtom)
@@ -41,6 +44,7 @@ export const SearchViewFlatten = () => {
     const hovered = useAtomValue(hoveredLineAtom)
     const selected = useAtomValue(selectedLineAtom)
     const ownPath = useAtomValue(ownPathAtom)
+    const footers = useAtomValue(blockFootersAtom)
     const [pointerInList, setPointerInList] = useState(false)
 
     // Re-project the stored results when the mode (possibly flipped from another
@@ -116,7 +120,10 @@ export const SearchViewFlatten = () => {
                 <>
                     {rows.map((tree, index) => timelineActive
                         ? <TimelineRow node={tree} key={`${index}`} {...rowProps(tree, index)}/>
-                        : <SearchTreeNode node={tree} key={`${index}`} {...rowProps(tree, index)}/>
+                        : <React.Fragment key={`${index}`}>
+                            <SearchTreeNode node={tree} {...rowProps(tree, index)}/>
+                            {(footers.get(tree.index) ?? []).map((f, j) => <BlockMoreFooter key={j} footer={f}/>)}
+                        </React.Fragment>
                     )}
                     {viewState.searchResults.hasMore && (
                         <div className="flex justify-center items-center py-4">

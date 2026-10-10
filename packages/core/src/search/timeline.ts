@@ -4,6 +4,7 @@ import { getKey, linkTargetKeys, type NotesGraph } from "../graph/graph.ts"
 import { containsEmoji, isUndated, UNDATED_AGE } from "../graph/boost.ts"
 import { matchQuery, nodeMatchesQuery, type QueryExpr } from "./query.ts"
 import { compareOpenTasks, isOpenTask } from "./task-order.ts"
+import { compactChildren, compareSiblings } from "./flatten.ts"
 
 export type TimelineItem = {
   node: ParsedNode
@@ -11,6 +12,29 @@ export type TimelineItem = {
   pinned: boolean            // emoji-boosted (containsEmoji(searchKey))
   archived: boolean          // ResultNode.effectiveArchived ?? false
   ageDays: number            // node.ageDays, or the fallback's age when undated
+  block?: BlockLine[]        // the block root's lines (pre-order, depth 1 = direct child) when node is a block root
+}
+
+export type BlockLine = { node: ParsedNode; depth: number; matched: boolean; preview: boolean }
+
+/** Lines under a block root, descending only through text nodes, siblings in compareSiblings order. `matched` =
+ *  target === undefined || matchQuery(node, target). `preview` = parent line previewed (depth 1: true) and kept by
+ *  compactChildren over its siblings' brightness (matched or any matched descendant line). */
+function blockLines(root: ResultNode, target: QueryExpr | undefined): BlockLine[] {
+  const lines: BlockLine[] = []
+  const matches = (n: ParsedNode) => target === undefined || matchQuery(n, target)
+  const bright = (r: ResultNode): boolean => matches(r.node) || (r.node.nodeType === "text" && r.children.some(bright))
+  const walk = (r: ResultNode, depth: number, previewed: boolean): void => {
+    const kids = [...r.children].sort(compareSiblings)
+    const keep = compactChildren(kids.map(bright))
+    kids.forEach((k, i) => {
+      const preview = previewed && keep[i]
+      lines.push({ node: k.node, depth, matched: matches(k.node), preview })
+      if (k.node.nodeType === "text") walk(k, depth + 1, preview)
+    })
+  }
+  walk(root, 1, true)
+  return lines
 }
 
 // Flat, date-ordered projection of a search result tree. Items are the nodes
@@ -32,33 +56,47 @@ export function buildTimeline(
   const items = new Map<string, TimelineItem>()
   const ancestors: ParsedNode[] = []
 
-  const visit = (r: ResultNode): void => {
+  // A hit inside a list block (a text line with `list`, and the text lines below it) is shown as one item: the
+  // block root with its lines (BlockLine). `depth` is ancestors.length when the block root was entered.
+  type Block = { r: ResultNode; depth: number }
+  const visit = (r: ResultNode, block: Block | null): void => {
     const node = r.node
+    const here = block ?? (node.nodeType === "text" && node.list ? { r, depth: ancestors.length } : null)
     const hit = target === undefined || matchQuery(node, target)
     if (hit && node.nodeType !== "pointer") {
-      const pinned = containsEmoji(node.searchKey)
-      const ageDays = isUndated(node.ageDays) ? (fallbackAgeDays?.(node) ?? UNDATED_AGE) : node.ageDays
+      const item = here?.r ?? r
+      const shown = item.node
+      const pinned = containsEmoji(shown.searchKey)
+      const ageDays = isUndated(shown.ageDays) ? (fallbackAgeDays?.(shown) ?? UNDATED_AGE) : shown.ageDays
       if (windowDays === null ? pinned || !isUndated(ageDays) : ageDays <= windowDays) {
-        const breadcrumb = ancestors.filter(a => a.nodeType !== "pointer" && nodeMatchesQuery(a, stages))
-        const key = getKey(node)
+        const breadcrumb = ancestors
+          .slice(0, here?.depth ?? ancestors.length)
+          .filter(a => a.nodeType !== "pointer" && nodeMatchesQuery(a, stages))
+        const key = getKey(shown)
         const existing = items.get(key)
+        const archived = item.effectiveArchived ?? false
         if (existing === undefined) {
-          items.set(key, { node, breadcrumb, pinned, archived: r.effectiveArchived ?? false, ageDays })
+          items.set(key, {
+            node: shown, breadcrumb, pinned, archived, ageDays,
+            ...(here ? { block: blockLines(here.r, target) } : {}),
+          })
         } else if (breadcrumb.length > existing.breadcrumb.length) {
-          existing.node = node
+          existing.node = shown
           existing.breadcrumb = breadcrumb
-          existing.archived = r.effectiveArchived ?? false
+          existing.archived = archived
           existing.ageDays = ageDays
+          if (here) existing.block = blockLines(here.r, target)
+          else delete existing.block
         }
       }
     }
     if (r.children.length === 0) return
     ancestors.push(node)
-    for (const child of r.children) visit(child)
+    for (const child of r.children) visit(child, node.nodeType === "text" ? here : null)
     ancestors.pop()
   }
 
-  for (const r of results) visit(r)
+  for (const r of results) visit(r, null)
 
   // Pinned first; then open tasks oldest first (overdue before future); then the rest newest first.
   return [...items.values()].sort((a, b) =>

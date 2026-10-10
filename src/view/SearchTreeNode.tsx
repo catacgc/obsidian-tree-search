@@ -207,7 +207,7 @@ const BulletOrTask = ({indent, node, interactive}: BulletOrTaskProps) => {
     </span>;
 };
 
-const GuideLines = ({indent}: { indent: number }) => {
+export const GuideLines = ({indent}: { indent: number }) => {
     if (indent === 1) return <></>;
 
     // Create guide lines for all levels up to current indent

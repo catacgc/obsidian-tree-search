@@ -5,4 +5,11 @@
 .ts-timeline-chip { padding: 2px 10px; border-radius: 999px; border: 1px solid var(--background-modifier-border); font-size: var(--font-ui-smaller); color: var(--text-muted); cursor: pointer; user-select: none; }
 .ts-timeline-chip:hover { color: var(--text-accent); }
 .ts-timeline-chip.is-active { background-color: var(--interactive-accent); border-color: var(--interactive-accent); color: var(--text-on-accent); }
+.ts-timeline-filters-sep { align-self: center; color: var(--text-faint); font-size: var(--font-ui-smaller); user-select: none; }
+.ts-block-lines { margin-top: 2px; font-size: var(--font-ui-small); }
+.ts-block-line { display: flex; align-items: center; gap: 6px; }
+.ts-block-line .ts-row-date { margin-left: auto; }
+.ts-block-more { font-size: var(--font-ui-smaller); color: var(--text-muted); cursor: pointer; user-select: none; }
+.ts-block-more:hover { color: var(--text-accent); }
+.ts-block-more-line { display: flex; align-items: center; }
 .ts-timeline-empty { padding: 16px; font-size: var(--font-ui-small); color: var(--text-muted); }

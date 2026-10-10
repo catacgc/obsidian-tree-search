@@ -79,6 +79,14 @@ describe("editorHints", () => {
     expect(editorHints({ ...base, mode: "edit", editKind: "list", outline: "## H" })[0].blocking).toBe(true)
   })
 
+  it("flags a plain edit line only when it is not a task", () => {
+    const plain = "Plain bullets aren't indexed — they won't appear in results"
+    const texts = (linePrefix: string) =>
+      editorHints({ ...base, mode: "edit", editKind: "list", outline: "buy milk", linePrefix }).map(h => h.text)
+    expect(texts("- [ ] ")).not.toContain(plain)
+    expect(texts("- ")).toContain(plain)
+  })
+
   it("reports an ambiguous attachment", () => {
     const hints = editorHints({ ...base, outline: "- [[P]]", attachmentError: { ambiguous: "x.png" } })
     expect(hints[0]).toEqual({

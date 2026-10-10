@@ -33,7 +33,7 @@ function attachment(searchKey: string): ParsedNode {
   }
 }
 
-function text(searchKey: string, opts: { isTask?: boolean; isCompleted?: boolean; hasLink?: boolean; hasHeaderLink?: boolean } = {}): ParsedNode {
+function text(searchKey: string, opts: { isTask?: boolean; isCompleted?: boolean; hasLink?: boolean; hasHeaderLink?: boolean; nested?: true; list?: true } = {}): ParsedNode {
   return {
     nodeType: "text", searchKey, location: baseLocation, boost: 0, ageDays: 0,
     parsedTokens: opts.hasHeaderLink
@@ -42,6 +42,8 @@ function text(searchKey: string, opts: { isTask?: boolean; isCompleted?: boolean
       ? [{ tokenType: "obsidian_link", source: searchKey, pageTarget: searchKey }]
       : [{ tokenType: "text", text: searchKey, decoration: "none" }],
     tags: [], isTask: opts.isTask ?? false, isCompleted: opts.isCompleted ?? false,
+    ...(opts.nested ? { nested: true } : {}),
+    ...(opts.list ? { list: true } : {}),
   }
 }
 
@@ -174,6 +176,19 @@ describe("matchQuery", () => {
     expect(matchQuery(text("buy milk"), expr)).toBe(false)
   })
 
+  it("is:subtask / is:subtext / is:list narrow by nesting", () => {
+    const is = (value: string): QueryExpr => ({ type: "modifier", field: "is", value })
+    const sub = text("call", { isTask: true, nested: true })
+    const note = text("note", { nested: true })
+    const top = text("top", { isTask: true, list: true })
+    const doneSub = text("done", { isTask: true, isCompleted: true, nested: true })
+    expect([sub, note, top, doneSub].map(n => matchQuery(n, is("subtask")))).toEqual([true, false, false, false])
+    expect([sub, note, top, doneSub].map(n => matchQuery(n, is("subtext")))).toEqual([false, true, false, false])
+    expect([sub, note, top, doneSub].map(n => matchQuery(n, is("list")))).toEqual([false, false, true, false])
+    expect(matchQuery(sub, is("task"))).toBe(true)
+    expect(parseQuery(":list", ".")).toEqual(parseQuery("is:list", "."))
+  })
+
   it("is:completed matches only completed task-flagged text nodes", () => {
     const expr: QueryExpr = { type: "modifier", field: "is", value: "completed" }
     expect(matchQuery(text("buy milk", { isTask: true, isCompleted: true }), expr)).toBe(true)
@@ -216,6 +231,8 @@ describe("matchQuery", () => {
       const matchesSomething =
         matchQuery(page("x"), expr) || matchQuery(header("x"), expr) ||
         matchQuery(text("x", { isTask: true }), expr) || matchQuery(text("x"), expr) ||
+        matchQuery(text("x", { isTask: true, nested: true }), expr) || matchQuery(text("x", { nested: true }), expr) ||
+        matchQuery(text("x", { list: true }), expr) ||
         matchQuery(text("x", { isTask: true, isCompleted: true }), expr) ||
         matchQuery(folder("x"), expr) || matchQuery(attachment("x"), expr) ||
         matchQuery({ ...page("x"), ageDays: UNDATED_AGE }, expr) ||

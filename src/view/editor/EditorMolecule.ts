@@ -12,10 +12,12 @@ import {
     HEADER_RE,
     LIST_ITEM_RE,
     lineHasIdentity,
+    localIsoDate,
     NotesGraph,
     OUTLINE_KEY,
     parseOutline,
     resolveAttachmentEmbeds,
+    scheduleUnscheduledTasks,
     splitEditableLine,
     StaleLineError,
     type EditorHint,
@@ -53,6 +55,8 @@ export type EditorState = {
     originalLine?: string
     linePrefix?: string
     editKind?: "list" | "heading"
+    /** Alt-Edit of a nested line (TextNode.nested): no default schedule. */
+    nested?: boolean
     outline: string
     contents: Record<string, string>
     contentOrder: string[]
@@ -84,6 +88,7 @@ export function editorHintsFor(app: App, s: EditorState): EditorHint[] {
     return editorHints({
         mode: s.mode,
         editKind: s.editKind,
+        linePrefix: s.linePrefix,
         parentName: s.mode === "append" ? s.parentName ?? "" : basenameOf(s.sourcePath),
         outline: s.outline,
         contents: s.contents,
@@ -186,6 +191,7 @@ export const EditorMolecule = molecule((mol, scope) => {
             linePrefix: split.prefix,
             editKind: isList ? "list" : "heading",
             outline: split.text,
+            nested: row.node.nodeType === "text" && row.node.nested === true,
             caret: split.text.length,
         }})
     })
@@ -226,6 +232,7 @@ export const EditorMolecule = molecule((mol, scope) => {
         const cfg = dailyConfigOf(index)
         const exists = (name: string) => !!app.metadataCache.getFirstLinkpathDest(name, "")
         let appended: {path: string; line: number} | null = null
+        const today = localIsoDate(new Date())
         try {
             if (!s.doneSteps.includes("attachments")) {
                 const plan = resolveAttachmentEmbeds({[OUTLINE_KEY]: s.outline, ...s.contents}, s.attachments, exists)
@@ -244,12 +251,13 @@ export const EditorMolecule = molecule((mol, scope) => {
             }
 
             if (s.mode === "append" && !s.doneSteps.includes("outline")) {
-                const {file, line} = await appendToDailyNote(app, parseOutline(s.outline).lines, cfg)
+                const {file, line} = await appendToDailyNote(app, parseOutline(scheduleUnscheduledTasks(s.outline, today)).lines, cfg)
                 if (line !== null) appended = {path: file.path, line}
                 commit({touchedPaths: [...s.touchedPaths, file.path], doneSteps: [...s.doneSteps, "outline"]})
             }
             if (s.mode === "edit" && !s.doneSteps.includes("line")) {
-                const newLine = (s.linePrefix ?? "") + s.outline.replace(/\r?\n/g, " ").trimEnd()
+                const line = (s.linePrefix ?? "") + s.outline.replace(/\r?\n/g, " ").trimEnd()
+                const newLine = s.nested ? line : scheduleUnscheduledTasks(line, today)
                 const files = await editLine(app, s.sourcePath, s.line ?? 0, s.originalLine ?? "", newLine)
                 commit({touchedPaths: [...s.touchedPaths, ...files.map(f => f.path)], doneSteps: [...s.doneSteps, "line"]})
             }
@@ -307,15 +315,20 @@ export const EditorMolecule = molecule((mol, scope) => {
         }
     })
 
-    /** Checkbox / Task panel action on a task row: rewrites its line, then reindexes, keeping the row selected. */
-    const editTaskAtom = atom(null, async (get, set, node: ParsedNode, change: TaskChange) => {
+    /** Checkbox / Task panel action on a task row: rewrites its line, then reindexes, keeping `anchor` (the row
+     *  showing the task; the task itself unless it is a line of a timeline block) selected. */
+    const editTaskAtom = atom(null, async (get, set, node: ParsedNode, change: TaskChange, anchor: ParsedNode = node) => {
         if (node.nodeType !== "text" || !node.isTask) return
         const app = get(GlobalAtoms.appAtom)
         const index = get(GlobalAtoms.indexAtom)
-        const {path, position: {start: {line}}} = node.location
+        const path = node.location.path
         try {
             const touched = await editTaskLine(app, node, change)
-            set(GlobalAtoms.pendingSelectAtom, {view: scp.name, targets: [{path, line}], flash: false})
+            set(GlobalAtoms.pendingSelectAtom, {
+                view: scp.name,
+                targets: [{path: anchor.location.path, line: anchor.location.position.start.line}],
+                flash: false,
+            })
             await refreshPaths(app, index, touched.map(f => f.path))
         } catch (err) {
             if (err instanceof StaleLineError) await markOutOfDate(app, index, path)

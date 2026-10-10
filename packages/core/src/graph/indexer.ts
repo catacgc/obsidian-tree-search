@@ -1,9 +1,10 @@
 import type { DvList, DvPage, HeaderNode, ParsedNode, ParsedTextToken, TextNode } from "./types.ts"
 import type { NotesGraph } from "./graph.ts"
 import { getKey } from "./graph.ts"
-import { calculateBoost, getAgeDays, ageDaysFromText } from "./boost.ts"
+import { calculateBoost, getAgeDays, ageDaysFromText, isUndated } from "./boost.ts"
 import { parseTokens, stripUrlQueryStrings } from "../parser/inline-tokens.ts"
 import { extractPageDate } from "../parser/frontmatter.ts"
+import { textSourceDate } from "../search/relative-date.ts"
 
 export type IndexSettings = {
   parentRelation: string // default: "parent"
@@ -29,6 +30,7 @@ function shouldSkip(lst: DvList): boolean {
     const header = lst.section.subpath.replace(/#/g, " ").trim()
     if (header.startsWith("--") && header.endsWith("--")) return true
   }
+  if (lst.task) return false
 
   if (lst.tags.length > 0) return false
 
@@ -219,6 +221,32 @@ function createHeadersNodes(graph: NotesGraph, pageRef: ParsedNode, page: DvPage
   }
 }
 
+// ── finishTextNode ────────────────────────────────────────────────────────────
+
+/** Sets `nested` (parent is a text line), `list` (has text children) and, when an open-task child (or a child that
+ *  itself inherited) carries a date earlier than its own scheduled date, or it has none, inherits that child's
+ *  `ageDays` + `inheritedDate`. Re-stores the node and returns the stored copy. */
+function finishTextNode(graph: NotesGraph, node: TextNode, parent: ParsedNode, kids: ParsedNode[]): TextNode {
+  const textKids = kids.filter((k): k is TextNode => k.nodeType === "text")
+  const next: TextNode = { ...node }
+  if (parent.nodeType === "text") next.nested = true
+  if (textKids.length > 0) next.list = true
+  const dated = textKids
+    .filter(k => (k.isTask && !k.isCompleted) || k.inheritedDate !== undefined)
+    .map(k => ({ age: k.ageDays, date: textSourceDate(k) }))
+    .filter((d): d is { age: number; date: string } => d.date !== null && !isUndated(d.age))
+  if (dated.length > 0) {
+    const earliest = dated.reduce((a, b) => (b.age > a.age ? b : a))
+    if (textSourceDate(node) === null || earliest.age > node.ageDays) {
+      next.ageDays = earliest.age
+      next.inheritedDate = earliest.date
+      next.boost = calculateBoost("text", next.searchKey, earliest.age)
+    }
+  }
+  graph.addOrUpdateNode(next)
+  return next
+}
+
 // ── indexSinglePage ───────────────────────────────────────────────────────────
 
 export function indexSinglePage(
@@ -278,7 +306,8 @@ export function indexSinglePage(
 
   const lineArchiveTag = "#" + settings.archiveTag
 
-  function createSubtree(parent: ParsedNode, children: DvList[]): void {
+  function createSubtree(parent: ParsedNode, children: DvList[]): ParsedNode[] {
+    const created: ParsedNode[] = []
     for (const child of children) {
       child.text = child.text.trim()
       if (shouldSkip(child)) continue
@@ -286,9 +315,11 @@ export function indexSinglePage(
       // whole page is archived (frontmatter tag); the directive form is detected
       // from tokens inside createNodeFromText.
       const forceArchived = isArchivedPage || child.tags.includes(lineArchiveTag)
-      const created = createTreeFromTextLine(graph, parent, page, child, ageDays, parseTokensFn, forceArchived)
-      createSubtree(created, child.children)
+      const node = createTreeFromTextLine(graph, parent, page, child, ageDays, parseTokensFn, forceArchived)
+      const kids = createSubtree(node, child.children)
+      created.push(node.nodeType === "text" ? finishTextNode(graph, node, parent, kids) : node)
     }
+    return created
   }
 
   createSubtree(pageNode, page.file.lists.values.filter(it => it.parent === undefined))

@@ -24,7 +24,7 @@ const HEADING_TEXT_RE = /^#{1,6}\s+\S/
 const LINK_ONLY_RE = /^\[\[([^\]|#]+)(\|[^\]]*)?\]\]$/
 
 /** Leading-whitespace width, each tab counted as 4. */
-function indentWidth(line: string): number {
+export function indentWidth(line: string): number {
   let w = 0
   for (const ch of line) {
     if (ch === "\t") w += 4
@@ -83,7 +83,7 @@ export function parseOutline(input: string): { lines: OutlineLine[]; issues: Out
     lines.push({ depth, marker, text })
 
     if (HEADING_TEXT_RE.test(text)) issues.push({ kind: "heading", line: i })
-    else if (!text.includes("[[") && !text.includes("#") && !text.includes("http")) issues.push({ kind: "plain", line: i })
+    else if (marker === "- " && !text.includes("[[") && !text.includes("#") && !text.includes("http")) issues.push({ kind: "plain", line: i })
   }
   if (lines.length === 0) issues.push({ kind: "empty" })
   return { lines, issues }

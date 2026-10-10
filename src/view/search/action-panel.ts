@@ -87,6 +87,7 @@ export function panelItems(ctx: PanelContext): PanelItem[] {
         const task = (id: string, title: string, icon: PanelIcon, change: TaskChange) =>
             items.push({id: `task:${id}`, section: "task", title, icon, run: {kind: "task", change}})
         task("done", "Done", "done", {kind: "done", done: true})
+        task("today", "Today", "schedule", {kind: "schedule", when: "today"})
         task("tomorrow", "Tomorrow", "schedule", {kind: "schedule", when: "tomorrow"})
         task("weekend", "Weekend", "schedule", {kind: "schedule", when: "weekend"})
         task("nextWeek", "Next Week", "schedule", {kind: "schedule", when: "nextWeek"})

@@ -13,7 +13,7 @@ export type QueryExpr =
   // `exact`: a quoted `outline:"name"` / `tree:"name"` (or `:daily`), matched whole rather than as a fragment.
   | { type: "modifier"; field: QueryModifierField; value: string; exact?: true }
 
-export const IS_VALUES = ["page", "header", "text", "folder", "attachment", "task", "completed", "undated", "archived"]
+export const IS_VALUES = ["page", "header", "text", "folder", "attachment", "task", "subtask", "subtext", "list", "completed", "undated", "archived"]
 export const HAS_VALUES = ["emoji", "link", "page"]
 
 // `outline:` target written by the `:daily` shortcut: today's daily note, which
@@ -62,6 +62,9 @@ const LEGACY_MODIFIERS: Record<string, { field: QueryModifierField; value: strin
   folder: { field: "is", value: "folder" },
   attachment: { field: "is", value: "attachment" },
   task: { field: "is", value: "task" },
+  subtask: { field: "is", value: "subtask" },
+  subtext: { field: "is", value: "subtext" },
+  list: { field: "is", value: "list" },
   completed: { field: "is", value: "completed" },
   archived: { field: "is", value: "archived" },
   emoji: { field: "has", value: "emoji" },
@@ -275,6 +278,9 @@ function matchModifier(attrs: ParsedNode, field: QueryModifierField, value: stri
       case "folder": return attrs.nodeType === "folder" || attrs.nodeType === "folderNote"
       case "attachment": return attrs.nodeType === "attachment"
       case "task": return attrs.nodeType === "text" && attrs.isTask === true && attrs.isCompleted !== true
+      case "subtask": return attrs.nodeType === "text" && attrs.isTask && !attrs.isCompleted && attrs.nested === true
+      case "subtext": return attrs.nodeType === "text" && !attrs.isTask && attrs.nested === true
+      case "list": return attrs.nodeType === "text" && attrs.list === true
       case "completed": return attrs.nodeType === "text" && attrs.isTask === true && attrs.isCompleted === true
       case "undated": return isUndated(attrs.ageDays)
       case "archived": return isArchived(attrs)

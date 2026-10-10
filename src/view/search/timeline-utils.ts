@@ -126,7 +126,7 @@ export function buildTimelineRows(app: App | null | undefined, graph: NotesGraph
             index: i,
             matched: true,
             archived: item.archived,
-            timeline: { breadcrumb: parent ? [parent] : item.breadcrumb, pinned: item.pinned, ageDays: item.ageDays }
+            timeline: { breadcrumb: parent ? [parent] : item.breadcrumb, pinned: item.pinned, ageDays: item.ageDays, block: item.block }
         }
     })
 }

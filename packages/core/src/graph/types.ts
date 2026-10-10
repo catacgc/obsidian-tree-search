@@ -41,6 +41,12 @@ export type TextNode = BaseNode & {
   tags: string[]
   isTask: boolean
   isCompleted: boolean
+  /** Its in-note parent is a text line: `is:subtask` (open task) / `is:subtext` (anything else). */
+  nested?: true
+  /** It has in-note text children: `is:list`. Search shows its children (compacted) and its block. */
+  list?: true
+  /** `YYYY-MM-DD` taken from its earliest-dated open subtask; `ageDays` then is that subtask's. */
+  inheritedDate?: string
 }
 
 export type FolderNode = BaseNode & {

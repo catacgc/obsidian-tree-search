@@ -1,7 +1,7 @@
-import React, {useEffect, useMemo, useRef} from "react";
+import React, {useEffect, useMemo, useRef, useState} from "react";
 import {useAtom, useAtomValue, useSetAtom} from "jotai";
 import {useMolecule} from "bunshi/react";
-import {formatRelativeDate, isUndated, textSourceDate} from "@mdtree/core";
+import {formatRelativeDate, isUndated, textSourceDate, type BlockLine} from "@mdtree/core";
 import {Pencil} from "lucide-react";
 import {GlobalAppMolecule, SearchViewMolecule, RECENCY_WINDOWS} from "../react-context/state";
 import {ActionsMolecule} from "../react-context/actions";
@@ -13,13 +13,26 @@ import {AppendDot} from "../editor/AppendDot";
 import type {AppendTarget} from "../editor/row-editing";
 import {useRowGestures} from "./row-gestures";
 import {TaskCheckbox} from "./TaskCheckbox";
+import {hasTaskFilter} from "./task-filter";
 
-// Recency chips (All / 7d / 30d / 1y), in Tree and Timeline mode. Filters the
-// results locally with `in:` semantics without touching the query. Divs, not
+/** Enter/Space handler for a div-button chip: runs `run`, keeping KeyComboWrapper's Enter (open selection) from
+ *  also firing. */
+const chipKeys = (run: () => void) => (ev: React.KeyboardEvent) => {
+    if (ev.key !== "Enter" && ev.key !== " ") return
+    ev.preventDefault()
+    ev.stopPropagation()
+    run()
+}
+
+// Recency chips (All / 7d / 30d / 1y), in Tree and Timeline mode, filter the
+// results locally with `in:` semantics without touching the query. After a
+// separator, the Tasks chip toggles `is:task` in the query. Divs, not
 // <button>s: Obsidian's button chrome breaks the layout (see SearchHelp's SyntaxRow).
 export const RecencyFilterBar = () => {
-    const {recencyWindowAtom} = useMolecule(SearchViewMolecule)
+    const {recencyWindowAtom, actualQueryAtom, toggleTaskFilterAtom} = useMolecule(SearchViewMolecule)
     const [recencyWindow, setRecencyWindow] = useAtom(recencyWindowAtom)
+    const query = useAtomValue(actualQueryAtom)
+    const toggleTasks = useSetAtom(toggleTaskFilterAtom)
 
     return <div className="ts-timeline-filters">
         {RECENCY_WINDOWS.map(w => <div
@@ -29,15 +42,11 @@ export const RecencyFilterBar = () => {
             className={`ts-timeline-chip ${recencyWindow === w ? "is-active" : ""}`}
             title={w === "all" ? "Any date" : `in:${w}`}
             onClick={() => setRecencyWindow(w)}
-            onKeyDown={ev => {
-                if (ev.key === "Enter" || ev.key === " ") {
-                    // Keep KeyComboWrapper's Enter (open selection) from also firing.
-                    ev.preventDefault()
-                    ev.stopPropagation()
-                    setRecencyWindow(w)
-                }
-            }}
+            onKeyDown={chipKeys(() => setRecencyWindow(w))}
         >{w === "all" ? "All" : w}</div>)}
+        <span className="ts-timeline-filters-sep" aria-hidden="true">|</span>
+        <div role="button" tabIndex={0} className={`ts-timeline-chip ${hasTaskFilter(query) ? "is-active" : ""}`}
+             title="is:task" onClick={() => toggleTasks()} onKeyDown={chipKeys(toggleTasks)}>Tasks</div>
     </div>
 }
 
@@ -99,6 +108,11 @@ export const TimelineRow = ({node, editable, appendDot, editHint}: TimelineRowPr
     const crumbs = timelineCrumbs(node)
     const thumb = useMemo(() => app ? resolveThumbnail(app, node.node) : null, [app, node.node])
     const highlighted = selectedLine === node.index ? "highlight" : ""
+    // Block item (a hit inside a list): its lines, compacted until "+N more" is clicked.
+    const block = node.timeline?.block ?? []
+    const hiddenLines = block.filter(l => !l.preview).length
+    const [blockOpen, setBlockOpen] = useState(false)
+    useEffect(() => setBlockOpen(false), [node.node])
 
     return <div className="tree-node" onMouseMove={handleMouseMove} onMouseOver={handleMouseOver} onClick={handleClick} {...editGestures}>
         <div ref={nodeRef}
@@ -110,11 +124,34 @@ export const TimelineRow = ({node, editable, appendDot, editHint}: TimelineRowPr
                 {crumbs.length > 0 && <div className="ts-timeline-breadcrumb">
                     {crumbs.map((c, i) => <React.Fragment key={i}>{i > 0 && " > "}{highlightText(c, matchTerms)}</React.Fragment>)}
                 </div>}
+                {block.length > 0 && <div className="ts-block-lines">
+                    {(blockOpen ? block : block.filter(l => l.preview)).map((l, i) =>
+                        <TimelineBlockLine key={i} line={l} anchor={node.node} matchTerms={matchTerms}/>)}
+                    {!blockOpen && hiddenLines > 0 && <div role="button" tabIndex={0} className="ts-block-more"
+                        onClick={ev => {
+                            ev.stopPropagation()
+                            setBlockOpen(true)
+                        }}
+                        onKeyDown={chipKeys(() => setBlockOpen(true))}>+{hiddenLines} more</div>}
+                </div>}
             </div>
             {thumb && <img className="ts-row-thumb" src={thumb} alt="" loading="lazy"/>}
             {date && <span className="ts-row-date" title={fromFile ? `${date.absolute} · file created` : date.absolute}>{date.label}</span>}
         </div>
         {appendDot && <AppendDot target={appendDot}/>}
         {editHint && <Pencil size={12} className="ts-edit-hint"/>}
+    </div>
+}
+
+/** One line of a timeline block row: checkbox or bullet, text, date; dimmed when it does not match. Clicking its text
+ *  bubbles to the row (select / open the block root); the checkbox keeps the row selected. */
+const TimelineBlockLine = ({line, anchor, matchTerms}: {line: BlockLine; anchor: TreeNode["node"]; matchTerms: string[]}) => {
+    const sourceDate = textSourceDate(line.node)
+    const date = sourceDate !== null ? formatRelativeDate(line.node.ageDays, sourceDate) : null
+    const task = line.node.nodeType === "text" && line.node.isTask
+    return <div className={`ts-block-line ${line.matched ? "" : "ts-node-dim"}`} style={{paddingLeft: `${(line.depth - 1) * 16}px`}}>
+        {task ? <TaskCheckbox node={line.node} interactive anchor={anchor}/> : <span className="ts-list-bullet">-</span>}
+        <BaseNodeRender node={line.node} matchTerms={matchTerms}/>
+        {date && <span className="ts-row-date" title={date.absolute}>{date.label}</span>}
     </div>
 }

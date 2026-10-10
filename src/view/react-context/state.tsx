@@ -1,7 +1,8 @@
 import {TreeNode} from '../search/SearchViewFlatten'
-import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, linkTargetTree, type QueryExpr, partitionArchived, extractArchiveReveal, suggestAt, type Suggestion, parseDuration, flattenIndex, defaultVisibility, pruneToRecency} from '@mdtree/core'
+import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, linkTargetTree, type QueryExpr, partitionArchived, extractArchiveReveal, suggestAt, type Suggestion, parseDuration, flattenIndex, defaultVisibility, blockFooters, pruneToRecency} from '@mdtree/core'
 import {atom, useAtomValue, type Getter, type Setter} from 'jotai'
 import {findTargetRow, revealRow, type RowTarget} from '../search/select-target'
+import {toggleTaskFilter} from '../search/task-filter'
 import {buildTimelineRows} from '../search/timeline-utils'
 
 type SearchQuery = { query: string; file?: string; heading?: string }
@@ -419,6 +420,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
 
             if (!childVisible && treeNodes[i].indent == nodeToExpand.indent + 1) {
                 treeNodes[i].visible = !childVisible
+                treeNodes[i].compacted = false
             } else {
                 treeNodes[i].visible = false
             }
@@ -461,8 +463,23 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         const level = get(getExpandLevel)
         const treeNodes = get(treeNodesAtom)
         const visible = defaultVisibility(treeNodes, level)
-        const newNodes = treeNodes.map((it, i) => ({ ...it, visible: visible[i] }))
+        const newNodes = treeNodes.map((it, i) => ({ ...it, visible: visible[i].visible, compacted: visible[i].compacted }))
         set(treeNodesAtom, newNodes)
+    })
+
+    /** "+N more" footers of the tree's compacted lists (blockFooters). */
+    const blockFootersAtom = atom(get => blockFooters(get(treeNodesAtom)))
+
+    /** Reveals the compacted direct children of the list row with `index` listIndex. */
+    const showCompactedAtom = atom(null, (get, set, listIndex: number) => {
+        const rows = [...get(treeNodesAtom)]
+        const start = rows.findIndex(it => it.index === listIndex)
+        if (start === -1) return
+        const indent = rows[start].indent
+        for (let i = start + 1; i < rows.length && rows[i].indent > indent; i++) {
+            if (rows[i].indent === indent + 1 && rows[i].compacted) rows[i] = {...rows[i], visible: true, compacted: false}
+        }
+        set(treeNodesAtom, rows)
     })
 
     const resetCollapseAtom = atom(null, (get, set) => {
@@ -535,6 +552,13 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         set(focusSearchInputAtom, get(focusSearchInputAtom) + 1)
     })
 
+    /** Tasks chip: adds or removes `is:task` in the query (toggleTaskFilter). */
+    const toggleTaskFilterAtom = atom(null, (get, set) => {
+        const next = toggleTaskFilter(get(searchQueryAtom).query)
+        set(searchQueryAtom, {query: next})
+        set(lastSearchAtom, {query: next})
+    })
+
     // Action panel (footer "Actions", ⌘K, mobile long-press). Bound to the row selected when it
     // opened, so selecting another row closes it without an effect racing the open.
     const actionPanelStateAtom = atom<{page: ActionPanelPage; line: number} | null>(null)
@@ -570,11 +594,12 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             searchPlaceholderAtom,
             setDefaultExpandLevelAtom,
             expandNodeAtom, selectedLineAtom, updateHoveredLineAtom, hoveredLineAtom,
+            blockFootersAtom, showCompactedAtom,
             matchTermsAtom,
             matchExprsAtom,
             cursorPosAtom, suggestionsAtom, suggestionIndexAtom, dismissSuggestionsAtom, resetSuggestionsAtom,
             repositionSuggestionsAtom,
-            focusSearchInputAtom, appendQueryTokenAtom,
+            focusSearchInputAtom, appendQueryTokenAtom, toggleTaskFilterAtom,
             timelineActiveAtom, toggleViewModeAtom, recencyWindowAtom, rebuildResultsAtom,
             actionPanelAtom, openActionPanelAtom, closeActionPanelAtom, toggleActionPanelAtom,
             allowTimeline: scp.allowTimeline,

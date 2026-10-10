@@ -1,7 +1,8 @@
-import { linkTargetKeys, type NotesGraph } from "../graph/graph.ts"
+import { getKey, linkTargetKeys, type NotesGraph } from "../graph/graph.ts"
 import type { EdgeEntry, ParsedNode } from "../graph/types.ts"
 import { firstPassInclude, matchQuery, parseQuery, extractArchiveReveal, extractScope, queryTargetsFolders, DAILY_NOTE, type ScopeTarget, type QueryExpr } from "./query.ts"
 import { partitionArchived } from "./archive.ts"
+import { fileParent } from "./timeline.ts"
 
 export type ResultNode = {
   node: ParsedNode
@@ -222,6 +223,37 @@ function filterDown(results: ResultNode[], search: QueryExpr[]): ResultNode[] {
   return filterDown(filtered, search.slice(1))
 }
 
+/** Key of the outermost text line above `node` in its own note (walking fileParent while the node is `nested`
+ *  and the parent is text), or null when `node` is not nested or no text parent is found. */
+function blockRootKey(graph: NotesGraph, node: ParsedNode): string | null {
+  let cur = node
+  for (let guard = 0; guard < 64 && cur.nodeType === "text" && cur.nested; guard++) {
+    const p = fileParent(graph, cur)
+    if (!p || p.nodeType !== "text") break
+    cur = p
+  }
+  return cur === node ? null : getKey(cur)
+}
+
+/** Nested lines are shown inside their outline block: a nested text result whose tree parent is not a text line
+ *  (a result root, or a child reached through a link) is replaced by its block root built with its whole subtree.
+ *  Siblings with the same key are kept once. */
+function liftToBlocks(graph: NotesGraph, nodes: ResultNode[], follow: EdgeFilter, parentIsText = false): ResultNode[] {
+  const out: ResultNode[] = []
+  const seen = new Set<string>()
+  for (const r of nodes) {
+    const rootKey = !parentIsText && r.node.nodeType === "text" && r.node.nested ? blockRootKey(graph, r.node) : null
+    const next = rootKey !== null
+      ? buildTree(rootKey, graph, new Map(), new Set(), follow)
+      : { ...r, children: liftToBlocks(graph, r.children, follow, r.node.nodeType === "text") }
+    const key = getKey(next.node)
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(next)
+  }
+  return out
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export function searchIndex(
@@ -261,7 +293,7 @@ export function searchIndex(
     roots.set(nodeKey, newNode)
   }
 
-  return filterDown(Array.from(roots.values()), expressions.slice(1)).sort(
+  return liftToBlocks(graph, filterDown(Array.from(roots.values()), expressions.slice(1)), follow).sort(
     (a, b) => b.children.length - a.children.length,
   )
 }

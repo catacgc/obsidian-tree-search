@@ -11,15 +11,15 @@ const META_ACTION_RE = /\(meta-action-[\w-]+::[^)]*\)/g
 const META_MDTREE_RE = /\(meta-mdtree::\s*\w+\)/g
 
 /** Lines that carry no graph-relevant information and should be skipped */
-function shouldSkip(text: string, archiveTag: string): boolean {
+function shouldSkip(text: string, archiveTag: string, isTask: boolean): boolean {
   if (text.includes(archiveTag)) return true
-  // skip pure prose: no links, tags, tasks, or URLs
+  if (isTask) return text === ""
+  // skip pure prose: no links, tags or URLs; tasks are always kept
   return (
     !text.includes("[[") &&
     !text.includes("![[") &&
     !text.includes("#") &&
-    !text.includes("http") &&
-    !text.includes("- [")
+    !text.includes("http")
   )
 }
 
@@ -158,7 +158,7 @@ export function scanMarkdown(
       tags.push(`#${m[1]}`)
     }
 
-    if ((rawText === text || text === "") && shouldSkip(text, "#" + archiveTag)) continue
+    if ((rawText === text || text === "") && shouldSkip(text, "#" + archiveTag, isTask)) continue
 
     // parent: pop stack entries with >= current indent
     while (indentStack.length > 0 && indentStack[indentStack.length - 1].indent >= indent) {

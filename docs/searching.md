@@ -30,7 +30,7 @@ This is how you narrow a big topic to the part you care about, without rememberi
 
 ## Recency
 
-The chips above the results limit them by date: **All**, **7d**, **30d** and **1y**. You can also press <kbd>Alt</kbd>+<kbd>1</kbd> to <kbd>Alt</kbd>+<kbd>4</kbd>.
+The chips above the results limit them by date: **All**, **7d**, **30d** and **1y**. You can also press <kbd>Alt</kbd>+<kbd>1</kbd> to <kbd>Alt</kbd>+<kbd>4</kbd>. After the `|`, the **Tasks** chip adds `is:task` to the query, or removes it when it is already there.
 
 In Tree mode, a recency chip prunes the tree to branches with recent activity.
 
@@ -38,6 +38,10 @@ Dated rows show how old they are on the right, in both Tree and Timeline mode: *
 
 ![Search results for apollo or hermes limited to the last 7 days](assets/screenshots/recency-tree.webp)
 *<code>apollo &#124; hermes</code> with **7d**: only the branches touched in the last week remain.*
+
+## Nested lines
+
+A match on a nested line shows its whole outline block: the outermost line above it in its note, with all the lines under it. Lines that don't match are dimmed. A line with 4 or more nested lines shows the first 3 plus every line that matches, and a **+N more** control shows the rest. In the Tree the block shows as rows; in the Timeline it shows inside one row.
 
 ## Timeline
 
@@ -58,14 +62,18 @@ Select a row and press <kbd>Cmd/Ctrl</kbd>+<kbd>K</kbd>, or click **Actions**, t
 
 Note rows add note actions, such as moving the note to a folder or consolidating notes into it. The panel also lists view actions (open the editor, switch to the Timeline, expand or collapse), and you can type to filter them.
 
-For an open task, a **Task** section adds **Done**, **Tomorrow**, **Weekend** (next Saturday) and **Next Week** (next Monday). See [Tasks](#tasks).
+For an open task, a **Task** section adds **Done**, **Today**, **Tomorrow**, **Weekend** (next Saturday) and **Next Week** (next Monday). See [Tasks](#tasks).
 
 ![The Actions panel for a selected row](assets/screenshots/action-panel.webp)
 *The Actions panel for "Kickoff with Alice and Bob".*
 
 ## Tasks
 
-Task lines (`- [ ] …`) show their checkbox in Tree and Timeline rows. Click it to complete the task in its note: the line becomes `- [x] …` and gets `[completion:: <today>]`. Click a completed task's checkbox to reopen it; its completion date is removed. The panel's **Tomorrow**, **Weekend** and **Next Week** set the task's `[scheduled:: <date>]`, replacing an existing scheduled date (`[scheduled:: …]`, `(scheduled:: …)` or `⏳ …`). These fields use the [Tasks](https://publish.obsidian.md/tasks/) plugin's Dataview format. Recurring tasks don't get a next occurrence. If the note changed since it was indexed, nothing is written and you see "This row's index is out of date".
+Task lines (`- [ ] …`) show their checkbox in Tree and Timeline rows. Click it to complete the task in its note: the line becomes `- [x] …` and gets `[completion:: <today>]`. Completing a task also completes the open tasks nested under it. Click a completed task's checkbox to reopen it; its completion date is removed, and its subtasks stay as they are. The panel's **Today**, **Tomorrow**, **Weekend** and **Next Week** set the task's `[scheduled:: <date>]`, replacing an existing scheduled date (`[scheduled:: …]`, `(scheduled:: …)` or `⏳ …`); its subtasks keep their own dates. These fields use the [Tasks](https://publish.obsidian.md/tasks/) plugin's Dataview format. Recurring tasks don't get a next occurrence. If the note changed since it was indexed, nothing is written and you see "This row's index is out of date".
+
+When you save an outline in the editor, or edit a single line, every open task without a scheduled date gets `[scheduled:: <today>]`. Subtasks (tasks nested under another line) don't.
+
+A task with open subtasks shows, and sorts by, the earliest date among its own scheduled date and its open subtasks' dates. The note itself is not changed.
 
 Open tasks sort oldest first, so overdue tasks come first and future ones last: in the Timeline, right after pinned items; in the Tree, before the other lines under the same parent. Undated open tasks come after the dated ones in the Tree. Completed tasks sort like any other line.
 

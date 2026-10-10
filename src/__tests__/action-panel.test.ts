@@ -65,11 +65,11 @@ describe("panelItems", () => {
         const task = (done: boolean) => rowsOf(row(page("Project X", "Project X.md"), 0),
             row({ ...text("call", "Project X.md", 3), isTask: true, isCompleted: done } as ParsedNode, 1))
         const open = ctx({ rows: task(false) })
-        expect(titles(open, "task")).toEqual(["Done", "Tomorrow", "Weekend", "Next Week"])
+        expect(titles(open, "task")).toEqual(["Done", "Today", "Tomorrow", "Weekend", "Next Week"])
         expect(panelItems(open).find(i => i.title === "Weekend")?.run).toEqual({ kind: "task", change: { kind: "schedule", when: "weekend" } })
         const sections = panelItems(open).map(i => i.section)
         expect(sections.indexOf("task")).toBeLessThan(sections.indexOf("edit"))
-        expect(titles(ctx({ rows: task(false), allowEditing: false, timelineActive: true }), "task")).toHaveLength(4)
+        expect(titles(ctx({ rows: task(false), allowEditing: false, timelineActive: true }), "task")).toHaveLength(5)
         expect(titles(ctx({ rows: task(true) }), "task")).toEqual([])
         expect(titles(ctx(), "task")).toEqual([])
     })

@@ -63,10 +63,12 @@ describe("scanMarkdown", () => {
       expect(lists[0].completed).toBe(false)
     })
 
-    it("skips pure-prose task items (no links or tags)", () => {
-      // shouldSkip evaluates text AFTER stripping the task marker, so plain prose tasks are dropped
+    it("keeps plain-text tasks", () => {
       const { lists } = scan("- [ ] plain task text")
-      expect(lists).toHaveLength(0)
+      expect(lists).toHaveLength(1)
+      expect(lists[0].task).toBe(true)
+      expect(scan("- [ ] ").lists).toHaveLength(0)
+      expect(scan("- [ ] call #archive").lists).toHaveLength(0)
     })
 
     it("detects completed tasks", () => {

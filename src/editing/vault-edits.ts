@@ -7,6 +7,7 @@ import type {App, TFile} from "obsidian"
 import {moment, normalizePath} from "obsidian"
 import {
     appendContent,
+    applyTaskEdit,
     appendOutline,
     firstAppendedLine,
     cutSubtree,
@@ -16,8 +17,6 @@ import {
     pasteUnderLinkBullet,
     replaceLineText,
     rescheduleDate,
-    scheduleTask,
-    setTaskDone,
     splitLines,
     StaleLineError,
     type AttachmentPlan,
@@ -25,6 +24,7 @@ import {
     type RescheduleKind,
     type SessionAttachment,
     type TextNode,
+    type TaskLineEdit,
 } from "@mdtree/core"
 import type {DailyNoteConfig} from "../indexing/indexed-tree"
 
@@ -143,17 +143,20 @@ export async function editLine(app: App, path: string, line: number, expectedLin
 
 export type TaskChange = { kind: "done"; done: boolean } | { kind: "schedule"; when: RescheduleKind }
 
-/** Completes/reopens or reschedules a task row's line (Tasks plugin Dataview fields). Throws StaleLineError, writing
- *  nothing, when the line at the row's location no longer is that task (open, for a reschedule). */
+/** Completes/reopens or reschedules a task row's line (Tasks plugin Dataview fields); completing also completes the
+ *  open tasks nested under it. Throws StaleLineError, writing nothing, when the line at the row's location no longer
+ *  is that task (open, for a reschedule). */
 export async function editTaskLine(app: App, node: TextNode, change: TaskChange, now: Date = new Date()): Promise<TFile[]> {
     const {path, position: {start: {line}}} = node.location
     const current = await readLine(app, path, line)
     if (current === null || !lineHasIdentity(current, node)) throw new StaleLineError()
-    const next = change.kind === "done"
-        ? setTaskDone(current, change.done, localIsoDate(now))
-        : scheduleTask(current, rescheduleDate(change.when, now))
-    if (next === null) throw new StaleLineError()
-    return editLine(app, path, line, current, next)
+    const edit: TaskLineEdit = change.kind === "done"
+        ? {kind: "done", done: change.done, today: localIsoDate(now)}
+        : {kind: "schedule", date: rescheduleDate(change.when, now)}
+    const file = app.vault.getFileByPath(path)
+    if (!file) throw new StaleLineError()
+    await app.vault.process(file, c => applyTaskEdit(c, line, current, edit))
+    return [file]
 }
 
 const linkName = (entry: string): string => (entry.match(/\[\[([^\]|#]+)/)?.[1] ?? entry).trim()

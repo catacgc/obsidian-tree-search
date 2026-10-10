@@ -160,6 +160,18 @@ describe("editTaskLine", () => {
         await expect(editTaskLine(app, task(5), { kind: "done", done: true }, MONDAY)).rejects.toBeInstanceOf(StaleLineError)
         expect(files.get("a.md")).toBe("- [ ] call [[Alice]]\n- call [[Bob]]\n")
     })
+
+    it("completing cascades to the open subtasks; scheduling touches only the line", async () => {
+        const content = "- [ ] p [[Bob]]\n    - [ ] sub\n- [ ] other\n"
+        const done = makeFakeApp({ "a.md": content })
+        await editTaskLine(done.app, task(0, "p [[bob]]"), { kind: "done", done: true }, MONDAY)
+        expect(done.files.get("a.md")).toBe(
+            "- [x] p [[Bob]] [completion:: 2026-10-05]\n    - [x] sub [completion:: 2026-10-05]\n- [ ] other\n",
+        )
+        const sched = makeFakeApp({ "a.md": content })
+        await editTaskLine(sched.app, task(0, "p [[bob]]"), { kind: "schedule", when: "today" }, MONDAY)
+        expect(sched.files.get("a.md")).toBe("- [ ] p [[Bob]] [scheduled:: 2026-10-05]\n    - [ ] sub\n- [ ] other\n")
+    })
 })
 
 describe("reparent", () => {

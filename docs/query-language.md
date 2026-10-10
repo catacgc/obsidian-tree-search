@@ -25,6 +25,9 @@ Matching is case-insensitive: `apollo` finds "Project Apollo".
 | `is:folder` | folders |
 | `is:attachment` | attachments |
 | `is:task` | open tasks |
+| `is:subtask` | open tasks nested under a line |
+| `is:subtext` | lines nested under a line |
+| `is:list` | lines with nested lines |
 | `is:completed` | completed tasks |
 | `is:undated` | no date |
 | `is:archived` | reveal archived (greyed) |
@@ -86,6 +89,9 @@ The stage separator is `.` by default. You can change it in [Settings](panes-and
 | `:folder` | folders |
 | `:attachment` | attachments |
 | `:task` | open tasks |
+| `:subtask` | nested open tasks |
+| `:subtext` | nested lines |
+| `:list` | lines with nested lines |
 | `:archived` | reveal archived (greyed) |
 | `:emoji` | has an emoji |
 | `:daily` | outline of today's daily note |

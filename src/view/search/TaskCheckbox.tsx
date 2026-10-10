@@ -6,8 +6,9 @@ import {EditorMolecule} from "../editor/EditorMolecule"
 const stop = (ev: React.SyntheticEvent) => ev.stopPropagation()
 
 /** A task row's checkbox (Tree and Timeline). Interactive: a click completes or reopens the task in its note
- *  (editTaskAtom) and nothing else: no select/open/expand, no drag. Null for non-task rows. */
-export function TaskCheckbox({node, interactive}: {node: ParsedNode; interactive: boolean}) {
+ *  (editTaskAtom) and nothing else: no select/open/expand, no drag. Null for non-task rows. `anchor`: the row kept
+ *  selected afterwards when it is not the task itself (a timeline block line's row). */
+export function TaskCheckbox({node, interactive, anchor}: {node: ParsedNode; interactive: boolean; anchor?: ParsedNode}) {
     const editTask = useSetAtom(useMolecule(EditorMolecule).editTaskAtom)
     if (node.nodeType !== "text" || !node.isTask) return null
     const done = node.isCompleted
@@ -18,6 +19,6 @@ export function TaskCheckbox({node, interactive}: {node: ParsedNode; interactive
                draggable={false}
                readOnly={!interactive}
                aria-label={interactive ? (done ? "Mark task not done" : "Mark task done") : undefined}
-               onChange={interactive ? () => void editTask(node, {kind: "done", done: !done}) : undefined}/>
+               onChange={interactive ? () => void editTask(node, {kind: "done", done: !done}, anchor) : undefined}/>
     </label>
 }

@@ -1,11 +1,12 @@
 import type { ParsedNode } from "../graph/types.ts"
 import { isUndated } from "../graph/boost.ts"
 
-// The first `YYYY-MM-DD` in a text line's own text. It takes precedence in the
+// The date a text row shows: the date inherited from its earliest-dated open
+// subtask, else the first `YYYY-MM-DD` in its own text. Either one sets the
 // indexer's age computation, so it is exactly the date the row shows.
 export function textSourceDate(node: ParsedNode): string | null {
   if (node.nodeType !== "text") return null
-  return /\d{4}-\d{2}-\d{2}/.exec(node.searchKey)?.[0] ?? null
+  return node.inheritedDate ?? /\d{4}-\d{2}-\d{2}/.exec(node.searchKey)?.[0] ?? null
 }
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]

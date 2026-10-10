@@ -22,6 +22,8 @@ export function editorHints(input: {
   editKind?: "list" | "heading"
   parentName: string
   outline: string
+  /** Edit mode: the edited line's marker prefix (indent, bullet, checkbox); default `- `. */
+  linePrefix?: string
   contents: Record<string, string>
   contentOrder: string[]
   noteExists: (name: string) => boolean
@@ -44,7 +46,7 @@ export function editorHints(input: {
   } else {
     if (outline.trim() === "") block("Empty — use Archive to remove the line")
     else if (HEADING_RE.test(outline.trim())) block(headingHint)
-    plain = input.editKind === "list" && !outline.includes("[[") && !outline.includes("#") && !outline.includes("http")
+    plain = input.editKind === "list" && parseOutline((input.linePrefix ?? "- ") + outline.replace(/\r?\n/g, " ")).issues.some(i => i.kind === "plain")
   }
 
   if (attachmentError) {

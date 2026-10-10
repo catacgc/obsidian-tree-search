@@ -1,5 +1,6 @@
 import { describe, it, expect } from "bun:test"
-import { setTaskDone, scheduleTask, rescheduleDate } from "../edit/task-edit.ts"
+import { setTaskDone, scheduleTask, rescheduleDate, scheduleUnscheduledTasks, applyTaskEdit } from "../edit/task-edit.ts"
+import { StaleLineError } from "../edit/outline-edit.ts"
 
 const TODAY = "2026-10-06"
 
@@ -54,6 +55,10 @@ describe("rescheduleDate", () => {
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
   const on = (i: number) => new Date(2026, 9, 5 + i, 23, 30)
 
+  it("Today is the local calendar day, even late in the evening", () => {
+    expect(rescheduleDate("today", on(0))).toBe("2026-10-05")
+  })
+
   it("Tomorrow is the next calendar day, across month ends", () => {
     expect(rescheduleDate("tomorrow", on(0))).toBe("2026-10-06")
     expect(rescheduleDate("tomorrow", new Date(2026, 11, 31, 9))).toBe("2027-01-01")
@@ -69,5 +74,49 @@ describe("rescheduleDate", () => {
     expect(days.map((_, i) => rescheduleDate("nextWeek", on(i)))).toEqual([
       "2026-10-12", "2026-10-12", "2026-10-12", "2026-10-12", "2026-10-12", "2026-10-12", "2026-10-12",
     ])
+  })
+})
+
+describe("scheduleUnscheduledTasks", () => {
+  const DAY = "2026-10-07"
+
+  it("schedules only open, non-empty, unscheduled tasks under a link root", () => {
+    const input = "- [[P]]\n    - [ ] call ^id\n    - [ ] a ⏳ 2026-10-01\n    - [x] done\n    - note\n    - [ ] "
+    const out = scheduleUnscheduledTasks(input, DAY).split("\n")
+    const lines = input.split("\n")
+    expect(out).toEqual([...lines.slice(0, 1), "    - [ ] call [scheduled:: 2026-10-07] ^id", ...lines.slice(2)])
+  })
+
+  it("leaves tasks nested under a text line unscheduled", () => {
+    expect(scheduleUnscheduledTasks("- [ ] parent\n    - [ ] child", DAY)).toBe("- [ ] parent [scheduled:: 2026-10-07]\n    - [ ] child")
+  })
+})
+
+describe("applyTaskEdit", () => {
+  const DAY = "2026-10-07"
+  const C = "- [[P]]\n   - [ ] parent\n      - [ ] a\n      - [x] b [completion:: 2026-10-01]\n      - note\n         - [ ] deep\n   - [ ] sibling\n"
+
+  it("completing a task completes its open nested tasks only", () => {
+    expect(applyTaskEdit(C, 1, "   - [ ] parent", { kind: "done", done: true, today: DAY })).toBe(
+      "- [[P]]\n   - [x] parent [completion:: 2026-10-07]\n      - [x] a [completion:: 2026-10-07]\n" +
+      "      - [x] b [completion:: 2026-10-01]\n      - note\n         - [x] deep [completion:: 2026-10-07]\n   - [ ] sibling\n",
+    )
+  })
+
+  it("scheduling and reopening touch only the head line", () => {
+    expect(applyTaskEdit(C, 1, "   - [ ] parent", { kind: "schedule", date: DAY })).toBe(
+      C.replace("   - [ ] parent\n", "   - [ ] parent [scheduled:: 2026-10-07]\n"),
+    )
+    const done = "- [x] p [completion:: 2026-10-01]\n    - [x] sub [completion:: 2026-10-01]\n"
+    expect(applyTaskEdit(done, 0, "- [x] p [completion:: 2026-10-01]", { kind: "done", done: false, today: DAY })).toBe(
+      "- [ ] p\n    - [x] sub [completion:: 2026-10-01]\n",
+    )
+  })
+
+  it("throws StaleLineError for a changed line and keeps CRLF", () => {
+    expect(() => applyTaskEdit(C, 1, "   - [ ] other", { kind: "done", done: true, today: DAY })).toThrow(StaleLineError)
+    expect(applyTaskEdit("- [ ] p\r\n    - [ ] s\r\n", 0, "- [ ] p", { kind: "done", done: true, today: DAY })).toBe(
+      "- [x] p [completion:: 2026-10-07]\r\n    - [x] s [completion:: 2026-10-07]\r\n",
+    )
   })
 })

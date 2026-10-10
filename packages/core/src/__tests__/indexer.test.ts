@@ -1,5 +1,6 @@
 import { describe, it, expect } from "bun:test"
 import { NotesGraph } from "../graph/graph.ts"
+import type { TextNode } from "../graph/types.ts"
 import { indexSinglePage, DEFAULT_SETTINGS } from "../graph/indexer.ts"
 import { parseVaultFile } from "../parser/vault-file.ts"
 import { searchIndex } from "../search/search.ts"
@@ -116,6 +117,43 @@ describe("indexSinglePage", () => {
       // The virtual page for Link has a parent edge from the header
       expect(g.hasEdge("note#section", "[[link]]")).toBe(true)
       expect(g.hasEdge("[[note]]", "[[link]]")).toBe(false)
+    })
+  })
+
+  describe("nesting: nested / list / inherited date", () => {
+    const textNode = (g: NotesGraph, key: string) => g.getNodeAttributes(key) as TextNode
+
+    it("flags nested lines and lists, and inherits the earliest open subtask date", () => {
+      const g = buildGraph(parse(
+        "- [[P]]\n   - [ ] parent [scheduled:: 2026-10-20]\n      - [ ] a [scheduled:: 2026-10-10]\n      - [x] b [scheduled:: 2026-10-01]\n      - c #x\n   - [ ] plain",
+        "n.md",
+      ))
+      const parent = textNode(g, "parent [scheduled:: 2026-10-20]")
+      const a = textNode(g, "a [scheduled:: 2026-10-10]")
+      expect(parent.list).toBe(true)
+      expect(parent.nested).toBeUndefined()
+      expect(parent.inheritedDate).toBe("2026-10-10")
+      expect(parent.ageDays).toBe(a.ageDays)
+      expect(a.nested).toBe(true)
+      const c = textNode(g, "c #x")
+      expect(c.nested).toBe(true)
+      expect(c.isTask).toBe(false)
+      const plain = textNode(g, "plain")
+      expect([plain.nested, plain.list, plain.inheritedDate]).toEqual([undefined, undefined, undefined])
+    })
+
+    it("an undated parent takes its dated open subtask's date", () => {
+      const g = buildGraph(parse("- [ ] parent\n    - [ ] sub [scheduled:: 2026-10-10]", "n.md"))
+      const parent = textNode(g, "parent")
+      expect(parent.inheritedDate).toBe("2026-10-10")
+      expect(parent.ageDays).toBe(textNode(g, "sub [scheduled:: 2026-10-10]").ageDays)
+    })
+
+    it("a parent dated earlier than its subtasks keeps its own date", () => {
+      const g = buildGraph(parse("- [ ] parent [scheduled:: 2026-10-01]\n    - [ ] sub [scheduled:: 2026-10-10]", "n.md"))
+      const parent = textNode(g, "parent [scheduled:: 2026-10-01]")
+      expect(parent.inheritedDate).toBeUndefined()
+      expect(parent.ageDays).toBeGreaterThan(textNode(g, "sub [scheduled:: 2026-10-10]").ageDays)
     })
   })
 
@@ -239,6 +277,13 @@ describe("search integration", () => {
     const g = buildGraph(parse("- [[UPPER CASE LINK]]", "note.md"))
     const results = searchIndex(g, "upper case link", ".")
     expect(results.length).toBeGreaterThan(0)
+  })
+
+  it("shows a nested match inside its outline block", () => {
+    const g = buildGraph(parse("- [[P]]\n   - [ ] parent\n      - [ ] alpha sub\n      - [ ] beta sub\n", "n.md"))
+    const results = searchIndex(g, "alpha", ".")
+    expect(results.map(r => r.node.searchKey)).toEqual(["parent"])
+    expect(results[0].children.map(c => c.node.searchKey)).toEqual(["alpha sub", "beta sub"])
   })
 })
 

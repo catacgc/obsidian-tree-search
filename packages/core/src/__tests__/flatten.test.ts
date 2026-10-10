@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test"
-import { flattenIndex, defaultVisibility } from "../search/flatten.ts"
+import { flattenIndex, defaultVisibility, compactChildren, blockFooters } from "../search/flatten.ts"
 import { parseQuery } from "../search/query.ts"
 import type { ResultNode } from "../search/search.ts"
 import type { ParsedNode } from "../graph/types.ts"
@@ -68,7 +68,32 @@ describe("flattenIndex greyed-out subtrees", () => {
   it("recomputes the same default when the expand level changes", () => {
     const tree = [node("foo hit", [node("context", [node("deep context")]), node("foo child")])]
     const flat = flattenIndex(tree, 0, parseQuery("foo", "."))
-    expect(defaultVisibility(flat, Infinity)).toEqual([true, true, false, true])
+    expect(defaultVisibility(flat, Infinity).map(v => v.visible)).toEqual([true, true, false, true])
+  })
+})
+
+describe("list compaction", () => {
+  it("compactChildren keeps all of a short list, else the first 3 plus every bright child", () => {
+    expect(compactChildren([false, false, false, false, true])).toEqual([true, true, true, false, true])
+    expect(compactChildren([false, false, false])).toEqual([true, true, true])
+  })
+
+  it("a matched list shows its first 3 children at level 0 and footers the compacted rest", () => {
+    const list: ResultNode = {
+      node: { ...text("foo list"), list: true } as ParsedNode,
+      children: ["c1", "c2", "c3", "c4", "c5"].map(k => node(k)),
+      parents: [],
+    }
+    const flat = flattenIndex([list], 0, parseQuery("foo", "."))
+    expect(defaultVisibility(flat, 0)).toEqual([
+      { visible: true, compacted: false },
+      { visible: true, compacted: false },
+      { visible: true, compacted: false },
+      { visible: true, compacted: false },
+      { visible: false, compacted: true },
+      { visible: false, compacted: true },
+    ])
+    expect([...blockFooters(flat)]).toEqual([[flat[3].index, [{ listIndex: flat[0].index, hidden: 2, indent: 1 }]]])
   })
 })
 

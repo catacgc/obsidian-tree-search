@@ -46,8 +46,18 @@ export { searchIndex, advancedSearch, searchParents, flattenTasks, pruneResultTr
 export { parseQuery, parseDuration, matchQuery, firstPassInclude, nodeMatchesQuery, collectModifiers, extractArchiveReveal, containsEmoji as queryContainsEmoji, type QueryExpr, type QueryModifierField } from "./search/query.ts"
 export { suggestAt, spliceSuggestion, type Suggestion } from "./search/suggest.ts"
 export { describeQuerySyntax, type QuerySyntaxEntry, type QuerySyntaxGroup } from "./search/syntax.ts"
-export { flattenIndex, defaultVisibility, type TreeNode } from "./search/flatten.ts"
-export { buildTimeline, fileParent, type TimelineItem } from "./search/timeline.ts"
+export {
+  flattenIndex,
+  defaultVisibility,
+  compactChildren,
+  compareSiblings,
+  blockFooters,
+  BLOCK_COMPACT_MIN,
+  type TreeNode,
+  type RowVisibility,
+  type BlockFooter,
+} from "./search/flatten.ts"
+export { buildTimeline, fileParent, type TimelineItem, type BlockLine } from "./search/timeline.ts"
 export { pruneToRecency } from "./search/recency.ts"
 export { formatRelativeDate, textSourceDate } from "./search/relative-date.ts"
 export { reverseMarkdownParsing } from "./search/copy.ts"
@@ -91,7 +101,16 @@ export {
   type OutlineLine,
   type OutlineIssue,
 } from "./edit/outline-edit.ts"
-export { setTaskDone, scheduleTask, rescheduleDate, localIsoDate, type RescheduleKind } from "./edit/task-edit.ts"
+export {
+  setTaskDone,
+  scheduleTask,
+  scheduleUnscheduledTasks,
+  applyTaskEdit,
+  rescheduleDate,
+  localIsoDate,
+  type RescheduleKind,
+  type TaskLineEdit,
+} from "./edit/task-edit.ts"
 export {
   slugify,
   attachmentKind,

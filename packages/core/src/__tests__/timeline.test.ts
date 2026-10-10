@@ -139,6 +139,19 @@ describe("buildTimeline", () => {
       "x overdue", "x today", "x due tomorrow", "x 2027", "x done", "x note new", "x note old",
     ])
   })
+
+  it("shows a hit inside a list as one block item with compacted preview lines", () => {
+    const listRoot: TextNode = { ...textNode("list root", 3), list: true }
+    const subs = ["sub one", "sub x two", "sub three", "sub four"].map(k => ({ ...textNode(k, 3), nested: true as const }))
+    const items = buildTimeline([rn(listRoot, subs.map(s => rn(s)))], parseQuery("x", "."))
+    expect(items.map(i => i.node)).toEqual([listRoot])
+    expect(items[0].block?.map(l => [l.node.searchKey, l.matched, l.preview])).toEqual([
+      ["sub one", false, true],
+      ["sub x two", true, true],
+      ["sub three", false, true],
+      ["sub four", false, false],
+    ])
+  })
 })
 
 describe("fileParent", () => {

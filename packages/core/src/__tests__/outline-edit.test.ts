@@ -241,12 +241,11 @@ describe("parseOutline / renderOutline", () => {
     expect(parseOutline("- \n   \n")).toEqual({ lines: [], issues: [{ kind: "empty" }] })
   })
 
-  it("flags headings and plain bullets (checkboxes included)", () => {
+  it("flags headings and plain bullets (tasks are not plain)", () => {
     const r = parseOutline("- ## H\n- buy milk\n- [ ] buy milk\n- [[ok]]\n- #tag\n- http://x")
     expect(r.issues).toEqual([
       { kind: "heading", line: 0 },
       { kind: "plain", line: 1 },
-      { kind: "plain", line: 2 },
     ])
     expect(r.lines[2]).toEqual({ depth: 0, marker: "- [ ] ", text: "buy milk" })
   })
