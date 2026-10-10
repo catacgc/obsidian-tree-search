@@ -1,24 +1,25 @@
-// The inline editor shared by Append and Alt-Edit (EDITOR.md §3): outline section, optional
-// content section, live preview and footer hints. Sits at the top of Quick Add, keyed by
-// session, with its link results (LinkResults: `[[` matches, else the parent's tree or the daily outline) filling the modal below it.
+// The inline editor shared by Append, Alt-Edit and prose (EDITOR.md §3): title, outline section, optional
+// content section, live preview and footer hints. Shown at the top of Quick Add and in place by the Search modal
+// and pane, keyed by session, with its link results (LinkResults: `[[` matches, else the parent's tree, the picked
+// line's note or the daily outline) filling the view below it.
 import React, {useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
-import {useAtomValue, useSetAtom} from "jotai";
+import {useAtomValue, useSetAtom, useStore} from "jotai";
 import {useMolecule} from "bunshi/react";
 import {htmlToMarkdown, Notice, Platform, Scope, type Modifier} from "obsidian";
 import {Brackets, ClipboardPaste, IndentDecrease, IndentIncrease, ListTodo, Paperclip} from "lucide-react";
-import {attachmentExt, attachmentKind, attachmentName, reverseMarkdownParsing} from "@mdtree/core";
+import {attachmentExt, attachmentKind, attachmentName, newLinkName, reverseMarkdownParsing} from "@mdtree/core";
 import {GlobalAtoms} from "../react-context/global";
 import {quickAddDefaultQuery, SearchViewMolecule} from "../react-context/state";
-import {leaveQuickAddAtom} from "../react-context/quick-add-flow";
 import {openFileByName} from "../../obsidian-utils";
 import {newNotePath, pasteAttachment, trashSessionAttachments} from "../../editing/vault-edits";
 import type {TreeNode} from "../search/SearchViewFlatten";
 import {EditorMolecule, editorHintsFor, isSaveBlocked, type EditorState} from "./EditorMolecule";
-import {basenameOf} from "./draft";
+import {basenameOf, editorTitle} from "./draft";
 import {LinkResults, useLinkSuggest, type LinkSuggestState} from "./LinkSuggest";
 import {MarkdownLine} from "./MarkdownLine";
 import {MarkdownField, type MarkdownFieldHandle} from "./MarkdownField";
 import {autoConvertHtml} from "./obsidian-editor";
+import {linkPasteEdit} from "./clipboard";
 import {
     acceptLink,
     ensureBullet,
@@ -31,12 +32,11 @@ import {
     outlineEnter,
     outlineIndent,
     outlineRepairs,
-    pasteLink,
     pasteOutline,
-    pastedUrl,
     toggleTask,
     wrapLink,
     wrapSelection,
+    type PasteData,
     type TextEdit,
 } from "./textarea-ops";
 
@@ -50,19 +50,6 @@ const ANY_MODIFIERS = null as unknown as Modifier[]
 /** Existing buffer key for `name` (links are case-insensitive), else `name`. */
 const bufferKey = (contents: Record<string, string>, name: string) =>
     Object.keys(contents).find(k => k.toLowerCase() === name.toLowerCase()) ?? name
-
-/** Text of the clipboard HTML's only `<a>` whose href is `url` (ignoring one trailing "/"), else "". */
-function clipboardLinkTitle(html: string, url: string): string {
-    const anchors = new DOMParser().parseFromString(html, "text/html").querySelectorAll("a[href]")
-    if (anchors.length !== 1) return ""
-    const strip = (s: string) => s.trim().replace(/\/$/, "")
-    if (strip(anchors[0].getAttribute("href")!) !== strip(url)) return ""
-    const t = (anchors[0].textContent ?? "").replace(/\s+/g, " ").trim()
-    return t === "" || strip(t) === strip(url) ? "" : t
-}
-
-/** What a paste carries: files (attachments), plain text and HTML. */
-type PasteData = { files: File[]; plain: string; html: string }
 
 /** The clipboard as paste data, for the toolbar's Paste. Non-text items become Files named "" (attachmentExt then
  *  takes the extension from the MIME type). Where `clipboard.read` is missing or denied, plain text only via
@@ -97,18 +84,25 @@ async function readClipboard(): Promise<PasteData> {
 }
 
 export function InlineEditor({state}: { state: EditorState }) {
-    const {updateEditorAtom, cancelEditorAtom, saveEditorAtom} = useMolecule(EditorMolecule)
+    const {updateEditorAtom, cancelEditorAtom, saveEditorAtom, closeEditorAtom, openProseAtom, pendingPasteAtom} = useMolecule(EditorMolecule)
+    const store = useStore()
     const update = useSetAtom(updateEditorAtom)
     const cancel = useSetAtom(cancelEditorAtom)
     const save = useSetAtom(saveEditorAtom)
     const app = useAtomValue(GlobalAtoms.appAtom)
-    const leave = useSetAtom(leaveQuickAddAtom)
-    const {searchQueryAtom, arrowDownAtom, arrowUpAtom, selectedNodeAtom, renderableTreeNodesAtom} = useMolecule(SearchViewMolecule)
+    const closeEditor = useSetAtom(closeEditorAtom)
+    const openProse = useSetAtom(openProseAtom)
+    const {searchQueryAtom, arrowDownAtom, arrowUpAtom, selectedNodeAtom, selectedLineAtom, renderableTreeNodesAtom, lastResultsAtom, searchModalTitleAtom} = useMolecule(SearchViewMolecule)
+    const hostTitle = useAtomValue(searchModalTitleAtom)
     const setQuery = useSetAtom(searchQueryAtom)
     const arrowDown = useSetAtom(arrowDownAtom)
     const arrowUp = useSetAtom(arrowUpAtom)
+    const selectLine = useSetAtom(selectedLineAtom)
     const picked = useAtomValue(selectedNodeAtom)
-    const rowCount = useAtomValue(renderableTreeNodesAtom).length
+    const rows = useAtomValue(renderableTreeNodesAtom)
+    const rowCount = rows.length
+    const targets = useAtomValue(lastResultsAtom).results
+    const graph = useAtomValue(GlobalAtoms.graphAtom)
 
     const rootRef = useRef<HTMLDivElement>(null)
     const outlineRef = useRef<MarkdownFieldHandle | null>(null)
@@ -126,6 +120,10 @@ export function InlineEditor({state}: { state: EditorState }) {
     const [contentCaret, setContentCaret] = useState(0)
 
     const append = state.mode === "append"
+    /** Prose mode: the whole note as Markdown; keys, paste and links behave as in a content section. */
+    const prose = state.mode === "prose"
+    /** Rename of an attachment: the outline holds its new name; no pastes of files, links or preview. */
+    const renaming = state.editKind === "file"
     const parentName = state.parentName ?? ""
     const active = state.activeContent
     const contentText = active !== null ? state.contents[active] ?? "" : ""
@@ -133,7 +131,7 @@ export function InlineEditor({state}: { state: EditorState }) {
     const outlineSuggest = useLinkSuggest(state.outline, state.caret, focused === "outline")
     const contentSuggest = useLinkSuggest(contentText, contentCaret, focused === "content" && active !== null)
 
-    const hintDeps = [app, state.outline, state.contents, state.contentOrder, state.attachments, state.mode, state.editKind, state.parentName]
+    const hintDeps = [app, state.outline, state.contents, state.contentOrder, state.attachments, state.mode, state.editKind, state.parentName, state.prose, state.proseConfirmed]
     const hints = useMemo(() => editorHintsFor(app, state), hintDeps)
     const blocked = useMemo(() => isSaveBlocked(app, state), hintDeps)
 
@@ -175,16 +173,22 @@ export function InlineEditor({state}: { state: EditorState }) {
             h.focus()
             h.setSelection(Math.min(state.caret, h.text().length))
         }
+        // The chain's large paste, applied once (read through the store so StrictMode's second mount sees null).
+        const paste = store.get(pendingPasteAtom)
+        if (paste) {
+            store.set(pendingPasteAtom, null)
+            if (append) pasteInto("outline", paste, false, false)
+        }
         if (rootRef.current?.contains(document.activeElement)) pushScope()
 
-        // The Append draft outlives Quick Add (until saved or discarded); an Alt-Edit session does not.
+        // The Append draft outlives Quick Add (until saved or discarded); Alt-Edit and prose sessions do not.
         const {sessionId, mode} = state
         return () => {
             popScope()
             scopeRef.current = null
             alive.current = false
             // StrictMode re-mounts synchronously; only a real unmount leaves `alive` false.
-            if (mode === "edit") queueMicrotask(() => { if (!alive.current) void cancel(sessionId) })
+            if (mode !== "append") queueMicrotask(() => { if (!alive.current) void cancel(sessionId) })
         }
     }, [])
 
@@ -202,17 +206,21 @@ export function InlineEditor({state}: { state: EditorState }) {
 
     const suggestFor = (section: Section): LinkSuggestState => section === "outline" ? outlineSuggest : contentSuggest
     const suggest = suggestFor(focused)
+    /** Name the New note row links, while a `[[query` is open in the focused field. */
+    const newName = useMemo(() => suggest.open ? newLinkName(graph, suggest.query, targets) : null, [suggest.open, suggest.query, targets, graph])
+    /** The New note row is selected exactly when it shows and no result row is selected (none exist, or ArrowUp left row 0). */
+    const newSelected = newName !== null && picked === null
 
     // The outline's note nearest its caret (caretNote: the caret line's link nearest the caret, else the nearest
     // ancestor line's), so the list follows the caret and edits to the links around it.
     const caretParent = caretNote(state.outline, state.caret) ?? undefined
-    // Quick Add's results list follows the open `[[query` of the focused field, else shows that note's full tree
-    // (`tree:"P"`), or today's daily outline without one.
-    useEffect(() => setQuery({query: suggest.open ? suggest.query : quickAddDefaultQuery(caretParent)}),
-        [suggest.open, suggest.query, caretParent])
+    // The results list follows the open `[[query` of the focused field, else shows that note's full tree (`[[P]]`),
+    // the picked line's note, or today's daily outline.
+    useEffect(() => setQuery({query: suggest.open ? `[[${suggest.query}` : quickAddDefaultQuery(caretParent, state.underLine?.path)}),
+        [suggest.open, suggest.query, caretParent, state.underLine?.path])
 
-    /** Escape / ✕ / backdrop: close Quick Add; the Append draft stays for next time. */
-    const close = () => leave({kind: "cancelled"})
+    /** Escape / ✕ / backdrop: close the editor (Quick Add, or back to the search); the Append draft stays for next time. */
+    const close = () => closeEditor({kind: "cancelled"})
     /** Discard (Cancel for Alt-Edit): drop the session and its pasted attachments, then close. */
     const discard = () => {
         void cancel()
@@ -260,6 +268,7 @@ export function InlineEditor({state}: { state: EditorState }) {
     }
 
     function openContent(name: string) {
+        if (prose) return
         update(s => {
             const key = bufferKey(s.contents, name)
             return {
@@ -286,12 +295,17 @@ export function InlineEditor({state}: { state: EditorState }) {
 
     /** A picked row: replaces the open `[[query`, or (daily outline, no `[[` open) inserts a note/heading link at the caret. */
     function accept(section: Section, row: TreeNode) {
+        if (!fieldOf(section)) return
+        if (!suggestFor(section).open && row.node.nodeType !== "page" && row.node.nodeType !== "header") return
+        insertLink(section, reverseMarkdownParsing(row.node))
+    }
+
+    /** Puts `link` in place of the open `[[query` (and a `]]` right after the caret), else at the caret. */
+    function insertLink(section: Section, link: string) {
         const h = fieldOf(section)
-        const sug = suggestFor(section)
         if (!h) return
-        if (!sug.open && row.node.nodeType !== "page" && row.node.nodeType !== "header") return
+        const sug = suggestFor(section)
         const {text, start} = fieldState(h)
-        const link = reverseMarkdownParsing(row.node)
         let edit = sug.open ? acceptLink(text, sug.start, start, link) : insertAtCaret(text, start, link)
         // A pick keeps the Append outline's caret line a list item.
         if (section === "outline" && append) edit = ensureBullet(edit.text, edit.caret)
@@ -391,17 +405,20 @@ export function InlineEditor({state}: { state: EditorState }) {
         const {text, start, end} = fieldState(h)
         const sug = suggestFor(section)
 
-        if (sug.open && rowCount > 0 && picked && !picked.archiveRow) {
-            if (ev.key === "ArrowDown") {
-                arrowDown()
+        const sectionNew = section === focused ? newName : null
+        if (sug.open && (rowCount > 0 || sectionNew !== null)) {
+            if (rowCount > 0 && ev.key === "ArrowDown") {
+                arrowDown()   // from the New note row (line -1) this selects the first visible row
                 return true
             }
-            if (ev.key === "ArrowUp") {
-                arrowUp()
+            if (rowCount > 0 && ev.key === "ArrowUp") {
+                if (sectionNew !== null && picked !== null && picked.index === rows[0].index) selectLine(-1)
+                else if (picked !== null) arrowUp()
                 return true
             }
             if ((ev.key === "Enter" || ev.key === "Tab") && !ev.shiftKey) {
-                accept(section, picked)
+                if (sectionNew !== null && picked === null) insertLink(section, `[[${sectionNew}]]`)
+                else if (picked && !picked.archiveRow) accept(section, picked)
                 return true
             }
         }
@@ -410,14 +427,20 @@ export function InlineEditor({state}: { state: EditorState }) {
             void save()
             return true
         }
-        if (section === "outline" && ev.key === "Backspace" && !ev.altKey && !mod && !ev.ctrlKey && !ev.metaKey && outlinePlainBackspace()) return true
-        if (section === "outline" && ev.key === "Enter" && ev.altKey) {
-            const name = linkAt(text, start) ?? firstLinkOnLine(text, start) ?? (append && parentName ? parentName : null)
+        if (section === "outline" && !prose && ev.key === "Backspace" && !ev.altKey && !mod && !ev.ctrlKey && !ev.metaKey && outlinePlainBackspace()) return true
+        if (section === "outline" && !prose && ev.key === "Enter" && ev.altKey) {
+            if (renaming) return true
+            const name = linkAt(text, start) ?? firstLinkOnLine(text, start)
             if (name) openContent(name)
+            // No link on the line: the whole-note prose editor (the parent's note, a new note linked from the picked
+            // line, or today's daily note).
+            else if (append) void openProse(state.underLine
+                ? {kind: "line", line: state.underLine}
+                : {kind: "note", noteName: state.parentName ? state.parentName.split("#")[0] : null})
             return true
         }
         // In the content section Enter is Obsidian's (it continues lists).
-        if (ev.key === "Enter" && section === "outline") {
+        if (ev.key === "Enter" && section === "outline" && !prose) {
             outlinePlainEnter()
             return true
         }
@@ -452,13 +475,14 @@ export function InlineEditor({state}: { state: EditorState }) {
 
     // ── Paste ─────────────────────────────────────────────────────────────────
     async function pasteFiles(section: Section, files: File[], text: string, caret: number) {
+        if (renaming) return
         let base: string
         let sourcePath: string
         if (section === "content" && active !== null) {
             base = active
             sourcePath = contentSourcePath(active)
         } else {
-            base = caretNote(text, caret) ?? (append ? parentName : basenameOf(state.sourcePath))
+            base = caretNote(text, caret) ?? (append ? (state.underLine ? basenameOf(state.underLine.path) : parentName) : basenameOf(state.sourcePath))
             sourcePath = state.sourcePath
         }
 
@@ -491,7 +515,7 @@ export function InlineEditor({state}: { state: EditorState }) {
         const current = h ? h.text() : text
         const at = Math.min(caret, current.length)
         if (section === "outline" && append) applyEdit(section, insertAttachmentBullets(current, at, names))
-        else applyEdit(section, insertAtCaret(current, at, names.map(n => `![[${n}]]`).join(section === "outline" ? " " : "\n")))
+        else applyEdit(section, insertAtCaret(current, at, names.map(n => `![[${n}]]`).join(section === "outline" && !prose ? " " : "\n")))
     }
 
     function onPaste(ev: ClipboardEvent, section: Section): boolean {
@@ -512,19 +536,16 @@ export function InlineEditor({state}: { state: EditorState }) {
             void pasteFiles(section, data.files, text, start)
             return true
         }
-        const url = plainOnly ? null : pastedUrl(data.plain)
-        if (url !== null) {
-            const edit = pasteLink(text, start, end, url, data.html === "" ? "" : clipboardLinkTitle(data.html, url))
-            if (edit) {
-                applyEdit(section, edit)
-                return true
-            }
+        const link = plainOnly ? null : linkPasteEdit(text, start, end, data)
+        if (link) {
+            applyEdit(section, link)
+            return true
         }
         const pasted = (!plainOnly && data.html !== "" && autoConvertHtml(app) ? htmlToMarkdown(data.html) : data.plain)
             .replace(/\r\n?/g, "\n")
-        if (section === "content") {
+        if (section === "content" || prose) {
             if (native) return false
-            if (pasted !== "") applyEdit("content", insertAtCaret(text.slice(0, start) + text.slice(end), start, pasted))
+            if (pasted !== "") applyEdit(section, insertAtCaret(text.slice(0, start) + text.slice(end), start, pasted))
             return true
         }
         if (append) {
@@ -552,7 +573,7 @@ export function InlineEditor({state}: { state: EditorState }) {
         },
         onCaret: (caret: number) => setCaret(section, caret),
         onEnter: () => {
-            if (section !== "outline") return false
+            if (section !== "outline" || prose) return false
             outlinePlainEnter()
             return true
         },
@@ -572,11 +593,26 @@ export function InlineEditor({state}: { state: EditorState }) {
 
     return <>
     <div
-        className="ts-inline-editor"
+        className={`ts-inline-editor${prose ? " ts-editor-prose" : ""}`}
         ref={rootRef}
         onFocus={pushScope}
         onBlur={ev => { if (!rootRef.current?.contains(ev.relatedTarget as Node | null)) popScope() }}
     >
+        {/* The Search modal's title already names an Alt-Edit session. */}
+        {editorTitle(state) !== hostTitle && <div className="ts-editor-title">{editorTitle(state)}</div>}
+        {state.prose?.kind === "new" && <input
+            className="ts-prose-name"
+            type="text"
+            spellCheck="false"
+            placeholder="New note name"
+            aria-label="New note name"
+            value={state.prose.name}
+            disabled={state.saving}
+            onChange={ev => {
+                const name = ev.target.value
+                update(s => s.prose?.kind === "new" ? {...s, prose: {...s.prose, name}} : s)
+            }}
+        />}
         <div className="ts-editor-field">
             <MarkdownField
                 handleRef={outlineRef}
@@ -608,7 +644,7 @@ export function InlineEditor({state}: { state: EditorState }) {
             </div>
         </div>}
 
-        {Platform.isMobile && <div className="ts-editor-toolbar">
+        {Platform.isMobile && !renaming && <div className="ts-editor-toolbar">
             <button className="ts-editor-tool clickable-icon" aria-label="Insert link" disabled={state.saving}
                 onMouseDown={ev => ev.preventDefault()} onClick={insertLinkBrackets}><Brackets size={18}/></button>
             <button className="ts-editor-tool clickable-icon" aria-label="Task" disabled={state.saving || !canEditPrefix}
@@ -624,7 +660,7 @@ export function InlineEditor({state}: { state: EditorState }) {
             <input ref={fileInputRef} type="file" multiple hidden onChange={onPickFiles}/>
         </div>}
 
-        {previewText.trim() !== "" && <div className="ts-editor-preview">
+        {!prose && !renaming && previewText.trim() !== "" && <div className="ts-editor-preview">
             <MarkdownLine app={app} text={previewText} sourcePath={previewSource}/>
         </div>}
 
@@ -638,7 +674,9 @@ export function InlineEditor({state}: { state: EditorState }) {
             </div>
         </div>
     </div>
-    <LinkResults open={suggest.open} query={suggest.query} parentName={caretParent}
-        onPick={row => { if (!row.archiveRow) accept(focused, row) }}/>
+    <LinkResults open={suggest.open} query={suggest.query} parentName={caretParent ?? (state.underLine ? basenameOf(state.underLine.path) : undefined)}
+        onPick={row => { if (!row.archiveRow) accept(focused, row) }}
+        newName={newName} newSelected={newSelected}
+        onPickNew={() => { if (newName !== null) insertLink(focused, `[[${newName}]]`) }}/>
     </>
 }
