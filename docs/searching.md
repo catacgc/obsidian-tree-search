@@ -34,7 +34,7 @@ The chips above the results limit them by date: **All**, **7d**, **30d** and **1
 
 In Tree mode, a recency chip prunes the tree to branches with recent activity.
 
-Dated rows show how old they are, in both Tree and Timeline mode: **Today**, then days (**1d** to **7d**), weeks (**1w** to **3w**), months (**1m** to **12m**), and the year (**2025**) once a row is more than 12 months old. Hover the date to see the full date.
+Dated rows show how old they are on the right, in both Tree and Timeline mode: **Today**, then days (**1d** to **7d**), weeks (**1w** to **3w**), months (**1m** to **12m**), and the year (**2025**) once a row is more than 12 months old. Hover the date to see the full date; a date written in the line itself is not repeated in its text. Rows with an image show its thumbnail just before the date.
 
 ![Search results for apollo or hermes limited to the last 7 days](assets/screenshots/recency-tree.webp)
 *<code>apollo &#124; hermes</code> with **7d**: only the branches touched in the last week remain.*

@@ -104,15 +104,13 @@ export const TimelineRow = ({node, editable, appendDot, editHint}: TimelineRowPr
              className={`ts-timeline-row ${highlighted} ${flashing} ${node.archived ? "ts-node-archived" : ""}`}
              title={node.node.location.path}>
             <div className="ts-timeline-body">
-                <div className="ts-timeline-line">
-                    <span className="ts-timeline-text"><BaseNodeRender node={shownNode} matchTerms={matchTerms}/></span>
-                    {date && <span className="ts-timeline-date" title={fromFile ? `${date.absolute} · file created` : date.absolute}>{date.label}</span>}
-                </div>
+                <div className="ts-row-text"><BaseNodeRender node={shownNode} matchTerms={matchTerms}/></div>
                 {crumbs.length > 0 && <div className="ts-timeline-breadcrumb">
                     {crumbs.map((c, i) => <React.Fragment key={i}>{i > 0 && " > "}{highlightText(c, matchTerms)}</React.Fragment>)}
                 </div>}
             </div>
-            {thumb && <img className="ts-timeline-thumb" src={thumb} alt="" loading="lazy"/>}
+            {thumb && <img className="ts-row-thumb" src={thumb} alt="" loading="lazy"/>}
+            {date && <span className="ts-row-date" title={fromFile ? `${date.absolute} · file created` : date.absolute}>{date.label}</span>}
         </div>
         {appendDot && <AppendDot target={appendDot}/>}
         {editHint && <Pencil size={12} className="ts-edit-hint"/>}

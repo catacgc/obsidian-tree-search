@@ -96,24 +96,26 @@ export function resolveThumbnail(app: App, node: ParsedNode, fileUrl: FileUrl = 
     return null
 }
 
-// Timeline rows for a search result tree (Search view and the Raycast server).
-// Undated items take the ctime of the file their line lives in (timeline-only;
-// the index itself deliberately ignores fs times). Age counts local calendar
-// days so the row's rebuilt date is exact. Results start at the matched node,
-// so a hit with no matched ancestor gets its in-note parent (e.g. the
-// enclosing header) as breadcrumb.
-export function buildTimelineRows(app: App | null | undefined, graph: NotesGraph, results: ResultNode[], matchExprs: QueryExpr[], windowDays: number | null): TreeNode[] {
+// Age in local calendar days of the file a row lives in, from its ctime; null
+// when there is no such file. The date for undated rows in Tree and Timeline
+// (UI-only; the index itself deliberately ignores fs times).
+export function fileAgeDays(app: App | null | undefined, node: ParsedNode): number | null {
+    const file = app?.vault.getFileByPath(node.location.path)
+    if (!file) return null
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-    const fileAgeDays = (n: ParsedNode) => {
-        const file = app?.vault.getFileByPath(n.location.path)
-        if (!file) return null
-        const created = new Date(file.stat.ctime)
-        created.setHours(0, 0, 0, 0)
-        // round: DST days are 23/25h long
-        return Math.max(0, Math.round((today.getTime() - created.getTime()) / 86_400_000))
-    }
-    return buildTimeline(results, matchExprs, windowDays, fileAgeDays).map((item, i) => {
+    const created = new Date(file.stat.ctime)
+    created.setHours(0, 0, 0, 0)
+    // round: DST days are 23/25h long
+    return Math.max(0, Math.round((today.getTime() - created.getTime()) / 86_400_000))
+}
+
+// Timeline rows for a search result tree (Search view and the Raycast server).
+// Undated items take their file's age (fileAgeDays). Results start at the
+// matched node, so a hit with no matched ancestor gets its in-note parent
+// (e.g. the enclosing header) as breadcrumb.
+export function buildTimelineRows(app: App | null | undefined, graph: NotesGraph, results: ResultNode[], matchExprs: QueryExpr[], windowDays: number | null): TreeNode[] {
+    return buildTimeline(results, matchExprs, windowDays, n => fileAgeDays(app, n)).map((item, i) => {
         const parent = item.breadcrumb.length === 0 ? fileParent(graph, item.node) : null
         return {
             node: item.node,

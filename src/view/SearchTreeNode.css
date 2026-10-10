@@ -149,7 +149,17 @@
 /* List content styling */
 .ts-list-content {
     flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
+
+/* Shared by Tree and Timeline rows: text | thumbnail | date, the last two on the right. */
+/* .tree-node sets nowrap; wrap here so long lines never run under the date. */
+.ts-row-text { flex: 1; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.ts-row-thumb { flex-shrink: 0; width: 40px; height: 40px; object-fit: cover; border-radius: 4px; }
+.ts-row-date { flex-shrink: 0; white-space: nowrap; font-size: var(--font-ui-smaller); color: var(--text-muted); }
 
 .ts-list-text {
     margin-left: 4px;

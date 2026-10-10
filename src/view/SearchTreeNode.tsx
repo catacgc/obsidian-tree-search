@@ -1,8 +1,9 @@
-import {useEffect, useRef} from "react";
-import {ParsedNode} from "@mdtree/core";
+import {useEffect, useMemo, useRef} from "react";
+import {formatRelativeDate, isUndated, ParsedNode, textSourceDate, UNDATED_AGE} from "@mdtree/core";
 import {Platform} from "obsidian";
 import {Pencil} from "lucide-react";
-import {NodeRenderer} from "./NodeRenderer";
+import {BaseNodeRender} from "./NodeRenderer";
+import {fileAgeDays, resolveThumbnail, stripDateAnnotations} from "./search/timeline-utils";
 import {TreeNode} from "./search/SearchViewFlatten";
 import {useAtomValue, useSetAtom} from "jotai";
 import {useMolecule} from "bunshi/react";
@@ -62,6 +63,14 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
     const className = `ts-list-line ts-list-line-${props.node.indent + 1} ${highlighted} ${expandableClass}`;
 
     const indentLevel = props.node.indent + 1;
+
+    const sourceDate = textSourceDate(props.node.node);
+    // Undated rows show their file's creation date, as in the Timeline.
+    const fromFile = isUndated(props.node.node.ageDays);
+    const date = formatRelativeDate(fromFile ? fileAgeDays(app, props.node.node) ?? UNDATED_AGE : props.node.node.ageDays, sourceDate);
+    // The date sits on the right; drop its in-text repeats from the rendered line.
+    const shownNode = useMemo(() => sourceDate ? stripDateAnnotations(props.node.node, sourceDate) : props.node.node, [props.node.node, sourceDate]);
+    const thumb = useMemo(() => app ? resolveThumbnail(app, props.node.node) : null, [app, props.node.node]);
 
     // Scroll to the selected line
     useEffect(() => {
@@ -168,16 +177,11 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
                         node={props.node.node}
                     />
                 </div>
-                <div className="ts-list-content flex flex-row justify-between"
+                <div className="ts-list-content"
                      area-label={props.node.node.location.path} title={drag.refusal ?? props.node.node.location.path}>
-                    <div>
-                    <NodeRenderer node={props.node.node} matchTerms={matchTerms}/>
-                    </div>
-
-                    {/*<div className="flex justify-end text-xs">*/}
-                    {/*    {props.node.node.location.path}*/}
-                    {/*    /!* {props.node.node.aliases.length > 0 && `(${props.node.node.aliases.join(", ")})`} *!/*/}
-                    {/*</div>*/}
+                    <span className="ts-row-text"><BaseNodeRender node={shownNode} matchTerms={matchTerms}/></span>
+                    {thumb && <img className="ts-row-thumb" src={thumb} alt="" loading="lazy"/>}
+                    {date && <span className="ts-row-date" title={fromFile ? `${date.absolute} · file created` : date.absolute}>{date.label}</span>}
                 </div>
             </div>
             {props.appendDot && <AppendDot target={props.appendDot}/>}

@@ -1,6 +1,6 @@
 import { highlightLine, openFileByName } from "../obsidian-utils";
 import { triggerLinkPreview } from "./hover-preview";
-import { ParsedNode, ParsedTextToken, Location, stripUrlQueryStrings, formatRelativeDate, textSourceDate } from "@mdtree/core";
+import { ParsedNode, ParsedTextToken, Location, stripUrlQueryStrings } from "@mdtree/core";
 import {useMolecule} from "bunshi/react";
 import {GlobalAppMolecule, SearchViewMolecule} from "./react-context/state";
 import {useAtomValue} from "jotai";
@@ -30,17 +30,6 @@ function renderLinkName(display: string, href: string, terms: string[]): React.R
         return <mark className="suggestion-highlight">{display}</mark>
     return display
 }
-
-export const NodeRenderer = (
-    props: { node: ParsedNode; matchTerms: string[] }
-) => {
-    const date = formatRelativeDate(props.node.ageDays, textSourceDate(props.node))
-    return <>
-        <BaseNodeRender {...props}/>
-        {date && <span title={date.absolute}> ({date.label}) </span>}
-    </>
-}
-
 
 export const BaseNodeRender = (
     props: { node: ParsedNode; matchTerms: string[] }
