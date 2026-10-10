@@ -1,5 +1,6 @@
-import type { App } from "obsidian"
-import { isUndated, type ParsedNode } from "@mdtree/core"
+import type { App, TFile } from "obsidian"
+import { buildTimeline, fileParent, isUndated, type NotesGraph, type ParsedNode, type QueryExpr, type ResultNode } from "@mdtree/core"
+import type { TreeNode } from "./SearchViewFlatten"
 
 export const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif"]
 
@@ -93,30 +94,76 @@ function safeDecode(s: string): string {
     }
 }
 
-function resourcePath(app: App, linkpath: string, sourcePath: string): string | null {
+// How a resolved vault file becomes an image URL: Obsidian's resource URL in
+// the plugin UI, an absolute file path for external clients (Raycast).
+export type FileUrl = (file: TFile) => string
+
+function resourcePath(app: App, linkpath: string, sourcePath: string, fileUrl: FileUrl): string | null {
     const file = app.metadataCache.getFirstLinkpathDest(linkpath, sourcePath)
-    return file ? app.vault.getResourcePath(file) : null
+    return file ? fileUrl(file) : null
 }
 
 // Thumbnail URL for an image attachment or the first resolvable image a text
 // line embeds/links; null when there is none.
-export function resolveThumbnail(app: App, node: ParsedNode): string | null {
+export function resolveThumbnail(app: App, node: ParsedNode, fileUrl: FileUrl = f => app.vault.getResourcePath(f)): string | null {
     if (node.nodeType === "attachment") {
-        return IMAGE_EXTENSIONS.includes(node.extension.toLowerCase()) ? resourcePath(app, node.name, "") : null
+        return IMAGE_EXTENSIONS.includes(node.extension.toLowerCase()) ? resourcePath(app, node.name, "", fileUrl) : null
     }
     if (node.nodeType !== "text") return null
     for (const t of node.parsedTokens) {
         let url: string | null = null
         if (t.tokenType === "image") {
             if (/^(https?:|data:)/i.test(t.src)) return t.src
-            url = resourcePath(app, safeDecode(t.src), node.location.path)
+            url = resourcePath(app, safeDecode(t.src), node.location.path, fileUrl)
         } else if (t.tokenType === "obsidian_link") {
             const dot = t.pageTarget.lastIndexOf(".")
             if (dot !== -1 && IMAGE_EXTENSIONS.includes(t.pageTarget.slice(dot + 1).toLowerCase())) {
-                url = resourcePath(app, t.pageTarget, node.location.path)
+                url = resourcePath(app, t.pageTarget, node.location.path, fileUrl)
             }
         }
         if (url) return url
     }
     return null
+}
+
+// Timeline rows for a search result tree (Search view and the Raycast server).
+// Undated items take the ctime of the file their line lives in (timeline-only;
+// the index itself deliberately ignores fs times). Age counts local calendar
+// days so the row's rebuilt date is exact. Results start at the matched node,
+// so a hit with no matched ancestor gets its in-note parent (e.g. the
+// enclosing header) as breadcrumb.
+export function buildTimelineRows(app: App | null | undefined, graph: NotesGraph, results: ResultNode[], matchExprs: QueryExpr[], windowDays: number | null): TreeNode[] {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const fileAgeDays = (n: ParsedNode) => {
+        const file = app?.vault.getFileByPath(n.location.path)
+        if (!file) return null
+        const created = new Date(file.stat.ctime)
+        created.setHours(0, 0, 0, 0)
+        // round: DST days are 23/25h long
+        return Math.max(0, Math.round((today.getTime() - created.getTime()) / 86_400_000))
+    }
+    return buildTimeline(results, matchExprs, windowDays, fileAgeDays).map((item, i) => {
+        const parent = item.breadcrumb.length === 0 ? fileParent(graph, item.node) : null
+        return {
+            node: item.node,
+            indent: 0,
+            hasChildren: false,
+            visible: true,
+            selected: false,
+            index: i,
+            matched: true,
+            archived: item.archived,
+            timeline: { breadcrumb: parent ? [parent] : item.breadcrumb, pinned: item.pinned, ageDays: item.ageDays }
+        }
+    })
+}
+
+// Breadcrumb segments shown under a timeline row: its matched ancestors, else
+// the source note's name.
+export function timelineCrumbs(row: TreeNode): string[] {
+    const breadcrumb = row.timeline?.breadcrumb ?? []
+    return breadcrumb.length > 0
+        ? breadcrumb.map(nodeLabel).filter(Boolean)
+        : [sourceNoteLabel(row.node)].filter((c): c is string => !!c)
 }

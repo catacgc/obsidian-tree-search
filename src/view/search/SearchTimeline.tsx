@@ -8,7 +8,7 @@ import {ActionsMolecule} from "../react-context/actions";
 import {triggerLocationPreview} from "../hover-preview";
 import {BaseNodeRender, highlightText} from "../NodeRenderer";
 import {TreeNode} from "./SearchViewFlatten";
-import {formatTimelineDate, nodeLabel, resolveThumbnail, sourceNoteLabel, stripDateAnnotations, textSourceDate} from "./timeline-utils";
+import {formatTimelineDate, resolveThumbnail, stripDateAnnotations, textSourceDate, timelineCrumbs} from "./timeline-utils";
 import {AppendDot} from "../editor/AppendDot";
 import type {AppendTarget} from "../editor/row-editing";
 import {useRowGestures} from "./row-gestures";
@@ -91,14 +91,11 @@ export const TimelineRow = ({node, editable, appendDot, editHint}: TimelineRowPr
 
     const sourceDate = textSourceDate(node.node)
     const date = formatTimelineDate(node.timeline?.ageDays ?? node.node.ageDays, sourceDate)
-    // Undated nodes are dated by their file's ctime (see updateSearchResultsAtom).
+    // Undated nodes are dated by their file's ctime (see buildTimelineRows).
     const fromFile = isUndated(node.node.ageDays)
     // The date sits on the right; drop its in-text repeats from the rendered line.
     const shownNode = useMemo(() => sourceDate ? stripDateAnnotations(node.node, sourceDate) : node.node, [node.node, sourceDate])
-    const breadcrumb = node.timeline?.breadcrumb ?? []
-    const crumbs = breadcrumb.length > 0
-        ? breadcrumb.map(nodeLabel).filter(Boolean)
-        : [sourceNoteLabel(node.node)].filter((c): c is string => !!c)
+    const crumbs = timelineCrumbs(node)
     const thumb = useMemo(() => app ? resolveThumbnail(app, node.node) : null, [app, node.node])
     const highlighted = selectedLine === node.index ? "highlight" : ""
 

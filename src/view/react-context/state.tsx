@@ -1,8 +1,8 @@
 import {TreeNode} from '../search/SearchViewFlatten'
-import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, linkTargetTree, type QueryExpr, partitionArchived, extractArchiveReveal, suggestAt, type Suggestion, buildTimeline, fileParent, parseDuration, flattenIndex, defaultVisibility, pruneToRecency} from '@mdtree/core'
+import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, linkTargetTree, type QueryExpr, partitionArchived, extractArchiveReveal, suggestAt, type Suggestion, parseDuration, flattenIndex, defaultVisibility, pruneToRecency} from '@mdtree/core'
 import {atom, useAtomValue, type Getter, type Setter} from 'jotai'
 import {findTargetRow, revealRow, type RowTarget} from '../search/select-target'
-import {ParsedNode} from '@mdtree/core'
+import {buildTimelineRows} from '../search/timeline-utils'
 
 type SearchQuery = { query: string; file?: string; heading?: string }
 import {createScope, molecule} from "bunshi";
@@ -312,38 +312,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
 
         const w = get(recencyWindowAtom)
         if (get(timelineActiveAtom)) {
-            // Undated items take the ctime of the file their line lives in
-            // (timeline-only; the index itself deliberately ignores fs times).
-            // Age counts local calendar days so the row's rebuilt date is exact.
-            const app = get(GlobalAtoms.appAtom)
-            const today = new Date()
-            today.setHours(0, 0, 0, 0)
-            const fileAgeDays = (n: ParsedNode) => {
-                const file = app?.vault.getFileByPath(n.location.path)
-                if (!file) return null
-                const created = new Date(file.stat.ctime)
-                created.setHours(0, 0, 0, 0)
-                // round: DST days are 23/25h long
-                return Math.max(0, Math.round((today.getTime() - created.getTime()) / 86_400_000))
-            }
-            const items = buildTimeline(result, get(matchExprsAtom), w === "all" ? null : parseDuration(w), fileAgeDays)
-            const graph = get(GlobalAtoms.graphAtom)
-            const nodes: TreeNode[] = items.map((item, i) => {
-                // Results start at the matched node, so a hit with no matched
-                // ancestor shows its in-note parent (e.g. the enclosing header).
-                const parent = item.breadcrumb.length === 0 ? fileParent(graph, item.node) : null
-                return {
-                    node: item.node,
-                    indent: 0,
-                    hasChildren: false,
-                    visible: true,
-                    selected: false,
-                    index: i,
-                    matched: true,
-                    archived: item.archived,
-                    timeline: { breadcrumb: parent ? [parent] : item.breadcrumb, pinned: item.pinned, ageDays: item.ageDays }
-                }
-            })
+            const nodes = buildTimelineRows(get(GlobalAtoms.appAtom), get(GlobalAtoms.graphAtom), result, get(matchExprsAtom), w === "all" ? null : parseDuration(w))
             settleSelection(get, set, nodes)
             return
         }

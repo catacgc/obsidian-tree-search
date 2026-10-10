@@ -2,6 +2,7 @@ import { reverseMarkdownParsing } from "./copy";
 import { TreeNode } from "./search/SearchViewFlatten";
 import { ObsidianLinkToken, ParsedTextToken, isArchived, Location, isUndated } from "@mdtree/core";
 import {App} from "obsidian";
+import {formatTimelineDate, resolveThumbnail, stripDateAnnotations, textSourceDate, timelineCrumbs, type FileUrl} from "./search/timeline-utils";
 
 export interface VaultResults {
     vault: string;
@@ -15,6 +16,24 @@ export interface IndividualListItemModel {
     index: number,
     nodeType: string,
     actions: RaycastAction[]
+    /** Present only on timeline responses (`view=timeline`). */
+    timeline?: TimelineRowInfo
+}
+
+export interface TimelineRowInfo {
+    /** Row date ("Today", "3d ago", "2026-09-01") and its YYYY-MM-DD form; absent when undated. */
+    date?: { label: string; absolute: string }
+    /** Days since the row date; sort key when merging vaults. */
+    ageDays: number
+    /** The date is the containing file's creation date: the line itself has none. */
+    fromFile: boolean
+    /** Matched ancestors, else the in-note parent or the source note. */
+    breadcrumb: string[]
+    /** Emoji-boosted: sorted on top. */
+    pinned: boolean
+    archived: boolean
+    /** http(s)/data URL, or an absolute path for vault images. */
+    thumbnail?: string
 }
 
 export type RaycastAction = Copy | Browse | InsertLink
@@ -119,6 +138,34 @@ export function createRaycastResponse(app: App, results: TreeNode[]): VaultResul
                 index: result.index,
                 nodeType: result.node.nodeType,
                 actions
+            }
+        })
+    }
+}
+
+export function createRaycastTimelineResponse(app: App, rows: TreeNode[], fileUrl: FileUrl): VaultResults {
+    return {
+        vault: app.vault.getName(),
+        results: rows.map(row => {
+            const sourceDate = textSourceDate(row.node)
+            const ageDays = row.timeline?.ageDays ?? row.node.ageDays
+            // The date is its own field; drop its in-text repeats from the title.
+            const shown = sourceDate ? {...row, node: stripDateAnnotations(row.node, sourceDate)} : row
+            return {
+                title: renderTitle(shown, [], app),
+                level: 0,
+                index: row.index,
+                nodeType: row.node.nodeType,
+                actions: getTreeNodeActions(app, row),
+                timeline: {
+                    date: formatTimelineDate(ageDays, sourceDate) ?? undefined,
+                    ageDays,
+                    fromFile: isUndated(row.node.ageDays),
+                    breadcrumb: timelineCrumbs(row),
+                    pinned: row.timeline?.pinned ?? false,
+                    archived: row.archived ?? false,
+                    thumbnail: resolveThumbnail(app, row.node, fileUrl) ?? undefined,
+                },
             }
         })
     }

@@ -1,10 +1,11 @@
 import http, {IncomingMessage, Server, ServerResponse} from "http";
-import {Platform} from "obsidian";
-import {searchIndex, partitionArchived, parseQuery, extractArchiveReveal, flattenIndex} from "@mdtree/core";
+import {Platform, type FileSystemAdapter} from "obsidian";
+import {searchIndex, partitionArchived, parseQuery, extractArchiveReveal, flattenIndex, parseDuration} from "@mdtree/core";
 import {getSettings, separatorAtom} from "../react-context/settings";
 import fs from "fs";
-import {createRaycastResponse} from "../node-actions";
+import {createRaycastResponse, createRaycastTimelineResponse} from "../node-actions";
 import {GlobalAtoms, GlobalStore} from "../react-context/global";
+import {buildTimelineRows} from "../search/timeline-utils";
 
 export class RaycastServer {
     private server: Server | null = null;
@@ -45,9 +46,13 @@ export class RaycastServer {
             return;
         }
 
+        // GET /?query=<q>&limit=<n>[&view=timeline[&window=7d|30d|1y]]
+        // Tree rows by default; `view=timeline` returns the Search view's
+        // Timeline rows, `window` being its recency chip (`in:` semantics).
         const requestListener = (req: IncomingMessage, res: ServerResponse) => {
-            const query = new URL(req.url || "", "http://localhost").searchParams.get("query");
-            const limit = parseInt(new URL(req.url || "", "http://localhost").searchParams.get("limit") || "100");
+            const params = new URL(req.url || "", "http://localhost").searchParams;
+            const query = params.get("query");
+            const limit = parseInt(params.get("limit") || "100");
             const decodedQuery = decodeURIComponent(query || "");
 
             if (!decodedQuery) {
@@ -61,10 +66,15 @@ export class RaycastServer {
             const result = searchIndex(graph, decodedQuery, separator, this.store.get(GlobalAtoms.indexAtom)?.searchOptions());
             const { reveal, stages: matchExprs } = extractArchiveReveal(parseQuery(decodedQuery, separator))
             const { visible } = partitionArchived(result, reveal)
-            const flattened = flattenIndex(visible, 0, matchExprs)
-            const mapped = createRaycastResponse(app, flattened.slice(0, limit))
-            const jsonContent = JSON.stringify(mapped);
-            res.end(jsonContent);
+            const recency = params.get("window")
+            // Raycast loads images from disk, not Obsidian's app:// resource URLs.
+            const adapter = app.vault.adapter as FileSystemAdapter
+            const mapped = params.get("view") === "timeline"
+                ? createRaycastTimelineResponse(app,
+                    buildTimelineRows(app, graph, visible, matchExprs, recency ? parseDuration(recency) : null).slice(0, limit),
+                    f => adapter.getFullPath(f.path))
+                : createRaycastResponse(app, flattenIndex(visible, 0, matchExprs).slice(0, limit))
+            res.end(JSON.stringify(mapped));
         };
 
         try {
