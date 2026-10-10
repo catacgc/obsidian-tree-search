@@ -5,8 +5,9 @@ import {useAtomValue, useSetAtom} from "jotai";
 import {useMolecule} from "bunshi/react";
 import {Platform, Scope} from "obsidian";
 import {
-    Archive, ArrowRightLeft, CalendarClock, ChevronLeft, ChevronsDownUp, ChevronsUpDown, CirclePlus, Combine, Copy,
-    CornerDownRight, ExternalLink, FileSearch, FileText, FolderInput, ListTree, Pencil, RefreshCw, SquarePen,
+    Archive, ArrowRightLeft, CalendarArrowUp, CalendarClock, ChevronLeft, ChevronsDownUp, ChevronsUpDown, CirclePlus,
+    Combine, Copy, CornerDownRight, ExternalLink, FileSearch, FileText, FolderInput, ListTree, Pencil, RefreshCw,
+    SquareCheck, SquarePen,
     type LucideIcon,
 } from "lucide-react";
 import {GlobalAtoms} from "../react-context/global";
@@ -20,9 +21,9 @@ import {nodeLabel} from "./timeline-utils";
 
 const ICONS: Record<PanelIcon, LucideIcon> = {
     link: ExternalLink, reveal: FileSearch, copy: Copy, insert: CornerDownRight, moveToFolder: FolderInput,
-    archive: Archive, consolidate: Combine, append: CirclePlus, edit: Pencil, moveUnder: ArrowRightLeft,
-    openEditor: SquarePen, tree: ListTree, timeline: CalendarClock, expand: ChevronsUpDown, collapse: ChevronsDownUp,
-    refresh: RefreshCw,
+    archive: Archive, consolidate: Combine, done: SquareCheck, schedule: CalendarArrowUp, append: CirclePlus, edit: Pencil,
+    moveUnder: ArrowRightLeft, openEditor: SquarePen, tree: ListTree, timeline: CalendarClock, expand: ChevronsUpDown,
+    collapse: ChevronsDownUp, refresh: RefreshCw,
 }
 
 /** Panel items that open the inline editor, which takes focus; after any other item focus returns to the search. */
@@ -55,7 +56,7 @@ const PanelBody = ({page, dockRef}: {page: "main" | "moveUnder"; dockRef: React.
         openActionPanelAtom, closeActionPanelAtom, allowEditing, allowTimeline,
     } = useMolecule(SearchViewMolecule)
     const {selectedTreeNodeActionsAtom, executeActionAtom} = useMolecule(ActionsMolecule)
-    const {ownPathAtom, reparentAtom} = useMolecule(EditorMolecule)
+    const {ownPathAtom, reparentAtom, editTaskAtom} = useMolecule(EditorMolecule)
     const app = useAtomValue(GlobalAtoms.appAtom)
     const rows = useAtomValue(renderableTreeNodesAtom)
     const selectedLine = useAtomValue(selectedLineAtom)
@@ -68,6 +69,7 @@ const PanelBody = ({page, dockRef}: {page: "main" | "moveUnder"; dockRef: React.
     const closePanel = useSetAtom(closeActionPanelAtom)
     const executeAction = useSetAtom(executeActionAtom)
     const reparent = useSetAtom(reparentAtom)
+    const editTask = useSetAtom(editTaskAtom)
     const handlers = useShortcutHandlers()
 
     const rootRef = useRef<HTMLDivElement>(null)
@@ -95,6 +97,7 @@ const PanelBody = ({page, dockRef}: {page: "main" | "moveUnder"; dockRef: React.
             // Actions that open the inline editor leave focus to it; everything else returns to the search.
             close(!(item.run.kind === "shortcut" && OPENS_EDITOR.has(item.run.id)))
             if (item.run.kind === "action") void executeAction(item.run.action)
+            else if (item.run.kind === "task") { if (selectedRow) void editTask(selectedRow.node, item.run.change) }
             else void handlers[item.run.id](0)
         }
         return items.map(item => ({

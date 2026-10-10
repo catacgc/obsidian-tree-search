@@ -37,7 +37,37 @@ describe("formatRelativeDate", () => {
     expect(formatRelativeDate(400, "2025-08-31", TODAY)).toEqual({ label: "2025", absolute: "2025-08-31" })
   })
 
-  it("shows a future date verbatim instead of Today", () => {
-    expect(formatRelativeDate(0, "2026-10-09", TODAY)).toEqual({ label: "2026-10-09", absolute: "2026-10-09" })
+  describe("future dates", () => {
+    // TODAY is Monday 2026-10-05; next calendar week runs Mon 10-12 .. Sun 10-18.
+    const ahead = (date: string, today = TODAY) => formatRelativeDate(-1, date, today)?.label
+
+    it("Tomorrow, then weekday names up to 6 days ahead", () => {
+      expect(ahead("2026-10-06")).toBe("Tomorrow")
+      expect(["2026-10-07", "2026-10-09", "2026-10-11"].map(d => ahead(d))).toEqual(["Wed", "Fri", "Sun"])
+    })
+
+    it("Next Week for the rest of the next calendar week (Monday start)", () => {
+      expect(["2026-10-12", "2026-10-18"].map(d => ahead(d))).toEqual(["Next Week", "Next Week"])
+      const saturday = new Date(2026, 9, 10, 9)
+      expect(["2026-10-12", "2026-10-16", "2026-10-17", "2026-10-18", "2026-10-19"].map(d => ahead(d, saturday)))
+        .toEqual(["Mon", "Fri", "Next Week", "Next Week", "This Month"])
+    })
+
+    it("This Month, then the month's name within the year, then the year", () => {
+      expect(["2026-10-19", "2026-10-31"].map(d => ahead(d))).toEqual(["This Month", "This Month"])
+      expect(["2026-11-01", "2026-12-31"].map(d => ahead(d))).toEqual(["Nov", "Dec"])
+      expect(["2027-01-01", "2028-03-01"].map(d => ahead(d))).toEqual(["2027", "2028"])
+    })
+
+    it("Next Week across a year boundary, then the year", () => {
+      const wednesday = new Date(2026, 11, 30, 9) // next week: Mon 2027-01-04 .. Sun 01-10
+      expect(["2027-01-05", "2027-01-06", "2027-01-10", "2027-01-11"].map(d => ahead(d, wednesday)))
+        .toEqual(["Tue", "Next Week", "Next Week", "2027"])
+    })
+
+    it("rebuilds a future date from a negative ageDays when the row has no date of its own", () => {
+      expect(formatRelativeDate(-1, null, TODAY)).toEqual({ label: "Tomorrow", absolute: "2026-10-06" })
+      expect(formatRelativeDate(-30, null, TODAY)).toEqual({ label: "Nov", absolute: "2026-11-04" })
+    })
   })
 })

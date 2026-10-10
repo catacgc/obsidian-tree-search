@@ -1,9 +1,25 @@
-import { describe, it, expect } from "bun:test"
+import { describe, it, expect, beforeAll, afterAll, setSystemTime } from "bun:test"
 import { getAgeDays, ageDaysFromText, isUndated, calculateBoost, UNDATED_AGE } from "../graph/boost.ts"
 import { extractPageDate } from "../parser/frontmatter.ts"
 import { makePeriodicDateResolver, type MomentParse } from "../parser/periodic-notes.ts"
 
 const DAY = 24 * 60 * 60 * 1000
+
+// `bun test` runs in UTC, where local and UTC midnight coincide; a UTC+3 zone shortly after local midnight (still the
+// previous day in UTC) exposes dates read as UTC instead of local calendar days.
+function inBucharestAt(hour: number, minute: number) {
+  let tz: string | undefined
+  beforeAll(() => {
+    tz = process.env.TZ
+    process.env.TZ = "Europe/Bucharest"
+    setSystemTime(new Date(2026, 9, 6, hour, minute)) // Tuesday 2026-10-06, local time
+  })
+  afterAll(() => {
+    setSystemTime()
+    if (tz === undefined) delete process.env.TZ
+    else process.env.TZ = tz
+  })
+}
 
 describe("getAgeDays precedence", () => {
   it("returns UNDATED_AGE when no date is present", () => {
@@ -40,6 +56,23 @@ describe("ageDaysFromText", () => {
     expect(ageDaysFromText(undefined)).toBeNull()
     expect(ageDaysFromText("2020-01-01")).toBeGreaterThan(1000)
   })
+
+  describe("local calendar days (Bucharest, 01:30)", () => {
+    inBucharestAt(1, 30)
+
+    it("today is 0, yesterday 1, the future negative", () => {
+      expect(ageDaysFromText("call 2026-10-06")).toBe(0)
+      expect(ageDaysFromText("call 2026-10-05")).toBe(1)
+      expect(ageDaysFromText("due 2026-10-07")).toBe(-1)
+      expect(ageDaysFromText("due 2026-11-20")).toBe(-45)
+    })
+
+    it("counts calendar days for a page date with a time of day", () => {
+      expect(getAgeDays(undefined, new Date(2026, 9, 5, 23, 0).getTime())).toBe(1)
+      expect(getAgeDays(undefined, new Date(2026, 9, 6, 22, 0).getTime())).toBe(0)
+      expect(getAgeDays(undefined, new Date(2026, 9, 7, 0, 30).getTime())).toBe(-1)
+    })
+  })
 })
 
 describe("calculateBoost age clamp", () => {
@@ -55,19 +88,25 @@ describe("calculateBoost age clamp", () => {
   it("does not underflow for very old dated nodes", () => {
     expect(calculateBoost("text", "x", 99999)).toBe(calculateBoost("text", "x", 1000))
   })
+
+  it("ranks future-dated nodes like today's", () => {
+    expect(calculateBoost("text", "x", -400)).toBe(calculateBoost("text", "x", 0))
+  })
 })
 
 describe("extractPageDate", () => {
-  it("prefers updated over created", () => {
-    const updated = new Date("2024-05-01").getTime()
-    const created = new Date("2020-01-01").getTime()
-    expect(extractPageDate({ updated: "2024-05-01", created: "2020-01-01" })).toBe(updated)
-    expect(extractPageDate({ created: "2020-01-01" })).toBe(created)
+  inBucharestAt(12, 0)
+
+  it("prefers updated over created; a date-only value is local midnight", () => {
+    expect(extractPageDate({ updated: "2024-05-01", created: "2020-01-01" })).toBe(new Date(2024, 4, 1).getTime())
+    expect(extractPageDate({ created: "2020-01-01" })).toBe(new Date(2020, 0, 1).getTime())
   })
 
-  it("accepts js-yaml Date objects and rejects garbage", () => {
-    const d = new Date("2024-05-01")
-    expect(extractPageDate({ updated: d })).toBe(d.getTime())
+  it("accepts js-yaml Date objects (date-only ones as local midnight) and rejects garbage", () => {
+    expect(extractPageDate({ updated: new Date("2024-05-01") })).toBe(new Date(2024, 4, 1).getTime())
+    const instant = new Date("2024-05-01T10:30:00Z")
+    expect(extractPageDate({ updated: instant })).toBe(instant.getTime())
+    expect(extractPageDate({ updated: "2024-05-01T10:30:00Z" })).toBe(instant.getTime())
     expect(extractPageDate({ updated: "not a date" })).toBeNull()
     expect(extractPageDate({})).toBeNull()
   })

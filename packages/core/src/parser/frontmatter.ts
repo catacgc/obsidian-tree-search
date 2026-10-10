@@ -55,18 +55,26 @@ export function extractTags(fm: Frontmatter): string[] {
  * `updated` over `created`. Returns null when neither yields a valid date.
  *
  * js-yaml parses unquoted ISO dates into JS `Date` objects; quoted values and
- * other formats arrive as strings, which we run through `Date.parse`.
+ * other formats arrive as strings, which we run through `Date.parse`. Both
+ * read a date-only `YYYY-MM-DD` as UTC midnight; it is a calendar day, so it
+ * becomes local midnight (js-yaml's Date for it is exactly UTC midnight).
  */
 export function extractPageDate(fm: Frontmatter): number | null {
   for (const field of ["updated", "created"]) {
     const raw = fm[field]
+    let ts = NaN
+    let dateOnly = false
     if (raw instanceof Date) {
-      const ts = raw.getTime()
-      if (!isNaN(ts)) return ts
+      ts = raw.getTime()
+      dateOnly = ts % 86_400_000 === 0
     } else if (typeof raw === "string") {
-      const ts = Date.parse(raw)
-      if (!isNaN(ts)) return ts
+      ts = Date.parse(raw)
+      dateOnly = /^\s*\d{4}-\d{2}-\d{2}\s*$/.test(raw)
     }
+    if (isNaN(ts)) continue
+    if (!dateOnly) return ts
+    const utc = new Date(ts)
+    return new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate()).getTime()
   }
   return null
 }

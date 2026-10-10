@@ -10,14 +10,21 @@ import {
     appendOutline,
     firstAppendedLine,
     cutSubtree,
+    lineHasIdentity,
+    localIsoDate,
     pasteAtOutlineEnd,
     pasteUnderLinkBullet,
     replaceLineText,
+    rescheduleDate,
+    scheduleTask,
+    setTaskDone,
     splitLines,
     StaleLineError,
     type AttachmentPlan,
     type OutlineLine,
+    type RescheduleKind,
     type SessionAttachment,
+    type TextNode,
 } from "@mdtree/core"
 import type {DailyNoteConfig} from "../indexing/indexed-tree"
 
@@ -132,6 +139,21 @@ export async function editLine(app: App, path: string, line: number, expectedLin
     if (!file) throw new StaleLineError()
     await app.vault.process(file, c => replaceLineText(c, line, expectedLine, newLine))
     return [file]
+}
+
+export type TaskChange = { kind: "done"; done: boolean } | { kind: "schedule"; when: RescheduleKind }
+
+/** Completes/reopens or reschedules a task row's line (Tasks plugin Dataview fields). Throws StaleLineError, writing
+ *  nothing, when the line at the row's location no longer is that task (open, for a reschedule). */
+export async function editTaskLine(app: App, node: TextNode, change: TaskChange, now: Date = new Date()): Promise<TFile[]> {
+    const {path, position: {start: {line}}} = node.location
+    const current = await readLine(app, path, line)
+    if (current === null || !lineHasIdentity(current, node)) throw new StaleLineError()
+    const next = change.kind === "done"
+        ? setTaskDone(current, change.done, localIsoDate(now))
+        : scheduleTask(current, rescheduleDate(change.when, now))
+    if (next === null) throw new StaleLineError()
+    return editLine(app, path, line, current, next)
 }
 
 const linkName = (entry: string): string => (entry.match(/\[\[([^\]|#]+)/)?.[1] ?? entry).trim()

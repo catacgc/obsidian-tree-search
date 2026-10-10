@@ -1,6 +1,8 @@
 import type { ParsedNode } from "../graph/types.ts"
 import type { ResultNode } from "./search.ts"
 import { nodeMatchesQuery, type QueryExpr } from "./query.ts"
+import { boostTier } from "../graph/boost.ts"
+import { compareOpenTasks } from "./task-order.ts"
 
 export type TreeNode = {
   node: ParsedNode
@@ -23,8 +25,14 @@ export function flattenIndex(
 ): TreeNode[] {
   const result: TreeNode[] = []
 
+  // Siblings by boost (type tier, then emoji and recency), except that within a tier open tasks come first, oldest first.
+  const order = (a: ResultNode, b: ResultNode): number =>
+    boostTier(b.node.boost ?? 0) - boostTier(a.node.boost ?? 0) ||
+    compareOpenTasks(a.node, a.node.ageDays, b.node, b.node.ageDays) ||
+    (b.node.boost ?? 0) - (a.node.boost ?? 0)
+
   function flatten(unsorted: ResultNode[], indent = 0, parentIndex = 0): number {
-    const nodes = [...unsorted].sort((a, b) => (b.node.boost ?? 0) - (a.node.boost ?? 0))
+    const nodes = [...unsorted].sort(order)
     let index = parentIndex
 
     for (const node of nodes) {

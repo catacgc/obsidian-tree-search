@@ -12,6 +12,7 @@ import {resolveThumbnail, stripDateAnnotations, timelineCrumbs} from "./timeline
 import {AppendDot} from "../editor/AppendDot";
 import type {AppendTarget} from "../editor/row-editing";
 import {useRowGestures} from "./row-gestures";
+import {TaskCheckbox} from "./TaskCheckbox";
 
 // Recency chips (All / 7d / 30d / 1y), in Tree and Timeline mode. Filters the
 // results locally with `in:` semantics without touching the query. Divs, not
@@ -103,6 +104,7 @@ export const TimelineRow = ({node, editable, appendDot, editHint}: TimelineRowPr
         <div ref={nodeRef}
              className={`ts-timeline-row ${highlighted} ${flashing} ${node.archived ? "ts-node-archived" : ""}`}
              title={node.node.location.path}>
+            <TaskCheckbox node={node.node} interactive={true}/>
             <div className="ts-timeline-body">
                 <div className="ts-row-text"><BaseNodeRender node={shownNode} matchTerms={matchTerms}/></div>
                 {crumbs.length > 0 && <div className="ts-timeline-breadcrumb">

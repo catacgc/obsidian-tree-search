@@ -61,6 +61,19 @@ describe("panelItems", () => {
         expect(titles(c, "view")).not.toContain("Open editor")
     })
 
+    it("offers a Task section, before Edit, for an open task row only, in every view", () => {
+        const task = (done: boolean) => rowsOf(row(page("Project X", "Project X.md"), 0),
+            row({ ...text("call", "Project X.md", 3), isTask: true, isCompleted: done } as ParsedNode, 1))
+        const open = ctx({ rows: task(false) })
+        expect(titles(open, "task")).toEqual(["Done", "Tomorrow", "Weekend", "Next Week"])
+        expect(panelItems(open).find(i => i.title === "Weekend")?.run).toEqual({ kind: "task", change: { kind: "schedule", when: "weekend" } })
+        const sections = panelItems(open).map(i => i.section)
+        expect(sections.indexOf("task")).toBeLessThan(sections.indexOf("edit"))
+        expect(titles(ctx({ rows: task(false), allowEditing: false, timelineActive: true }), "task")).toHaveLength(4)
+        expect(titles(ctx({ rows: task(true) }), "task")).toEqual([])
+        expect(titles(ctx(), "task")).toEqual([])
+    })
+
     it("Edit: Append to names the target page; Edit line and Move under only where they apply", () => {
         expect(titles(ctx(), "edit")).toEqual(["Append to [[Project X]]", "Edit line", "Move under…"])
         // A root page row: appendable, not editable (its own file), not draggable.

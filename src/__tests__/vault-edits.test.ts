@@ -1,8 +1,8 @@
 import { describe, it, expect } from "bun:test"
 import yaml from "js-yaml"
 import type { App } from "obsidian"
-import { StaleLineError } from "@mdtree/core"
-import { appendToDailyNote, editLine, reparent, writeNoteContents } from "../editing/vault-edits"
+import { StaleLineError, type TextNode } from "@mdtree/core"
+import { appendToDailyNote, editLine, editTaskLine, reparent, writeNoteContents } from "../editing/vault-edits"
 
 // ── Fake app ─────────────────────────────────────────────────────────────────
 //
@@ -132,6 +132,33 @@ describe("editLine", () => {
         const { app, files } = makeFakeApp({ "a.md": "- one\n- two\n" })
         await expect(editLine(app, "a.md", 1, "- three", "- 3")).rejects.toBeInstanceOf(StaleLineError)
         expect(files.get("a.md")).toBe("- one\n- two\n")
+    })
+})
+
+describe("editTaskLine", () => {
+    const MONDAY = new Date(2026, 9, 5, 9)
+    const task = (line: number, key = "call [[bob]]"): TextNode => ({
+        nodeType: "text", searchKey: key, boost: 0, ageDays: 0, tags: [], isTask: true, isCompleted: false,
+        parsedTokens: [{ tokenType: "obsidian_link", source: "[[Bob]]", pageTarget: "Bob" }],
+        location: { path: "a.md", position: { start: { line, ch: 0 }, end: { line, ch: 0 } } },
+    })
+
+    it("completes, reopens and reschedules the row's line in place", async () => {
+        const { app, files } = makeFakeApp({ "a.md": "# Today\r\n    - [ ] call [[Bob]]\r\n- other\r\n" })
+        await editTaskLine(app, task(1), { kind: "schedule", when: "weekend" }, MONDAY)
+        expect(files.get("a.md")).toBe("# Today\r\n    - [ ] call [[Bob]] [scheduled:: 2026-10-10]\r\n- other\r\n")
+        await editTaskLine(app, task(1), { kind: "done", done: true }, MONDAY)
+        expect(files.get("a.md")).toBe("# Today\r\n    - [x] call [[Bob]] [scheduled:: 2026-10-10] [completion:: 2026-10-05]\r\n- other\r\n")
+        await editTaskLine(app, task(1), { kind: "done", done: false }, MONDAY)
+        expect(files.get("a.md")).toBe("# Today\r\n    - [ ] call [[Bob]] [scheduled:: 2026-10-10]\r\n- other\r\n")
+    })
+
+    it("throws StaleLineError, writing nothing, when the line no longer is that task", async () => {
+        const { app, files } = makeFakeApp({ "a.md": "- [ ] call [[Alice]]\n- call [[Bob]]\n" })
+        await expect(editTaskLine(app, task(0), { kind: "done", done: true }, MONDAY)).rejects.toBeInstanceOf(StaleLineError)
+        await expect(editTaskLine(app, task(1), { kind: "done", done: true }, MONDAY)).rejects.toBeInstanceOf(StaleLineError)
+        await expect(editTaskLine(app, task(5), { kind: "done", done: true }, MONDAY)).rejects.toBeInstanceOf(StaleLineError)
+        expect(files.get("a.md")).toBe("- [ ] call [[Alice]]\n- call [[Bob]]\n")
     })
 })
 

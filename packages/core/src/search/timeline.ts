@@ -3,6 +3,7 @@ import type { ResultNode } from "./search.ts"
 import { getKey, linkTargetKeys, type NotesGraph } from "../graph/graph.ts"
 import { containsEmoji, isUndated, UNDATED_AGE } from "../graph/boost.ts"
 import { matchQuery, nodeMatchesQuery, type QueryExpr } from "./query.ts"
+import { compareOpenTasks, isOpenTask } from "./task-order.ts"
 
 export type TimelineItem = {
   node: ParsedNode
@@ -59,9 +60,11 @@ export function buildTimeline(
 
   for (const r of results) visit(r)
 
+  // Pinned first; then open tasks oldest first (overdue before future); then the rest newest first.
   return [...items.values()].sort((a, b) =>
     (a.pinned === b.pinned ? 0 : a.pinned ? -1 : 1) ||
-    a.ageDays - b.ageDays ||
+    compareOpenTasks(a.node, a.ageDays, b.node, b.ageDays) ||
+    (isOpenTask(a.node) ? 0 : a.ageDays - b.ageDays) ||
     b.node.boost - a.node.boost,
   )
 }

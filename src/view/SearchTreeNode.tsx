@@ -14,6 +14,7 @@ import {EditorMolecule} from "./editor/EditorMolecule";
 import {AppendDot} from "./editor/AppendDot";
 import {dragInfo, isValidDropTarget, type AppendTarget} from "./editor/row-editing";
 import {useRowGestures} from "./search/row-gestures";
+import {TaskCheckbox} from "./search/TaskCheckbox";
 
 type SearchTreeNodePropsFlatten = {
     node: TreeNode;
@@ -175,6 +176,7 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
                     <BulletOrTask
                         indent={indentLevel}
                         node={props.node.node}
+                        interactive={!props.onPick}
                     />
                 </div>
                 <div className="ts-list-content"
@@ -193,20 +195,12 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
 type BulletOrTaskProps = {
     indent: number;
     node: ParsedNode;
+    /** Task checkbox completes/reopens the task (not in pick mode). */
+    interactive: boolean;
 }
 
-const BulletOrTask = ({indent, node}: BulletOrTaskProps) => {
-
-    if (node.nodeType === "text" && node.isTask && !node.isCompleted) {
-        return <label className="task-list-label">
-            {/* Controlled: an uncontrolled box kept a reused DOM node's checked state across queries. */}
-            <input className="task-list-item-checkbox" type="checkbox" checked={false} readOnly={true} data-task=""/>
-        </label>;
-    } else if (node.nodeType === "text" && node.isTask && node.isCompleted) {
-        return <label className="task-list-label">
-            <input className="task-list-item-checkbox" type="checkbox" checked={true} readOnly={true} data-task="x"/>
-        </label>;
-    }
+const BulletOrTask = ({indent, node, interactive}: BulletOrTaskProps) => {
+    if (node.nodeType === "text" && node.isTask) return <TaskCheckbox node={node} interactive={interactive}/>;
 
     return <span className={"ts-formatting ts-formatting-list ts-formatting-list-ul ts-list-" + indent}>
         <span className="ts-list-bullet">-</span>

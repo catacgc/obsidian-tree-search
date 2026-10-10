@@ -3,6 +3,7 @@ import { flattenIndex, defaultVisibility } from "../search/flatten.ts"
 import { parseQuery } from "../search/query.ts"
 import type { ResultNode } from "../search/search.ts"
 import type { ParsedNode } from "../graph/types.ts"
+import { calculateBoost, UNDATED_AGE } from "../graph/boost.ts"
 
 const baseLocation = { path: "note.md", position: { start: { line: 0, ch: 0 }, end: { line: 0, ch: 0 } } } as any
 
@@ -68,5 +69,31 @@ describe("flattenIndex greyed-out subtrees", () => {
     const tree = [node("foo hit", [node("context", [node("deep context")]), node("foo child")])]
     const flat = flattenIndex(tree, 0, parseQuery("foo", "."))
     expect(defaultVisibility(flat, Infinity)).toEqual([true, true, false, true])
+  })
+})
+
+describe("flattenIndex sibling order", () => {
+  // Real boosts: type first, then emoji and recency.
+  const line = (key: string, ageDays: number, task?: "open" | "done"): ResultNode => ({
+    node: {
+      ...text(key), ageDays, boost: calculateBoost("text", key, ageDays),
+      isTask: task !== undefined, isCompleted: task === "done",
+    } as ParsedNode,
+    children: [], parents: [],
+  })
+  const page = (key: string): ResultNode => ({
+    node: { nodeType: "page", searchKey: key, location: baseLocation, boost: calculateBoost("page", key, UNDATED_AGE),
+      ageDays: UNDATED_AGE, isReference: false, page: key, aliases: [], tags: [] } as ParsedNode,
+    children: [], parents: [],
+  })
+
+  it("keeps pages above lines, then puts open tasks first among lines, oldest first, undated last", () => {
+    const parent = node("parent", [
+      line("note new", 1), line("due tomorrow", -1, "open"), line("🔥 pinned note", 3), line("done", 0, "done"),
+      page("child page"), line("overdue", 5, "open"), line("undated task", UNDATED_AGE, "open"), line("today", 0, "open"),
+    ])
+    expect(flattenIndex([parent], Infinity).map(r => r.node.searchKey)).toEqual([
+      "parent", "child page", "overdue", "today", "due tomorrow", "undated task", "🔥 pinned note", "done", "note new",
+    ])
   })
 })

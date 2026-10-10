@@ -33,11 +33,13 @@ import {
     applyAttachmentPlan,
     dailyNotePath,
     editLine,
+    editTaskLine,
     readLine,
     reparent,
     trashSessionAttachments,
     writeNoteContents,
     type EditorAttachment,
+    type TaskChange,
 } from "../../editing/vault-edits"
 import {appendTargetAt, classifyReparent, isEditableRow, type OwnPath} from "./row-editing"
 
@@ -305,10 +307,26 @@ export const EditorMolecule = molecule((mol, scope) => {
         }
     })
 
+    /** Checkbox / Task panel action on a task row: rewrites its line, then reindexes, keeping the row selected. */
+    const editTaskAtom = atom(null, async (get, set, node: ParsedNode, change: TaskChange) => {
+        if (node.nodeType !== "text" || !node.isTask) return
+        const app = get(GlobalAtoms.appAtom)
+        const index = get(GlobalAtoms.indexAtom)
+        const {path, position: {start: {line}}} = node.location
+        try {
+            const touched = await editTaskLine(app, node, change)
+            set(GlobalAtoms.pendingSelectAtom, {view: scp.name, targets: [{path, line}], flash: false})
+            await refreshPaths(app, index, touched.map(f => f.path))
+        } catch (err) {
+            if (err instanceof StaleLineError) await markOutOfDate(app, index, path)
+            else new Notice(err instanceof Error ? err.message : String(err))
+        }
+    })
+
     return {
         editorStateAtom, altHeldAtom, dragIndexAtom, dropTargetAtom, ownPathAtom,
         updateEditorAtom, cancelEditorAtom, openAppendAtom, openBlankEditorAtom, openEditAtom,
         openAppendForSelectedAtom, openEditForSelectedAtom, saveEditorAtom,
-        clearDragAtom, reparentAtom,
+        clearDragAtom, reparentAtom, editTaskAtom,
     }
 })

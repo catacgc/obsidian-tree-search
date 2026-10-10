@@ -34,14 +34,14 @@ The chips above the results limit them by date: **All**, **7d**, **30d** and **1
 
 In Tree mode, a recency chip prunes the tree to branches with recent activity.
 
-Dated rows show how old they are on the right, in both Tree and Timeline mode: **Today**, then days (**1d** to **7d**), weeks (**1w** to **3w**), months (**1m** to **12m**), and the year (**2025**) once a row is more than 12 months old. Hover the date to see the full date; a date written in the line itself is not repeated in its text. Rows with an image show its thumbnail just before the date.
+Dated rows show how old they are on the right, in both Tree and Timeline mode: **Today**, then days (**1d** to **7d**), weeks (**1w** to **3w**), months (**1m** to **12m**), and the year (**2025**) once a row is more than 12 months old. Rows dated in the future show how far ahead they are: **Tomorrow**, the weekday (**Wed**) up to 6 days ahead, **Next Week** for the rest of next week (Monday to Sunday), **This Month**, the month (**Nov**) later this year, then the year (**2027**). Dates are calendar days in your time zone. Hover the date to see the full date; a date written in the line itself is not repeated in its text. Rows with an image show its thumbnail just before the date.
 
 ![Search results for apollo or hermes limited to the last 7 days](assets/screenshots/recency-tree.webp)
 *<code>apollo &#124; hermes</code> with **7d**: only the branches touched in the last week remain.*
 
 ## Timeline
 
-Switch to the Timeline with the toggle above the results, or press <kbd>Alt</kbd>+<kbd>T</kbd>. The Timeline shows your results as a flat list, newest first. Items with an emoji are pinned to the top. A line takes its date from its daily note, a date in the line, or its note's `created`/`updated` frontmatter; lines with none of these use the date their file was created.
+Switch to the Timeline with the toggle above the results, or press <kbd>Alt</kbd>+<kbd>T</kbd>. The Timeline shows your results as a flat list, newest first, so future-dated items come first, furthest ahead at the top. Open tasks are the exception (see [Tasks](#tasks)). Items with an emoji are pinned to the top. A line takes its date from its daily note, a date in the line, or its note's `created`/`updated` frontmatter; lines with none of these use the date their file was created.
 
 ![The timeline for is:text over the last 30 days](assets/screenshots/timeline.webp)
 *`is:text` in the Timeline with **30d**: dated rows, with emoji items pinned on top.*
@@ -58,8 +58,16 @@ Select a row and press <kbd>Cmd/Ctrl</kbd>+<kbd>K</kbd>, or click **Actions**, t
 
 Note rows add note actions, such as moving the note to a folder or consolidating notes into it. The panel also lists view actions (open the editor, switch to the Timeline, expand or collapse), and you can type to filter them.
 
+For an open task, a **Task** section adds **Done**, **Tomorrow**, **Weekend** (next Saturday) and **Next Week** (next Monday). See [Tasks](#tasks).
+
 ![The Actions panel for a selected row](assets/screenshots/action-panel.webp)
 *The Actions panel for "Kickoff with Alice and Bob".*
+
+## Tasks
+
+Task lines (`- [ ] …`) show their checkbox in Tree and Timeline rows. Click it to complete the task in its note: the line becomes `- [x] …` and gets `[completion:: <today>]`. Click a completed task's checkbox to reopen it; its completion date is removed. The panel's **Tomorrow**, **Weekend** and **Next Week** set the task's `[scheduled:: <date>]`, replacing an existing scheduled date (`[scheduled:: …]`, `(scheduled:: …)` or `⏳ …`). These fields use the [Tasks](https://publish.obsidian.md/tasks/) plugin's Dataview format. Recurring tasks don't get a next occurrence. If the note changed since it was indexed, nothing is written and you see "This row's index is out of date".
+
+Open tasks sort oldest first, so overdue tasks come first and future ones last: in the Timeline, right after pinned items; in the Tree, before the other lines under the same parent. Undated open tasks come after the dated ones in the Tree. Completed tasks sort like any other line.
 
 ## Previews
 

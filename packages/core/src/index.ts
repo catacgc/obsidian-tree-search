@@ -91,6 +91,7 @@ export {
   type OutlineLine,
   type OutlineIssue,
 } from "./edit/outline-edit.ts"
+export { setTaskDone, scheduleTask, rescheduleDate, localIsoDate, type RescheduleKind } from "./edit/task-edit.ts"
 export {
   slugify,
   attachmentKind,

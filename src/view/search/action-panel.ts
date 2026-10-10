@@ -6,11 +6,13 @@ import type {RaycastAction} from "../node-actions"
 import {raycastActionOf} from "../node-actions"
 import {SHORTCUTS, type KeySpec, type ShortcutId} from "./shortcuts"
 import {appendTargetAt, dragInfo, isEditableRow, isValidDropTarget, type OwnPath} from "../editor/row-editing"
+import type {TaskChange} from "../../editing/vault-edits"
 
-export type PanelSection = "row" | "edit" | "view"
+export type PanelSection = "row" | "task" | "edit" | "view"
 
 export type PanelIcon =
     | "link" | "reveal" | "copy" | "insert" | "moveToFolder" | "archive" | "consolidate"
+    | "done" | "schedule"
     | "append" | "edit" | "moveUnder"
     | "openEditor" | "tree" | "timeline" | "expand" | "collapse" | "refresh"
 
@@ -18,6 +20,7 @@ export type PanelRun =
     | {kind: "shortcut"; id: ShortcutId}
     | {kind: "action"; action: RaycastAction}
     | {kind: "moveUnder"}
+    | {kind: "task"; change: TaskChange}
 
 export type PanelItem = {
     id: string
@@ -41,7 +44,7 @@ export type PanelContext = {
     ownPath: OwnPath
 }
 
-export const SECTION_TITLES: Record<Exclude<PanelSection, "row">, string> = {edit: "Edit", view: "View"}
+export const SECTION_TITLES: Record<Exclude<PanelSection, "row">, string> = {task: "Task", edit: "Edit", view: "View"}
 
 const keyOf = (id: ShortcutId): KeySpec | undefined => SHORTCUTS.find(s => s.id === id)?.keys[0]
 
@@ -78,6 +81,16 @@ export function panelItems(ctx: PanelContext): PanelItem[] {
         const {id, icon} = rowActionShortcut(action)
         items.push({id: `row:${i}`, section: "row", title: action.title, icon, key: id && keyOf(id), run: {kind: "action", action}})
     })
+
+    // Open tasks: complete or reschedule the line (Tasks plugin fields), in every view like Archive.
+    if (row && row.node.nodeType === "text" && row.node.isTask && !row.node.isCompleted) {
+        const task = (id: string, title: string, icon: PanelIcon, change: TaskChange) =>
+            items.push({id: `task:${id}`, section: "task", title, icon, run: {kind: "task", change}})
+        task("done", "Done", "done", {kind: "done", done: true})
+        task("tomorrow", "Tomorrow", "schedule", {kind: "schedule", when: "tomorrow"})
+        task("weekend", "Weekend", "schedule", {kind: "schedule", when: "weekend"})
+        task("nextWeek", "Next Week", "schedule", {kind: "schedule", when: "nextWeek"})
+    }
 
     if (ctx.allowEditing && row) {
         const target = appendTargetAt(ctx.rows, ctx.selectedPos, ctx.timelineActive)

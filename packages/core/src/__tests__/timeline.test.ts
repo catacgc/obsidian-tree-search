@@ -126,6 +126,19 @@ describe("buildTimeline", () => {
     expect(items[0].node).toBe(child)
     expect(items[0].breadcrumb).toEqual([parent])
   })
+
+  it("lists open tasks first, oldest first (overdue, today, future), then other rows newest first", () => {
+    const task = (key: string, ageDays: number, done = false): TextNode =>
+      ({ ...textNode(key, ageDays), isTask: true, isCompleted: done })
+    const tree = [rn(pageNode("P", 0), [
+      rn(textNode("x note new", 1)), rn(task("x due tomorrow", -1)), rn(task("x done", 0, true)),
+      rn(task("x overdue", 5)), rn(textNode("x note old", 9)), rn(task("x today", 0)), rn(task("x 2027", -400)),
+    ])]
+
+    expect(keys(buildTimeline(tree, parseQuery("x", ".")))).toEqual([
+      "x overdue", "x today", "x due tomorrow", "x 2027", "x done", "x note new", "x note old",
+    ])
+  })
 })
 
 describe("fileParent", () => {
