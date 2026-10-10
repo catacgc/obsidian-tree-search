@@ -43,6 +43,7 @@ function obsidianLinkPlugin(md: MarkdownIt): void {
       const content = state.src.slice(start + 2, end)
       const token = state.push("obsidian_link", "a", 0)
       token.content = content
+      token.meta = { embed: start > 0 && state.src.charAt(start - 1) === "!" }
     }
     state.pos = end + 2
     return true
@@ -92,6 +93,7 @@ function parseTokenList(tokens: Token[]): ParsedTextToken[] {
         pageTarget: resolveReference(fileName ?? ""),
         headerName,
         alias,
+        ...(token.meta?.embed ? { embed: true as const } : {}),
       },
       ...parseTokenList(tokens.slice(1)),
     ]

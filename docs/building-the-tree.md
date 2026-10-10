@@ -12,7 +12,7 @@ Inside a note, three things create parent/child relationships:
 
 - **Headings.** Lines under a heading become its children.
 - **Nested bullets.** An indented bullet is a child of the bullet above it.
-- **Links in bullets.** A bullet that contains a `[[link]]` is also a child of the linked note.
+- **Links in bullets.** A bullet that contains a `[[link]]` is also a child of the linked note. Embeds (`![[image.png]]`, `![[Note]]`) only show content: they don't make the bullet a child of the embedded file.
 
 Here is the `Project Apollo` note from the example vault:
 

@@ -107,6 +107,8 @@ export type ObsidianLinkToken = {
   pageTarget: string
   alias?: string
   headerName?: string
+  /** `![[…]]`: an embed (transclusion). It renders like a link but adds no parent edge. */
+  embed?: true
 }
 
 export type LinkToken = {

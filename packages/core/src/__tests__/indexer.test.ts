@@ -295,6 +295,16 @@ describe("search integration", () => {
     expect(results.map(r => r.node.searchKey)).toEqual(["parent"])
     expect(results[0].children.map(c => c.node.searchKey)).toEqual(["alpha sub", "beta sub"])
   })
+
+  it("an embed is not a parent: the line stays under its links only", () => {
+    const line = "[[Spark Cost]] ![[ibm-image-1.png]] ![[Ibm Notes]]"
+    const g = buildGraph(parse(`- [[IBM]]\n    - ${line}\n`, "2026-10-01.md"))
+    expect(g.hasNode("[[ibm-image-1.png]]")).toBe(false)
+    expect(g.hasNode("[[ibm notes]]")).toBe(false)
+    const roots = searchIndex(g, "ibm", ".")
+    expect(roots.map(r => r.node.searchKey)).toEqual(["ibm"])
+    expect(roots[0].children.map(c => c.node.searchKey)).toEqual([line.toLowerCase()])
+  })
 })
 
 describe("todoist meta-action integration", () => {

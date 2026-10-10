@@ -40,11 +40,11 @@ export function getKey(node: ParsedNode): string {
 }
 
 /** Keys of the page/header nodes a line's `[[links]]` point at: the sources of the
- *  link "parent" edges the indexer adds to that line (createVirtualPage keys). */
+ *  link "parent" edges the indexer adds to that line (createVirtualPage keys). Embeds add none. */
 export function linkTargetKeys(tokens: ParsedTextToken[]): Set<string> {
   const keys = new Set<string>()
   for (const t of tokens) {
-    if (t.tokenType !== "obsidian_link") continue
+    if (t.tokenType !== "obsidian_link" || t.embed) continue
     keys.add((t.headerName ? `${t.pageTarget}#${t.headerName}` : `[[${t.pageTarget.replace(/\.canvas$/i, "")}]]`).toLowerCase())
   }
   return keys
@@ -324,9 +324,10 @@ export class NotesGraph {
     return page
   }
 
+  /** The `[[links]]` that make a line a child of the linked page/header; `![[embeds]]` only show content. */
   getObsidianLinkReferences(tokens: ParsedTextToken[]): ObsidianLinkToken[] {
     return tokens.filter(
-      (t): t is ObsidianLinkToken => t.tokenType === "obsidian_link",
+      (t): t is ObsidianLinkToken => t.tokenType === "obsidian_link" && !t.embed,
     )
   }
 

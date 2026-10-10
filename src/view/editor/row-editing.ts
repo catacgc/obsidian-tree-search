@@ -84,7 +84,7 @@ export function dragInfo(rows: TreeNode[], pos: number): { draggable: boolean; r
     if (node.nodeType === "text") {
         const parent = rows[parentPos].node
         const linksParent = node.parsedTokens.some(t => {
-            if (t.tokenType !== "obsidian_link") return false
+            if (t.tokenType !== "obsidian_link" || t.embed) return false
             const target = t.pageTarget.toLowerCase()
             if (parent.nodeType === "page") return target === parent.page.toLowerCase()
             if (parent.nodeType === "header") {
