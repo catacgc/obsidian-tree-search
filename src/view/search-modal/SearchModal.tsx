@@ -4,8 +4,6 @@ import {GraphContextProvider} from "../react-context/GraphContextProvider";
 import {SearchModalContainer, SearchModalKind} from "../search/SearchModalContainer";
 import {GlobalAtoms, GlobalStore} from "../react-context/global";
 import {quickAddClosedAtom} from "../react-context/quick-add-flow";
-import {appendDraftAtom} from "../react-context/settings";
-import {quickAddTitle} from "../editor/draft";
 
 export class SearchModal extends Modal {
 
@@ -19,15 +17,13 @@ export class SearchModal extends Modal {
     }
 
     async onOpen() {
-        // openQuickAddAtom has already set the editor state this opens on.
-        if (this.kind === "quickAdd") this.setTitle(quickAddTitle(this.store.get(GlobalAtoms.editSessionAtom) ?? this.store.get(appendDraftAtom)));
         this.root = createRoot(this.contentEl);
 
         this.root?.render(
             <GraphContextProvider store={this.store}>
                 <div className="tree-search-modal-container">
                     <div className="workspace-leaf-content">
-                        <SearchModalContainer kind={this.kind}/>
+                        <SearchModalContainer kind={this.kind} onTitle={this.kind === "search" ? t => this.setTitle(t) : undefined}/>
                     </div>
                 </div>
             </GraphContextProvider>

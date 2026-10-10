@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test"
-import { appendOutlineEmpty, editorHints } from "../edit/editor-hints.ts"
+import { appendOutlineEmpty, editorHints, NAMES_HINT, renameFileHints } from "../edit/editor-hints.ts"
 
 const base = {
   mode: "append" as const,
@@ -18,6 +18,12 @@ describe("appendOutlineEmpty", () => {
   it("treats a parent with children or a lone non-parent link as content", () => {
     expect(appendOutlineEmpty("- [[Project X]]\n    - [[A]]", "Project X")).toBe(false)
     expect(appendOutlineEmpty("- [[Meeting]]")).toBe(false)
+  })
+
+  it("treats a parent root carrying an alias or field as content", () => {
+    expect(appendOutlineEmpty("- [[P|a]]", "P")).toBe(false)
+    expect(appendOutlineEmpty("- [[P]] (is:: x)", "P")).toBe(false)
+    expect(appendOutlineEmpty("- [[P]]\n    - ", "P")).toBe(true)
   })
 })
 
@@ -38,6 +44,14 @@ describe("editorHints", () => {
   it("announces a new note for a link with a buffer and no file", () => {
     const hints = editorHints({ ...base, outline: "- [[New]] kickoff", contents: { New: "Hello" }, contentOrder: ["New"] })
     expect(hints).toEqual([{ text: 'Creates note "New"', blocking: false }])
+  })
+
+  it("describes note patches instead of dangling-link hints for patched names", () => {
+    const patches = [{ name: "New", aliases: ["n"], headings: [], fields: [] }]
+    const texts = editorHints({ ...base, outline: "- [[Project X]]\n    - [[New|n]]", patches }).map(h => h.text)
+    expect(texts).toContain('Creates note "New"')
+    expect(texts).toContain('Adds alias "n" to New')
+    expect(texts.some(t => t.includes("stays a link"))).toBe(false)
   })
 
   it("distinguishes appending, dangling links and plain bullets", () => {
@@ -87,11 +101,33 @@ describe("editorHints", () => {
     expect(texts("- ")).toContain(plain)
   })
 
+  it("drops the plain-bullet hint when Save dates every line (append under a picked line)", () => {
+    const plain = "Plain bullets aren't indexed — they won't appear in results"
+    expect(editorHints({ ...base, outline: "- buy milk" }).map(h => h.text)).toContain(plain)
+    expect(editorHints({ ...base, outline: "- buy milk", datedLines: true }).map(h => h.text)).not.toContain(plain)
+  })
+
   it("reports an ambiguous attachment", () => {
     const hints = editorHints({ ...base, outline: "- [[P]]", attachmentError: { ambiguous: "x.png" } })
     expect(hints[0]).toEqual({
       text: "Can't tell which attachment ![[x.png]] is — restore its file name and change the alias instead",
       blocking: true,
     })
+  })
+})
+
+describe("renameFileHints", () => {
+  const exists = (name: string) => ["photo.png", "taken.png"].includes(name.toLowerCase())
+  const hints = (stem: string) => renameFileHints(stem, "photo.png", "png", exists)
+
+  it("blocks an empty name, invalid characters and another existing file", () => {
+    expect(hints("  ")).toEqual([{ text: "Name the file", blocking: true }])
+    expect(hints("a/b")).toEqual([{ text: NAMES_HINT, blocking: true }])
+    expect(hints("Taken")).toEqual([{ text: '"Taken.png" already exists', blocking: true }])
+  })
+
+  it("allows a new name and a case-only change of the same file", () => {
+    expect(hints("cover")).toEqual([])
+    expect(hints("Photo")).toEqual([])
   })
 })

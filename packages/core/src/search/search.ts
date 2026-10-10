@@ -1,6 +1,7 @@
 import { getKey, linkTargetKeys, type NotesGraph } from "../graph/graph.ts"
 import type { EdgeEntry, ParsedNode } from "../graph/types.ts"
-import { firstPassInclude, matchQuery, parseQuery, extractArchiveReveal, extractScope, queryTargetsFolders, DAILY_NOTE, type ScopeTarget, type QueryExpr } from "./query.ts"
+import { firstPassInclude, matchQuery, parseQuery, extractArchiveReveal, extractScope, queryTargetsFolders, openLinkAt, DAILY_NOTE, type ScopeTarget, type QueryExpr } from "./query.ts"
+import { INVALID_NAME_RE } from "../edit/attachments.ts"
 import { partitionArchived } from "./archive.ts"
 import { fileParent } from "./timeline.ts"
 
@@ -77,17 +78,18 @@ function buildTree(
 // parent. A line nested under a bullet that links the same note shares that
 // edge (edges are unique per pair), so it is dropped too, as in `fileParent`.
 //
-// `tree:<note>` keeps it inside the note's full subtree: every edge the search
+// `[[note]]` keeps it inside the note's full subtree: every edge the search
 // would follow anyway, recorded in any file, so children written elsewhere
-// under a `[[note]]` link count too. Several scopes intersect.
+// under a `[[note]]` link count too. `[[note#heading]]` roots it at that
+// heading instead. Several scopes intersect.
 
 type Scope = { keys: Set<string>; follow: EdgeFilter }
 
 type NoteCandidate = { key: string; name: string; path: string; lowerPath: string; ageDays: number; isReference: boolean }
 
-/** The notes `outline:`/`tree:` targets name, compared lowercase:
+/** The notes `outline:`/`[[note]]` targets name, compared lowercase:
  *  - `:daily`: today's daily note (`SearchOptions.dailyNote`), by path;
- *  - exact (quoted): every note whose name or vault path (with or without `.md`) equals it;
+ *  - exact (quoted, or a link): every note whose name or vault path (with or without `.md`) equals it;
  *  - a fragment: the note whose name equals it, else the most recent one whose name
  *    (or, for a fragment with a `/`, vault path) contains it.
  *  With `includeReferences`, link-only notes are candidates too; they match by name
@@ -163,7 +165,10 @@ function outlineScope(graph: NotesGraph, targets: ScopeTarget[], options: Search
 }
 
 function treeScope(graph: NotesGraph, targets: ScopeTarget[], options: SearchOptions, follow: EdgeFilter): Scope {
-  const roots = pickNotes(graph, targets, options, true).map(n => n.key)
+  // An exact `note#heading` target is a heading key (getKey); an unknown one matches nothing, as an unknown note does.
+  const isHeading = (t: ScopeTarget) => t.exact && t.value.includes("#")
+  const headings = targets.filter(isHeading).map(t => t.value).filter(k => graph.hasNode(k))
+  const roots = [...pickNotes(graph, targets.filter(t => !isHeading(t)), options, true).map(n => n.key), ...headings]
   return { keys: reachable(graph, roots, follow), follow }
 }
 
@@ -262,12 +267,15 @@ export function searchIndex(
   separator: string,
   options: SearchOptions = {},
 ): ResultNode[] {
+  // An open `[[fragment` turns the whole query into a link-target list; the fragment holds no `[[`, so this can't recurse.
+  const open = openLinkAt(qs)
+  if (open) return linkTargetTree(graph, open.fragment, separator)
   if (qs.length < 3) return []
 
   // Strip `is:archived` out of the matching stages (it is a visibility toggle,
   // not a matcher) so it never filters results; a bare `is:archived` stage is
   // substituted with the archived predicate so it still selects archived nodes.
-  // `outline:`/`tree:` likewise leave the stages: they scope the candidates and edges.
+  // `outline:`/`[[note]]` likewise leave the stages: they scope the candidates and edges.
   const { outline, tree, stages: expressions } =
     extractScope(extractArchiveReveal(parseQuery(qs, separator)).stages)
   const baseFollow: EdgeFilter = queryTargetsFolders(expressions) ? () => true : skipFolderEdges
@@ -310,6 +318,21 @@ export function linkTargetTree(graph: NotesGraph, query: string, separator: stri
     n => (n.nodeType === "page" || n.nodeType === "header") && matchQuery(n, expr),
   )
   return partitionArchived(pruned, false).visible
+}
+
+/**
+ * The name an open `[[query` would link as a new note: the trimmed query, or null when it is blank,
+ * contains `#`, `^`, `[` or `]` or a character INVALID_NAME_RE rejects, names a page in `graph`
+ * (note file or reference), or equals an alias of a page in `targets` (case-insensitive).
+ */
+export function newLinkName(graph: NotesGraph, query: string, targets: ResultNode[]): string | null {
+  const name = query.trim()
+  if (!name || /[#^[\]]/.test(name) || INVALID_NAME_RE.test(name)) return null
+  const lower = name.toLowerCase()
+  if (graph.hasNode(`[[${lower}]]`)) return null
+  const aliased = (ns: ResultNode[]): boolean => ns.some(n =>
+    (n.node.nodeType === "page" && n.node.aliases.some(a => a.toLowerCase() === lower)) || aliased(n.children))
+  return aliased(targets) ? null : name
 }
 
 export function advancedSearch(

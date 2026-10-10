@@ -51,6 +51,13 @@
     white-space: normal;
 }
 
+/* The editor's title (editorTitle): what Save writes, in every host. */
+.ts-editor-title {
+    margin-bottom: 8px;
+    font-size: var(--font-ui-medium);
+    font-weight: var(--font-semibold);
+}
+
 .ts-editor-field {
     position: relative;
 }
@@ -248,4 +255,35 @@
     padding: 8px 12px;
     color: var(--text-muted);
     font-size: var(--font-ui-small);
+}
+
+.ts-link-new {
+    padding: 4px 12px;
+    cursor: pointer;
+    border-radius: var(--radius-s);
+}
+
+.ts-link-new:hover {
+    background-color: var(--background-modifier-hover);
+}
+
+.ts-link-new.is-selected {
+    background-color: hsla(var(--interactive-accent-hsl), 0.1);
+}
+
+.ts-link-new-label {
+    margin-right: 6px;
+    color: var(--text-muted);
+    font-size: var(--font-ui-small);
+}
+
+/* Prose mode: the whole note in one field. */
+.ts-editor-prose .ts-editor-outline .cm-editor {
+	max-height: 60vh;
+	overflow: auto;
+}
+
+.ts-prose-name {
+	width: 100%;
+	margin-bottom: 6px;
 }

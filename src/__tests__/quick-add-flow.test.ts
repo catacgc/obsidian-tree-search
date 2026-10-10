@@ -6,7 +6,7 @@ import { appendDraftAtom } from "../view/react-context/settings"
 import { openQuickAddAtom } from "../view/react-context/quick-add-flow"
 import { dailyConfigOf, newAppendState } from "../view/editor/draft"
 import { dailyNotePath } from "../editing/vault-edits"
-import type { EditorState } from "../view/editor/EditorMolecule"
+import type { EditorState, UnderLine } from "../view/editor/EditorMolecule"
 
 function setup(draft: EditorState | null) {
     const trashed: string[] = []
@@ -20,8 +20,9 @@ function setup(draft: EditorState | null) {
     } as unknown as App)
     store.set(appendDraftAtom, draft)
     // trashSessionAttachments calls trashFile before its first await, so `trashed` is filled synchronously.
-    const appendTo = (name: string) => store.set(openQuickAddAtom, { request: { kind: "link", name }, session: null })
-    return { store, trashed, appendTo }
+    const appendTo = (name: string) => store.set(openQuickAddAtom, { kind: "link", name })
+    const appendUnder = (target: UnderLine) => store.set(openQuickAddAtom, { kind: "line", target })
+    return { store, trashed, appendTo, appendUnder }
 }
 
 function draftUnder(parent: string): EditorState {
@@ -62,5 +63,45 @@ describe("Append to [[name]]", () => {
         const { store, appendTo } = setup(newAppendState("x.md"))
         appendTo("Q")
         expect(store.get(appendDraftAtom)).toMatchObject({ parentName: "Q", outline: "- [[Q]]\n    - ", sourcePath: today })
+    })
+})
+
+describe("Append under a picked line", () => {
+    const LINE: UnderLine = { path: "Shop.md", line: 4, expectedLine: "- buy milk", label: "buy milk" }
+
+    it("replaces a draft under a parent with one under the line, trashing its pasted attachments", () => {
+        const { store, trashed, appendUnder } = setup(draftUnder("P"))
+        appendUnder(LINE)
+        const d = store.get(appendDraftAtom)!
+        expect(d.outline).toBe("- ")
+        expect(d.underLine).toEqual(LINE)
+        expect(d.parentName).toBeUndefined()
+        expect(trashed).toEqual(["P image.png"])
+    })
+
+    it("keeps the typed outline when the same line is picked again", () => {
+        const { store, appendUnder } = setup(null)
+        appendUnder(LINE)
+        store.set(appendDraftAtom, { ...store.get(appendDraftAtom)!, outline: "- check price", caret: 13 })
+        appendUnder({ ...LINE })
+        expect(store.get(appendDraftAtom)).toMatchObject({ outline: "- check price", underLine: LINE })
+    })
+
+    it("a link request replaces a draft under a line", () => {
+        const { store, appendTo, appendUnder } = setup(null)
+        appendUnder(LINE)
+        appendTo("Q")
+        const d = store.get(appendDraftAtom)!
+        expect(d.underLine).toBeUndefined()
+        expect(d.outline).toBe("- [[Q]]\n    - ")
+    })
+})
+
+describe("A chain opened in the editor", () => {
+    it("replaces the draft, trashing its pasted attachments, with the chain's outline and caret", () => {
+        const { store, trashed } = setup(draftUnder("P"))
+        store.set(openQuickAddAtom, { kind: "outline", parentName: "P", outline: "- [[P]]\n    - [[N]]\n        - ", caret: 27 })
+        expect(store.get(appendDraftAtom)).toMatchObject({ mode: "append", parentName: "P", outline: "- [[P]]\n    - [[N]]\n        - ", caret: 27, attachments: [] })
+        expect(trashed).toEqual(["P image.png"])
     })
 })

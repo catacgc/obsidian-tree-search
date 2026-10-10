@@ -1,13 +1,17 @@
 import {TreeNode} from '../search/SearchViewFlatten'
 import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, linkTargetTree, type QueryExpr, partitionArchived, extractArchiveReveal, suggestAt, type Suggestion, parseDuration, flattenIndex, defaultVisibility, blockFooters, pruneToRecency} from '@mdtree/core'
 import {atom, useAtomValue, type Getter, type Setter} from 'jotai'
-import {findTargetRow, revealRow, type RowTarget} from '../search/select-target'
+import {findTargetRow, revealRow, rowTargets, type RowTarget} from '../search/select-target'
 import {toggleTaskFilter} from '../search/task-filter'
 import {buildTimelineRows} from '../search/timeline-utils'
+import {chainOutline, chainResults, isEntryInput, isMovable, parseChainEntry, rowLabel, type ChainOutline, type ChainState, type RowRef} from '../search/chain'
+import {basenameOf, dailyConfigOf, searchModalTitle} from '../editor/draft'
+import {dailyNotePath} from '../../editing/vault-edits'
+import {dragInfo, INLINE_LINK_REFUSAL, treeParentPos} from '../editor/row-editing'
 
 type SearchQuery = { query: string; file?: string; heading?: string }
 import {createScope, molecule} from "bunshi";
-import {App} from "obsidian";
+import {App, Notice} from "obsidian";
 import {GlobalAtoms} from "./global";
 import {searchViewModesAtom, separatorAtom, type SearchViewMode} from "./settings";
 import {atomWithDefault} from "jotai/utils";
@@ -132,13 +136,13 @@ export const GlobalAppMolecule = molecule((_, scope) => {
 /** Quick Add's results list without a parent and no `[[` open: the outline of today's daily note. */
 export const DAILY_OUTLINE_QUERY = ":daily :page"
 
-/** Quick Add's results list while no `[[` is open: the full tree of the outline's note nearest the caret (caretNote),
- *  or today's daily outline without one. A typed name with `"` can't be a note (nor be quoted), so it counts as none. */
-export const quickAddDefaultQuery = (parentName: string | undefined): string =>
-    parentName && !parentName.includes('"') ? `tree:"${parentName}"` : DAILY_OUTLINE_QUERY
-
-/** True for a query quickAddDefaultQuery produces; such queries run through searchIndex, not linkTargetTree. */
-export const isQuickAddDefaultQuery = (q: string): boolean => q === DAILY_OUTLINE_QUERY || /^tree:"[^"]*"$/.test(q)
+/** Quick Add's results list while no `[[` is open: the full tree of the outline's note nearest the caret (caretNote)
+ *  as `[[P]]`; else, for an Append under a picked line, the outline of that line's note (`underLinePath`); else
+ *  today's daily outline. A name with `[` or `]` can't be written as a link, so it counts as none. */
+export const quickAddDefaultQuery = (parentName: string | undefined, underLinePath?: string): string =>
+    parentName && !/[[\]]/.test(parentName) ? `[[${parentName}]]`
+    : underLinePath ? `outline:"${underLinePath.replace(/\.md$/, "")}" :page`
+    : DAILY_OUTLINE_QUERY
 
 export const SearchModalMolecule = molecule((mol, scope) => {
     const scp = scope(SearchViewScope)
@@ -149,13 +153,19 @@ export const SearchModalMolecule = molecule((mol, scope) => {
     const searchResultsComputeAtom = withAtomEffect(searchResultsAtom, (get, set) => {
         get(GlobalAtoms.graphVersionAtom)  // re-run on mutable graph updates from refreshPage
         const searchQuery = get(searchMol.actualQueryAtom)
+        // A chain (`>` append, `<` reparent) replaces the search with its own results.
+        const chain = get(searchMol.chainAtom)
+        if (chain) {
+            set(searchMol.refreshChainResultsAtom)
+            return
+        }
         const graph = get(GlobalAtoms.graphAtom)
         const separator = get(separatorAtom)
         const options = get(GlobalAtoms.indexAtom)?.searchOptions()
 
-        if (scp.isQuickLink || (scp.isQuickAdd && !isQuickAddDefaultQuery(searchQuery))) {
-            // Insert Link and Quick Add offer only link targets: notes and headers whose
-            // own name/alias/heading matches the query, archived rows hidden.
+        if (scp.isQuickLink) {
+            // Insert Link offers only link targets: notes and headers whose own name/alias/heading
+            // matches the query, archived rows hidden. Its input is typed without `[[`.
             set(searchMol.updateSearchResultsAtom, linkTargetTree(graph, searchQuery, separator), 0)
             return
         }
@@ -191,6 +201,8 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         set(selectAnchorAtom, null)
         set(selectedLineValueAtom, line)
     })
+    /** Search's append (`>`) or reparent (`<`) chain; null when searching normally. */
+    const chainAtom = atom<ChainState | null>(null)
     /** Row index that is flashing (just saved); cleared by the view after the animation. */
     const flashLineAtom = atom<number | null>(null)
     const searchVisibleAtom = atom(scp.showSearch)
@@ -243,6 +255,14 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     const hasMoreTreeNodesAtom = atom((get) => get(searchResultsStateAtom).hasMore)
 
     const searchPlaceholderAtom = atom((get) => {
+        const chain = get(chainAtom)
+        if (chain?.mode === "reparent") return `Move ${chain.child.label} under…`
+        if (chain?.mode === "append") {
+            const last = chain.steps[chain.steps.length - 1]
+            if (last.kind === "entry") return `Add under ${last.label} — Enter adds, Alt+Enter opens the editor`
+            // The operators only: the chip and the modal's Patch title already name the anchor.
+            return `- item · [[note]] · |alias · #heading · (k:: v)`
+        }
         const { totalNodes } = get(searchResultsStateAtom)
         const graph = get(GlobalAtoms.graphAtom)
         if (totalNodes > 0) {
@@ -250,6 +270,24 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         }
 
         return `Search ${graph.order} nodes and ${graph.size} edges`
+    })
+
+    /** Today's daily note basename (the Today chip's note). */
+    const dailyNameOf = (get: Getter) => basenameOf(dailyNotePath(dailyConfigOf(get(GlobalAtoms.indexAtom))))
+
+    /** The append chain's pending write (what Enter adds), an error to show, or null when Enter searches/opens instead. */
+    const chainWriteAtom = atom<ChainOutline | {error: string} | null>(get => {
+        const chain = get(chainAtom)
+        if (chain?.mode !== "append") return null
+        const q = get(actualQueryAtom)
+        const hasEntries = chain.steps.some(s => s.kind === "entry")
+        const parsed = parseChainEntry(q)
+        if (parsed !== null && "error" in parsed) return parsed
+        // Typed text that matches rows stays a search; prefix `- ` to add it instead.
+        if (!hasEntries && (parsed === null || (!isEntryInput(q) && get(renderableTreeNodesAtom).length > 0))) return null
+        const o = chainOutline(chain.steps, parsed, dailyNameOf(get))
+        if (!("error" in o) && o.lines.length === 0 && !o.underLine) return null
+        return o
     })
 
     const incrementPagesAtom = atom(
@@ -260,12 +298,12 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     const selectedNodeAtom = atom<TreeNode | null>(get => {
         const sel = get(selectedLineAtom)
         if (sel == -1) return null
-        return get(treeNodesAtom)[sel]
+        return get(treeNodesAtom)[sel] ?? null
     })
 
     // Per-view (scope name) Tree/Timeline mode, persisted to data.json by main.ts.
     const viewModeAtom = atom<SearchViewMode>(get => get(searchViewModesAtom)[scp.name] ?? "tree")
-    const timelineActiveAtom = atom(get => scp.allowTimeline === true && get(viewModeAtom) === "timeline")
+    const timelineActiveAtom = atom(get => scp.allowTimeline === true && get(viewModeAtom) === "timeline" && !get(editorOpenAtom))
     const toggleViewModeAtom = atom(null, (get, set) =>
         set(searchViewModesAtom, {...get(searchViewModesAtom), [scp.name]: get(viewModeAtom) === "timeline" ? "tree" : "timeline"}))
     // View-local recency filter; narrows the timeline, or prunes the tree to
@@ -311,7 +349,8 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     const updateSearchResultsAtom = atom(null, (get, set, result: ResultNode[], archivedCount: number = 0) => {
         set(lastResultsAtom, { results: result, archivedCount })
 
-        const w = get(recencyWindowAtom)
+        // The editor's link list is never narrowed by the view's recency window.
+        const w = get(editorOpenAtom) ? "all" : get(recencyWindowAtom)
         if (get(timelineActiveAtom)) {
             const nodes = buildTimelineRows(get(GlobalAtoms.appAtom), get(GlobalAtoms.graphAtom), result, get(matchExprsAtom), w === "all" ? null : parseDuration(w))
             settleSelection(get, set, nodes)
@@ -482,6 +521,33 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         set(treeNodesAtom, rows)
     })
 
+    /** Shows all lines of the timeline block row with `index`, or only its previews. */
+    const setBlockOpenAtom = atom(null, (get, set, index: number, open: boolean) => {
+        set(treeNodesAtom, get(treeNodesAtom).map(r => r.index === index ? {...r, blockOpen: open} : r))
+    })
+
+    /** → in the search input on the selected row: reveals a list's compacted children, else toggles the row's
+     *  children (Tree), or opens / closes a block row's lines (Timeline). False when the row has nothing to toggle. */
+    const toggleRowAtom = atom(null, (get, set, index: number): boolean => {
+        const rows = get(treeNodesAtom)
+        const pos = rows.findIndex(r => r.index === index)
+        const row = rows[pos]
+        if (!row || row.archiveRow) return false
+        if (row.timeline) {
+            if (!row.timeline.block?.some(l => !l.preview)) return false
+            set(setBlockOpenAtom, index, !row.blockOpen)
+            return true
+        }
+        let compacted = false
+        for (let i = pos + 1; i < rows.length && rows[i].indent > row.indent; i++) {
+            if (rows[i].indent === row.indent + 1 && rows[i].compacted) compacted = true
+        }
+        if (compacted) set(showCompactedAtom, index)
+        else if (row.hasChildren) set(expandNodeAtom, index)
+        else return false
+        return true
+    })
+
     const resetCollapseAtom = atom(null, (get, set) => {
         set(userExpandLevel, 0)
         set(dynamicExpandAtom, -1)
@@ -574,6 +640,125 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         else set(openActionPanelAtom)
     })
 
+    // ── Chains: append (`>`) and reparent (`<`) ────────────────────────────
+    const setQuery = (set: Setter, query: string) => {
+        set(searchQueryAtom, {query})
+        set(lastSearchAtom, {query})
+    }
+    const refreshChainResultsAtom = atom(null, (get, set) => {
+        const chain = get(chainAtom)
+        if (!chain) return
+        const query = get(actualQueryAtom)
+        const options = get(GlobalAtoms.indexAtom)?.searchOptions() ?? {}
+        const results = chainResults(get(GlobalAtoms.graphAtom), chain, query, get(separatorAtom), options, dailyNameOf(get))
+        set(updateSearchResultsAtom, results)
+    })
+
+    /** The selected row as a chip: its node, label and (Tree mode) tree parent; null without a usable selection. */
+    const selectedRowRef = (get: Getter): {row: TreeNode; ref: RowRef} | null => {
+        const sel = get(selectedNodeAtom)
+        if (!sel || sel.archiveRow) return null
+        const rows = get(renderableTreeNodesAtom)
+        const pos = rows.findIndex(r => r.index === sel.index)
+        const parentPos = pos >= 0 && !get(timelineActiveAtom) ? treeParentPos(rows, pos) : null
+        return {row: sel, ref: {node: sel.node, label: rowLabel(sel.node), parent: parentPos === null ? null : rows[parentPos].node}}
+    }
+
+    /** Backspace in an empty input: drops the last chip (an append chain's last step, or the reparent), restoring the
+     *  query typed before it. */
+    const popChainAtom = atom(null, (get, set) => {
+        const chain = get(chainAtom)
+        if (!chain) return
+        if (chain.mode === "reparent" || chain.steps.length === 1) {
+            set(chainAtom, null)
+            setQuery(set, chain.mode === "reparent" ? chain.prevQuery : chain.steps[0].prevQuery)
+            return
+        }
+        const last = chain.steps[chain.steps.length - 1]
+        set(chainAtom, {...chain, steps: chain.steps.slice(0, -1)})
+        setQuery(set, last.prevQuery)
+    })
+
+    /** Escape: leaves the chain, restoring the query typed before its first chip. */
+    const cancelChainAtom = atom(null, (get, set) => {
+        const chain = get(chainAtom)
+        if (chain?.mode !== "append") {
+            set(popChainAtom)
+            return
+        }
+        set(chainAtom, null)
+        setQuery(set, chain.steps[0].prevQuery)
+    })
+
+    /** Move to (`<`, Alt+M, action panel): the selected row becomes the one to move; the query then searches its new
+     *  parent (a page, header, line or folder, by the row's type). Shows the search input of a pane that hid it. */
+    const startReparentAtom = atom(null, (get, set) => {
+        const selected = selectedRowRef(get)
+        if (!selected) return
+        const node = selected.ref.node
+        if (!isMovable(node)) {
+            new Notice(node.nodeType === "header" ? "Headings can't be moved — move their page or their lines" : "This row can't be moved")
+            return
+        }
+        if (node.nodeType === "text" && selected.row.indent > 0) {
+            const rows = get(renderableTreeNodesAtom)
+            const pos = rows.findIndex(r => r.index === selected.row.index)
+            if (dragInfo(rows, pos).refusal === INLINE_LINK_REFUSAL) {
+                new Notice(INLINE_LINK_REFUSAL)
+                return
+            }
+        }
+        // A folder note row stands for its folder.
+        const child = node.nodeType === "folderNote" ? {...selected.ref, node: node.folder, label: rowLabel(node.folder)} : selected.ref
+        set(chainAtom, {mode: "reparent", child, prevQuery: get(actualQueryAtom), confirm: null})
+        setQuery(set, "")
+        set(searchVisibleAtom, true)
+        set(focusSearchInputAtom, get(focusSearchInputAtom) + 1)
+    })
+
+    const clearChainAtom = atom(null, (_get, set) => set(chainAtom, null))
+
+    // ── The editor shown in place (Search modal / pane) ─────────────────────
+    /** The query and selected row this view returns to when its editor closes; null while it shows its search. */
+    const editorReturnAtom = atom<{query: string; selected: RowTarget[]} | null>(null)
+    /** This view shows the editor (Search modal / pane only). */
+    const editorOpenAtom = atom(get => scp.allowEditing && get(GlobalAtoms.editorHostAtom) === scp.name)
+    /** The Search modal's title (searchModalTitle); null in the other views. */
+    const searchModalTitleAtom = atom(get => scp.isModal && scp.allowEditing
+        ? searchModalTitle(get(editorOpenAtom) ? get(GlobalAtoms.editSessionAtom) : null, get(chainAtom))
+        : null)
+
+    /** Switches this view to the editor, remembering the query and selected row to return to. A prose or Alt-Edit
+     *  session opened from inside the editor keeps the first return point. */
+    const enterEditorAtom = atom(null, (get, set) => {
+        if (get(editorReturnAtom) === null) {
+            const sel = get(selectedNodeAtom)
+            set(editorReturnAtom, {query: get(actualQueryAtom), selected: sel && !sel.archiveRow ? rowTargets(sel) : []})
+        }
+        set(chainAtom, null)
+        set(closeActionPanelAtom)
+        set(searchVisibleAtom, true)
+        set(GlobalAtoms.editorHostAtom, scp.name)
+        // Re-project the last results in Tree mode for the editor's link list.
+        set(rebuildResultsAtom)
+    })
+
+    /** Back to the search from the editor: restores the query, then selects `saved` (flashing) or the row selected
+     *  before; `focus` focuses and selects the query. */
+    const leaveEditorAtom = atom(null, (get, set, {saved, focus}: {saved: RowTarget[] | null; focus: boolean}) => {
+        if (get(GlobalAtoms.editorHostAtom) === scp.name) set(GlobalAtoms.editorHostAtom, null)
+        const r = get(editorReturnAtom)
+        if (r === null) return
+        set(editorReturnAtom, null)
+        const targets = saved ?? r.selected
+        if (targets.length > 0) set(GlobalAtoms.pendingSelectAtom, {view: scp.name, targets, flash: saved !== null})
+        // The results view's mount rebuild must not settle the pending row on the editor's rows; the recompute for
+        // the restored query selects it.
+        if (get(actualQueryAtom) !== r.query) set(lastResultsAtom, {results: [], archivedCount: 0})
+        setQuery(set, r.query)
+        if (focus) set(GlobalAtoms.selectQueryAtom, {view: scp.name})
+    })
+
     return {
             scopeName: {name: scp.name, instance: instance},
             actualQueryAtom,
@@ -585,6 +770,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             hasMoreTreeNodesAtom,
             searchVisibleAtom,
             updateSearchResultsAtom,
+            lastResultsAtom,
             arrowUpAtom,
             arrowDownAtom,
             decExpandAtom,
@@ -594,7 +780,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             searchPlaceholderAtom,
             setDefaultExpandLevelAtom,
             expandNodeAtom, selectedLineAtom, updateHoveredLineAtom, hoveredLineAtom,
-            blockFootersAtom, showCompactedAtom,
+            blockFootersAtom, showCompactedAtom, setBlockOpenAtom, toggleRowAtom,
             matchTermsAtom,
             matchExprsAtom,
             cursorPosAtom, suggestionsAtom, suggestionIndexAtom, dismissSuggestionsAtom, resetSuggestionsAtom,
@@ -605,6 +791,8 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             allowTimeline: scp.allowTimeline,
             allowEditing: scp.allowEditing,
             flashLineAtom,
+            chainAtom, chainWriteAtom, refreshChainResultsAtom, popChainAtom, cancelChainAtom, startReparentAtom, clearChainAtom,
+            editorOpenAtom, enterEditorAtom, leaveEditorAtom, searchModalTitleAtom,
     }
 })
 

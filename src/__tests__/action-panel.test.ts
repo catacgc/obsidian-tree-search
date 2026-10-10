@@ -49,8 +49,8 @@ describe("panelItems", () => {
 
     it("maps row actions to their shortcut keys and drops Insert after when Append exists", () => {
         const row = panelItems(ctx()).filter(i => i.section === "row")
-        expect(row.map(i => i.title)).toEqual(["Browse example", "See in Obsidian", "Copy Node", "Archive"])
-        expect(row.map(i => i.key?.label)).toEqual(["Enter", "Enter", "C", "X"])
+        expect(row.map(i => i.title)).toEqual(["Browse example", "See in Obsidian", "Copy Node", "Archive", "Move to…"])
+        expect(row.map(i => i.key?.label)).toEqual(["Enter", "Enter", "C", "X", "M"])
         expect(row[1].key?.shift).toBe(true)
     })
 
@@ -59,6 +59,17 @@ describe("panelItems", () => {
         expect(titles(c, "row")).toContain("Insert After")
         expect(titles(c, "edit")).toEqual([])
         expect(titles(c, "view")).not.toContain("Open editor")
+    })
+
+    it("replaces the folder-picker Move To with Move to… for movable rows, in every view", () => {
+        const withMove = [...ACTIONS, { type: "browse", url: tsUri("moveToFolder"), title: "Move To", icon: "" } as RaycastAction]
+        for (const allowEditing of [true, false]) {
+            const row = titles(ctx({ rowActions: withMove, selectedPos: 0, allowEditing }), "row")
+            expect(row).not.toContain("Move To")
+            expect(row).toContain("Move to…")
+        }
+        const headerRows = rowsOf(row({ ...base("P.md", 2), nodeType: "header", page: "P", header: "H", indent: 1 } as ParsedNode, 0))
+        expect(titles(ctx({ rows: headerRows, selectedPos: 0 }), "row")).not.toContain("Move to…")
     })
 
     it("offers a Task section, before Edit, for an open task row only, in every view", () => {
@@ -78,6 +89,13 @@ describe("panelItems", () => {
         expect(titles(ctx(), "edit")).toEqual(["Append to [[Project X]]", "Edit line", "Move under…"])
         // A root page row: appendable, not editable (its own file), not draggable.
         expect(titles(ctx({ selectedPos: 0 }), "edit")).toEqual(["Append to [[Project X]]"])
+    })
+
+    it("names Edit Rename for a heading", () => {
+        const h: ParsedNode = { ...base("Project X.md", 3), nodeType: "header", page: "Project X", header: "Plan", indent: 1 }
+        const rows = rowsOf(row(page("Project X", "Project X.md"), 0), row(h, 1))
+        expect(titles(ctx({ rows, selectedPos: 1 }), "edit")).toContain("Rename")
+        expect(titles(ctx(), "edit")).toContain("Edit line")
     })
 
     it("Append shows its own key", () => {

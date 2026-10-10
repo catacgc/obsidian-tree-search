@@ -155,6 +155,16 @@ describe("indexSinglePage", () => {
       expect(parent.inheritedDate).toBeUndefined()
       expect(parent.ageDays).toBeGreaterThan(textNode(g, "sub [scheduled:: 2026-10-10]").ageDays)
     })
+
+    it("indexes a prose child that carries [created:: date], dated by it", () => {
+      const g = buildGraph(parse("- [ ] buy milk\n    - check price [created:: 2026-10-07]\n    - plain prose\n", "n.md"))
+      const child = textNode(g, "check price [created:: 2026-10-07]")
+      expect(child).toBeDefined()
+      expect(g.hasNode("plain prose")).toBe(false)
+      expect(g.hasEdge("buy milk", "check price [created:: 2026-10-07]")).toBe(true)
+      const dated = buildGraph(parse("- [ ] t [scheduled:: 2026-10-07]", "m.md"))
+      expect(child.ageDays).toBe(textNode(dated, "t [scheduled:: 2026-10-07]").ageDays)
+    })
   })
 
   describe("frontmatter parent relations", () => {

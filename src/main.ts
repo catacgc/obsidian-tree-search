@@ -89,7 +89,6 @@ export default class TreeSearchPlugin extends Plugin {
         quickLinkModal.setTitle("Insert Link");
 
         const searchModal = new SearchModal(this.globalStore);
-        searchModal.setTitle("Search");
 
         const quickAddModal = new SearchModal(this.globalStore, "quickAdd");
         this.globalStore.set(GlobalAtoms.modalsAtom, {search: searchModal, quickAdd: quickAddModal});
@@ -114,7 +113,7 @@ export default class TreeSearchPlugin extends Plugin {
             id: "quick-add-modal",
             name: "Quick Add",
             callback: () => {
-                this.globalStore.set(openQuickAddAtom, {request: {kind: "draft"}, session: null});
+                this.globalStore.set(openQuickAddAtom, {kind: "draft"});
             },
         });
 
@@ -122,7 +121,7 @@ export default class TreeSearchPlugin extends Plugin {
             id: "open-editor",
             name: "Open editor",
             callback: () => {
-                this.globalStore.set(openQuickAddAtom, {request: {kind: "draft"}, session: null});
+                this.globalStore.set(openQuickAddAtom, {kind: "draft"});
             },
         });
 

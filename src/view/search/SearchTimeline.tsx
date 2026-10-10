@@ -64,7 +64,7 @@ type TimelineRowProps = {
 }
 
 export const TimelineRow = ({node, editable, appendDot, editHint}: TimelineRowProps) => {
-    const {selectedLineAtom, flashLineAtom, updateHoveredLineAtom, matchTermsAtom} = useMolecule(SearchViewMolecule)
+    const {selectedLineAtom, flashLineAtom, updateHoveredLineAtom, matchTermsAtom, setBlockOpenAtom} = useMolecule(SearchViewMolecule)
     const {appAtom} = useMolecule(GlobalAppMolecule)
     const {selectHoveredLineAtom} = useMolecule(ActionsMolecule)
     const editGestures = useRowGestures(node, editable ?? false)
@@ -77,6 +77,7 @@ export const TimelineRow = ({node, editable, appendDot, editHint}: TimelineRowPr
 
     const updateHovered = useSetAtom(updateHoveredLineAtom)
     const selectHovered = useSetAtom(selectHoveredLineAtom)
+    const setBlockOpen = useSetAtom(setBlockOpenAtom)
 
     useEffect(() => {
         if (selectedLine === node.index && nodeRef.current) {
@@ -111,8 +112,7 @@ export const TimelineRow = ({node, editable, appendDot, editHint}: TimelineRowPr
     // Block item (a hit inside a list): its lines, compacted until "+N more" is clicked.
     const block = node.timeline?.block ?? []
     const hiddenLines = block.filter(l => !l.preview).length
-    const [blockOpen, setBlockOpen] = useState(false)
-    useEffect(() => setBlockOpen(false), [node.node])
+    const blockOpen = node.blockOpen === true
 
     return <div className="tree-node" onMouseMove={handleMouseMove} onMouseOver={handleMouseOver} onClick={handleClick} {...editGestures}>
         <div ref={nodeRef}
@@ -130,9 +130,9 @@ export const TimelineRow = ({node, editable, appendDot, editHint}: TimelineRowPr
                     {!blockOpen && hiddenLines > 0 && <div role="button" tabIndex={0} className="ts-block-more"
                         onClick={ev => {
                             ev.stopPropagation()
-                            setBlockOpen(true)
+                            setBlockOpen(node.index, true)
                         }}
-                        onKeyDown={chipKeys(() => setBlockOpen(true))}>+{hiddenLines} more</div>}
+                        onKeyDown={chipKeys(() => setBlockOpen(node.index, true))}>+{hiddenLines} more</div>}
                 </div>}
             </div>
             {thumb && <img className="ts-row-thumb" src={thumb} alt="" loading="lazy"/>}

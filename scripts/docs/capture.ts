@@ -206,7 +206,7 @@ const shots: [name: string, run: () => Promise<Target>][] = [
     ["archive-revealed", async () => { await searchModal("hermes is:archived"); return lastModal(); }],
     ["query-stage", async () => { await searchModal("apollo . alice"); return lastModal(); }],
     ["query-tasks", async () => { await searchModal("is:task"); return lastModal(); }],
-    ["query-tree-scope", async () => { await searchModal('tree:"project apollo"'); return lastModal(); }],
+    ["query-tree-scope", async () => { await searchModal("[[Project Apollo]]"); return lastModal(); }],
     ["query-daily", async () => { await searchModal(":daily"); return lastModal(); }],
     ["recency-tree", async () => {
         await searchModal("apollo | hermes");

@@ -78,6 +78,11 @@ export class IndexedTree {
         return this.dailyNoteConfig
     }
 
+    /** Date (ms) of a daily/weekly note at `path`, else null. */
+    periodicDateOf(path: string): number | null {
+        return this.periodicDate(path)
+    }
+
     /** Search context: today's daily note, the target of `:daily` (computed per call, so it follows the date). */
     searchOptions(): SearchOptions {
         return { dailyNote: dailyNotePath(this.dailyNoteConfig) }

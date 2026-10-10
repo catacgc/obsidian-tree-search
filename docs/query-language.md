@@ -52,19 +52,22 @@ Matching is case-insensitive: `apollo` finds "Project Apollo".
 | `in:1m` | last month |
 | `in:1y` | last year |
 
-## Scope — outline:, tree:
+## Scope — outline:, [[note]]
 
 | Syntax | Meaning |
 | --- | --- |
 | `outline:<note>` | outline of the latest note matching &lt;note&gt; |
 | `outline:"my note"` | outline of exactly “my note” |
-| `tree:<note>` | latest note matching &lt;note&gt; with all its children, from any note |
-| `tree:"my note"` | exactly “my note” with all its children, from any note |
+| `[[my note]]` | exactly “my note” with all its children, from any note |
+| `[[my note#Heading]]` | that heading with all its children, from any note |
+| `[[name` | notes and headings whose name matches; Enter or Tab completes the link |
 
-`outline:` shows only what is written inside a note. `tree:` goes further and adds everything written about it anywhere in your vault.
+`outline:` shows only what is written inside a note. `[[my note]]` goes further and adds everything written about it anywhere in your vault.
 
-![Search results for tree:"project apollo"](assets/screenshots/query-tree-scope.webp)
-*`tree:"project apollo"`: the note plus everything written about it anywhere.*
+While a `[[` is open (no `]]` after it), the results list only notes and headings whose name matches what you typed after it, as in Insert Link. Pick one with Enter or Tab, and the query becomes its `[[link]]`, which shows its tree.
+
+![Search results for [[Project Apollo]]](assets/screenshots/query-tree-scope.webp)
+*`[[Project Apollo]]`: the note plus everything written about it anywhere.*
 
 ## Combine
 

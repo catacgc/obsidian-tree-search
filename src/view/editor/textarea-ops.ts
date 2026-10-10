@@ -2,6 +2,8 @@
 // Every edit returns the new text plus the caret (and optional selection end).
 
 export type TextEdit = { text: string; caret: number; selectionEnd?: number }
+/** What a paste carries: files (attachments), plain text and HTML. */
+export type PasteData = { files: File[]; plain: string; html: string }
 
 const LIST_MARKER_LINE_RE = /^\s*(?:[-*+]|\d+\.)(?:\s|$)/
 const BARE_MARKER_LINE_RE = /^[ \t]*(?:[-*+]|\d+\.)$/

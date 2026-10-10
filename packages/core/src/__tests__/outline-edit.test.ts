@@ -15,6 +15,8 @@ import {
   cutSubtree,
   pasteUnderLinkBullet,
   pasteAtOutlineEnd,
+  pasteUnderLine,
+  outlineChanged,
   StaleLineError,
 } from "../edit/outline-edit.ts"
 import { NotesGraph } from "../graph/graph.ts"
@@ -233,6 +235,56 @@ describe("pasteUnderLinkBullet / pasteAtOutlineEnd", () => {
     expect(cut.block).toEqual(["- [[Child]]", "    - detail"])
     expect(pasteUnderLinkBullet(cut.content, "New", cut.block)).toBe("- [[Old]]\n- [[New]]\n\t- [[x]]\n\t- [[Child]]\n\t\t- detail\n")
     expect(pasteAtOutlineEnd("- [[A]]\n\t- [[B]]\n", cut.block)).toBe("- [[A]]\n\t- [[B]]\n- [[Child]]\n\t- detail\n")
+  })
+})
+
+describe("pasteUnderLine", () => {
+  it("inserts the block as the last children of the head line", () => {
+    const out = pasteUnderLine("- [ ] buy milk\n- other", 0, "- [ ] buy milk", ["- [ ] compare prices"])
+    expect(out).toEqual({ content: "- [ ] buy milk\n    - [ ] compare prices\n- other", line: 1 })
+  })
+
+  it("goes after existing children and nests one level below an indented head", () => {
+    const out = pasteUnderLine("- a\n    - b\n        - c\n- d\n", 1, "    - b", ["- x", "    - y"])
+    expect(out).toEqual({ content: "- a\n    - b\n        - c\n        - x\n            - y\n- d\n", line: 3 })
+  })
+
+  it("uses tabs in a tab-indented file", () => {
+    expect(pasteUnderLine("- a\n\t- b\n", 1, "\t- b", ["- x"]).content).toBe("- a\n\t- b\n\t\t- x\n")
+  })
+
+  it("throws StaleLineError when the head changed", () => {
+    expect(() => pasteUnderLine("- a\n", 0, "- b", ["- x"])).toThrow(StaleLineError)
+  })
+
+  it("keeps CRLF line endings", () => {
+    expect(pasteUnderLine("- a\r\n- b\r\n", 0, "- a", ["- x"]).content).toBe("- a\r\n    - x\r\n- b\r\n")
+  })
+})
+
+describe("[[P#H]] link-only bullets", () => {
+  it("appendOutline merges under an existing [[P#H]] bullet", () => {
+    expect(appendOutline("- [[P#H]]\n    - a\n", outline("- [[P#H]]\n    - b"))).toBe("- [[P#H]]\n    - a\n    - b\n")
+  })
+})
+
+describe("outlineChanged", () => {
+  const note = "---\na: 1\n---\n- [[A]]\n    - b\nprose line\nmore prose\n"
+
+  it("is false for an edit after the outline", () => {
+    expect(outlineChanged(note, note.replace("more prose", "changed prose\nand more"))).toBe(false)
+  })
+
+  it("is true for a changed bullet", () => {
+    expect(outlineChanged(note, note.replace("    - b", "    - c"))).toBe(true)
+  })
+
+  it("is true for changed frontmatter", () => {
+    expect(outlineChanged(note, note.replace("a: 1", "a: 2"))).toBe(true)
+  })
+
+  it("is true for an added bullet", () => {
+    expect(outlineChanged(note, note.replace("    - b\n", "    - b\n- c\n"))).toBe(true)
   })
 })
 

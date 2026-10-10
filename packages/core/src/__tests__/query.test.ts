@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test"
-import { parseQuery, matchQuery, firstPassInclude, nodeMatchesQuery, parseDuration, collectModifiers, extractArchiveReveal, type QueryExpr, IS_VALUES, HAS_VALUES } from "../search/query.ts"
+import { parseQuery, matchQuery, firstPassInclude, nodeMatchesQuery, parseDuration, collectModifiers, extractArchiveReveal, openLinkAt, type QueryExpr, IS_VALUES, HAS_VALUES } from "../search/query.ts"
 import { UNDATED_AGE } from "../graph/boost.ts"
 import type { ParsedNode } from "../graph/types.ts"
 
@@ -418,9 +418,9 @@ describe("outline: field", () => {
   })
 })
 
-describe("tree: field", () => {
-  it("keeps a quoted name whole and exact, separator and spaces included", () => {
-    expect(parseQuery("tree:\"Daily 2026.10.03\" is:page", ".")).toEqual([{
+describe("[[note]] scope", () => {
+  it("keeps a link's name whole and exact, separator and spaces included", () => {
+    expect(parseQuery("[[Daily 2026.10.03]] is:page", ".")).toEqual([{
       type: "and",
       exprs: [
         { type: "modifier", field: "tree", value: "daily 2026.10.03", exact: true },
@@ -429,8 +429,34 @@ describe("tree: field", () => {
     }])
   })
 
-  it("leaves a bare name a fragment", () => {
-    expect(parseQuery("tree:sep", ".")[0]).toEqual({ type: "modifier", field: "tree", value: "sep" })
+  it("drops a link's alias", () => {
+    expect(parseQuery("[[Project X|PX]]", ".")[0]).toEqual({ type: "modifier", field: "tree", value: "project x", exact: true })
+  })
+
+  it("no longer reads tree: as an operator", () => {
+    expect(parseQuery("tree:sep", ".")[0]).toEqual({ type: "contains", value: "tree:sep" })
+  })
+
+  it("parses an open [[fragment as its words", () => {
+    expect(parseQuery("[[aep test", ".")).toEqual(parseQuery("aep test", "."))
+  })
+
+  it("skips an empty link", () => {
+    expect(parseQuery("[[]] foo", ".")[0]).toEqual({ type: "contains", value: "foo" })
+  })
+})
+
+describe("openLinkAt", () => {
+  it("finds the last [[ with no ]] after it", () => {
+    expect(openLinkAt("[[aep test")).toEqual({ start: 0, fragment: "aep test" })
+    expect(openLinkAt("is:task [[Pro")).toEqual({ start: 8, fragment: "Pro" })
+    expect(openLinkAt("[[a]] [[b")).toEqual({ start: 6, fragment: "b" })
+  })
+
+  it("is null when every link is closed or there is none", () => {
+    expect(openLinkAt("[[a]]")).toBeNull()
+    expect(openLinkAt("[[a]] b")).toBeNull()
+    expect(openLinkAt("x")).toBeNull()
   })
 })
 

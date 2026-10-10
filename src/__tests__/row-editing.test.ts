@@ -111,6 +111,13 @@ describe("isEditableRow", () => {
         expect(isEditableRow(fmChild, ownPath, false)).toBe(false)
         expect(isEditableRow(row(page("Archive", ""), 0, { archiveRow: true }), ownPath, true)).toBe(false)
     })
+
+    it("renames attachments that are files of their own, not unresolved references", () => {
+        const att: ParsedNode = { ...base("assets/photo.png", 0), nodeType: "attachment", name: "photo.png", extension: "png", aliases: [] }
+        const own: OwnPath = n => n.nodeType === "attachment" ? "assets/photo.png" : null
+        expect(isEditableRow(row(att, 1), own, false)).toBe(true)
+        expect(isEditableRow(row(att, 1), () => null, false)).toBe(false)
+    })
 })
 
 describe("drag", () => {

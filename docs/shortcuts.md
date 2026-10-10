@@ -17,6 +17,7 @@ Alt shortcuts match the physical key, so they work on macOS even though <kbd>⌥
 | <kbd>Enter</kbd> | Open (default action) |
 | <kbd>Shift</kbd>+<kbd>Enter</kbd> | See in Obsidian |
 | <kbd>Ctrl</kbd>+<kbd>K</kbd> | Actions |
+| <kbd>→</kbd> (caret at the end of the search) | Expand / collapse the selected row, or show the rest of its list |
 
 ## View
 
@@ -35,7 +36,7 @@ Alt shortcuts match the physical key, so they work on macOS even though <kbd>⌥
 | --- | --- |
 | <kbd>Ctrl</kbd>+<kbd>C</kbd> | Copy as a link |
 | <kbd>Alt</kbd>+<kbd>I</kbd> or <kbd>Ctrl</kbd>+<kbd>I</kbd> | Insert after |
-| <kbd>Alt</kbd>+<kbd>M</kbd> | Move to folder (pages) |
+| <kbd>Alt</kbd>+<kbd>M</kbd> | Move to… (search for the new parent: a note, heading, line or folder) |
 | <kbd>Alt</kbd>+<kbd>X</kbd> | Archive / unarchive |
 | <kbd>Alt</kbd>+<kbd>P</kbd> | Consolidate notes (pages) |
 
@@ -44,8 +45,13 @@ Alt shortcuts match the physical key, so they work on macOS even though <kbd>⌥
 | Keys | Action |
 | --- | --- |
 | <kbd>Alt</kbd>+<kbd>A</kbd> | Append to the row's note |
-| <kbd>Alt</kbd>+<kbd>Enter</kbd> | Edit the row |
+| <kbd>Alt</kbd>+<kbd>Enter</kbd> | Edit the row (Rename a heading or attachment) |
 | <kbd>Alt</kbd>+<kbd>N</kbd> | Open editor |
+| <kbd>&gt;</kbd> | Add under the selected row (or today's note): it becomes a chip; typed text then becomes another chip |
+| <kbd>Enter</kbd> (with chips) | Write the chain; <kbd>Alt</kbd>+<kbd>Enter</kbd> continues in the editor |
+| <kbd>&lt;</kbd> | Move the selected page or line: search for its new parent |
+| <kbd>Backspace</kbd> (empty input) | Drop the last chip |
+| <kbd>Esc</kbd> | Cancel the chain or the move |
 
 ## Inside the editor
 
@@ -54,7 +60,7 @@ Alt shortcuts match the physical key, so they work on macOS even though <kbd>⌥
 | <kbd>Shift</kbd>+<kbd>Enter</kbd> or <kbd>Ctrl</kbd>+<kbd>Enter</kbd> | Save |
 | <kbd>Esc</kbd> | Cancel |
 | <kbd>Tab</kbd> or <kbd>Shift</kbd>+<kbd>Tab</kbd> | Indent / outdent |
-| <kbd>Alt</kbd>+<kbd>Enter</kbd> | Content of the link at the caret |
+| <kbd>Alt</kbd>+<kbd>Enter</kbd> | Content of the link on the line, else the whole note |
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>Ctrl</kbd>+<kbd>I</kbd> <kbd>Ctrl</kbd>+<kbd>K</kbd> | Bold / italic / link |
 
 ## Mobile

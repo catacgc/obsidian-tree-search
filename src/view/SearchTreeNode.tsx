@@ -117,8 +117,8 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
         expandNode(props.node.index);
         ev.preventDefault();
     }
-    // Drag-to-reparent: Tree rows only, desktop only (HTML5 DnD doesn't work with touch).
-    const dragEnabled = allowEditing && !Platform.isMobile
+    // Drag-to-reparent: Tree rows only, desktop only (HTML5 DnD doesn't work with touch); never the editor's link list.
+    const dragEnabled = allowEditing && !props.onPick && !Platform.isMobile
     const drag = dragEnabled ? dragInfo(rows, props.pos) : {draggable: false, refusal: undefined}
     const dragHandlers: React.HTMLAttributes<HTMLDivElement> = dragEnabled ? {
         onDragStart: ev => {

@@ -3,16 +3,18 @@
 
 import {getKey, type ParsedNode} from "@mdtree/core"
 import type {TreeNode} from "../search/SearchViewFlatten"
-import type {ReparentPlan} from "../../editing/vault-edits"
+import type {DragReparentPlan} from "../../editing/vault-edits"
 
-/** The file a node's page lives in (headers map to their page), or null for references / non-pages. */
+/** The file a node's page lives in (headers map to their page), an attachment's own file, or null for references and
+ *  other nodes. */
 export type OwnPath = (node: ParsedNode) => string | null
 
 export type AppendTarget = { dotPos: number; parentName: string; target: TreeNode }
 
 export const INLINE_LINK_REFUSAL = "Linked inline — edit the text to change its parent"
 
-/** Rows whose line can be Alt-edited: text and headers, and pages written as a link line in another file. */
+/** Rows whose line can be Alt-edited: text and headers, pages written as a link line in another file, and attachments
+ *  (renamed). */
 export function isEditableRow(row: TreeNode, ownPath: OwnPath, timeline: boolean): boolean {
     if (row.archiveRow) return false
     const node = row.node
@@ -22,6 +24,8 @@ export function isEditableRow(row: TreeNode, ownPath: OwnPath, timeline: boolean
             return true
         case "page":
             return (row.indent > 0 || timeline) && node.location.path !== ownPath(node)
+        case "attachment":
+            return ownPath(node) === node.location.path
         default:
             return false
     }
@@ -104,7 +108,7 @@ export function isValidDropTarget(rows: TreeNode[], dragPos: number, targetPos: 
 }
 
 /** How to move the dragged row under the target page. Bullet plans carry `head: ""`; the caller reads it from the file. */
-export function classifyReparent(rows: TreeNode[], dragPos: number, targetPos: number, ownPath: OwnPath, relation: string): ReparentPlan {
+export function classifyReparent(rows: TreeNode[], dragPos: number, targetPos: number, ownPath: OwnPath, relation: string): DragReparentPlan {
     const child = rows[dragPos].node
     const parentPos = treeParentPos(rows, dragPos)
     const target = rows[targetPos].node

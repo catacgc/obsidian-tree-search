@@ -1,24 +1,37 @@
-import { linkOnlyTarget, parseOutline } from "./outline-edit.ts"
+import { parseOutline } from "./outline-edit.ts"
+import { describePatch, type NotePatch } from "./note-patches.ts"
 import { INVALID_NAME_RE } from "./attachments.ts"
 
 export type EditorHint = { text: string; blocking: boolean }
 
 const HEADING_RE = /^#{1,6}\s+\S/
 const LINK_RE = /(?<!!)\[\[([^\]|#]+)/g
-const NAMES_HINT = 'Names can\'t contain \\ / : * ? " < > |'
-const PLAIN_HINT = "Plain bullets aren't indexed — they won't appear in results"
+export const NAMES_HINT = 'Names can\'t contain \\ / : * ? " < > |'
+export const PLAIN_HINT = "Plain bullets aren't indexed — they won't appear in results"
 
 /** True when an Append outline adds nothing: no bullets, or only the untouched prefilled `- [[parentName]]` root. */
 export function appendOutlineEmpty(outline: string, parentName?: string): boolean {
   const { lines } = parseOutline(outline)
   return (
     lines.length === 0 ||
-    (!!parentName && lines.length === 1 && lines[0].depth === 0 && linkOnlyTarget(lines[0].text)?.toLowerCase() === parentName.toLowerCase())
+    (!!parentName && lines.length === 1 && lines[0].depth === 0 && lines[0].text.toLowerCase() === `[[${parentName}]]`.toLowerCase())
   )
 }
 
+/** Hints for renaming a file (Rename on an attachment row): `stem` is the new name without `extension`; `original` is
+ *  the current file name. A case-only change of the same file is allowed. */
+export function renameFileHints(stem: string, original: string, extension: string, fileExists: (name: string) => boolean): EditorHint[] {
+  const name = stem.trim()
+  const block = (text: string): EditorHint[] => [{ text, blocking: true }]
+  if (name === "") return block("Name the file")
+  if (INVALID_NAME_RE.test(name)) return block(NAMES_HINT)
+  const next = extension ? `${name}.${extension}` : name
+  if (next.toLowerCase() !== original.toLowerCase() && fileExists(next)) return block(`"${next}" already exists`)
+  return []
+}
+
 export function editorHints(input: {
-  mode: "append" | "edit"
+  mode: "append" | "edit" | "prose"
   editKind?: "list" | "heading"
   parentName: string
   outline: string
@@ -28,6 +41,16 @@ export function editorHints(input: {
   contentOrder: string[]
   noteExists: (name: string) => boolean
   attachmentError?: { ambiguous: string } | { invalidName: string }
+  /** Prose mode for a new note: the name field's value. */
+  proseNewName?: string
+  /** Prose mode: the save would change the note's frontmatter or leading outline. */
+  proseOutlineChanged?: boolean
+  /** Prose mode: the outline change was confirmed by a first Save. */
+  proseConfirmed?: boolean
+  /** Append under a line: Save dates every line ([created::]/[scheduled::]), which indexes plain bullets. */
+  datedLines?: boolean
+  /** Append mode: the outline's note patches (planOutlinePatches). */
+  patches?: NotePatch[]
 }): EditorHint[] {
   const { mode, outline, contents, noteExists, attachmentError } = input
   const blocking: string[] = []
@@ -38,11 +61,25 @@ export function editorHints(input: {
     ? `Headings go in a note's content — click [[${input.parentName}]]`
     : "Headings go in a note's content — click a [[link]]"
 
+  const info: string[] = []
   let plain = false
-  if (mode === "append") {
+  if (mode === "prose") {
+    if (outline.trim() === "") block("Empty — nothing to save")
+    if (input.proseNewName !== undefined) {
+      const name = input.proseNewName.trim()
+      if (name === "") block("Name the new note")
+      else if (INVALID_NAME_RE.test(name)) block(NAMES_HINT)
+      else if (noteExists(name)) block(`Note "${name}" already exists`)
+    }
+    if (input.proseOutlineChanged) {
+      info.push(input.proseConfirmed
+        ? "Outline changes confirmed — Save writes them"
+        : "This changes the note's outline or frontmatter — press Save twice to confirm")
+    }
+  } else if (mode === "append") {
     const { issues } = parseOutline(outline)
     if (issues.some(i => i.kind === "heading")) block(headingHint)
-    plain = issues.some(i => i.kind === "plain")
+    plain = !input.datedLines && issues.some(i => i.kind === "plain")
   } else {
     if (outline.trim() === "") block("Empty — use Archive to remove the line")
     else if (HEADING_RE.test(outline.trim())) block(headingHint)
@@ -57,6 +94,8 @@ export function editorHints(input: {
     }
   }
 
+  if (mode === "prose") return [...blocking.map(text => ({ text, blocking: true })), ...info.map(text => ({ text, blocking: false }))]
+
   const bufferOf = (name: string): string | undefined => {
     if (name in contents) return contents[name]
     const lower = name.toLowerCase()
@@ -68,9 +107,9 @@ export function editorHints(input: {
     if (buf.trim() !== "" && INVALID_NAME_RE.test(name) && !noteExists(name)) block(NAMES_HINT)
   }
 
-  const info: string[] = []
   if (plain) info.push(PLAIN_HINT)
-
+  const patched = new Set((input.patches ?? []).map(p => p.name.toLowerCase()))
+  for (const p of input.patches ?? []) info.push(...describePatch(p, noteExists(p.name)))
   const names: string[] = []
   const seen = new Set<string>()
   const addName = (raw: string) => {
@@ -85,6 +124,10 @@ export function editorHints(input: {
   const parentLower = input.parentName.toLowerCase()
   for (const name of names) {
     const hasBuffer = (bufferOf(name) ?? "").trim() !== ""
+    if (patched.has(name.toLowerCase())) {
+      if (hasBuffer && noteExists(name)) info.push(`Appends to ${name}.md`)
+      continue
+    }
     if (!noteExists(name)) {
       if (hasBuffer) info.push(`Creates note "${name}"`)
       else if (name.toLowerCase() !== parentLower) info.push(`[[${name}]] stays a link without a note — click it to add content`)

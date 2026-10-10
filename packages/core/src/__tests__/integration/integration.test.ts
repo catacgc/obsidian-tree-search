@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test"
 import { loadFixture, search, searchKeys } from "./helpers.ts"
 import { partitionArchived } from "../../search/archive.ts"
-import { linkTargetTree, searchIndex, type ResultNode } from "../../search/search.ts"
+import { linkTargetTree, newLinkName, searchIndex, type ResultNode } from "../../search/search.ts"
 import { DEFAULT_SETTINGS, indexSinglePage } from "../../graph/indexer.ts"
 import { NotesGraph, getKey } from "../../graph/graph.ts"
 import { parseVaultFile } from "../../parser/vault-file.ts"
@@ -271,6 +271,38 @@ describe("insert-mode", () => {
     expect(keys).toContain("[[new plan]]")
     expect(keys).not.toContain("[[old plan]]")
   })
+
+  describe("newLinkName", () => {
+    const g2 = new NotesGraph()
+    const files: Record<string, string> = {
+      "AEP Testing plan.md": "---\naliases: [Quality doc]\n---\n# Scope\n",
+      "Daily.md": "- [[Ghost note]] mention\n",
+    }
+    for (const [path, content] of Object.entries(files)) {
+      indexSinglePage(parseVaultFile(content, path, 1_700_000_000_000), g2, DEFAULT_SETTINGS)
+    }
+    const t = (q: string) => linkTargetTree(g2, q, ".")
+    const keys = (ns: ResultNode[]): string[] => ns.flatMap(n => [getKey(n.node), ...keys(n.children)])
+
+    it("offers the typed name when only a longer note matches", () => {
+      expect(keys(t("AEP testing"))).toContain("[[aep testing plan]]")
+      expect(newLinkName(g2, "AEP testing", t("AEP testing"))).toBe("AEP testing")
+    })
+
+    it("trims the name", () => {
+      expect(newLinkName(g2, "  New idea ", t("  New idea "))).toBe("New idea")
+    })
+
+    it("is null for an existing note, a reference-only note, or a target's alias", () => {
+      expect(newLinkName(g2, "aep testing plan", t("aep testing plan"))).toBeNull()
+      expect(newLinkName(g2, "ghost note", t("ghost note"))).toBeNull()
+      expect(newLinkName(g2, "quality doc", t("quality doc"))).toBeNull()
+    })
+
+    it("is null for a blank name or one a link or file name can't hold", () => {
+      for (const q of ["", "   ", "AEP#Scope", "a/b", "x|y", "blk^id", "a]b"]) expect(newLinkName(g2, q, [])).toBeNull()
+    })
+  })
 })
 
 // ── type-filters (is:/has: field syntax) ─────────────────────────────────────
@@ -353,11 +385,11 @@ describe("outline:<note> / :daily", () => {
   })
 })
 
-describe("tree:<note>", () => {
+describe("[[note]] scope", () => {
   const g = loadFixture("outline")
 
   it("is the note's full subtree, including children written in other notes", () => {
-    const results = search(g, "tree:\"project x\"")
+    const results = search(g, "[[Project X]]")
     expect(results.map(r => r.node.searchKey)).toEqual(["project x|"])
     expect(collectKeysFromResults(results).sort())
       .toEqual(["budget review #finance", "kickoff with [[bob]]", "milestone [[q4]]", "project x|"])
@@ -366,27 +398,39 @@ describe("tree:<note>", () => {
   })
 
   it("reaches past the note's own file into linked notes' children", () => {
-    expect(searchKeys(g, "tree:\"2026-10-03\"")).toContain("budget review #finance")
+    expect(searchKeys(g, "[[2026-10-03]]")).toContain("budget review #finance")
   })
 
   it("targets a note that exists only as a link", () => {
-    const results = search(g, "tree:\"bob\"")
+    const results = search(g, "[[Bob]]")
     expect(results.map(r => r.node.searchKey)).toEqual(["bob"])
     expect(results[0].children.map(c => c.node.searchKey)).toEqual(["kickoff with [[bob]]"])
   })
 
   it("other terms only match inside the tree", () => {
-    expect(searchKeys(g, "tree:\"project x\" budget")).toEqual(["budget review #finance"])
+    expect(searchKeys(g, "[[Project X]] budget")).toEqual(["budget review #finance"])
   })
 
   it("intersects with outline:", () => {
-    const keys = searchKeys(g, "outline:2026-10-03 tree:\"project x\"")
+    const keys = searchKeys(g, "outline:2026-10-03 [[Project X]]")
     expect(keys).toContain("kickoff with [[bob]]")
     expect(keys).not.toContain("budget review #finance")
     expect(keys).not.toContain("milestone [[q4]]")
   })
 
-  it("an unknown note matches nothing", () => {
-    expect(search(g, "tree:nowhere")).toEqual([])
+  it("roots the tree at a heading", () => {
+    expect(search(g, "[[2026-10-03#Morning]]")[0].node.searchKey).toBe("2026-10-03#morning")
+    expect(searchKeys(g, "[[2026-10-03#Morning]]")).toContain("call [[alice]] about #budget")
+  })
+
+  it("an unknown note or heading matches nothing", () => {
+    expect(search(g, "[[nowhere]]")).toEqual([])
+    expect(search(g, "[[2026-10-03#Nowhere]]")).toEqual([])
+  })
+
+  it("an open [[fragment is the link-target list", () => {
+    const results = search(g, "[[proj")
+    expect(results.length).toBeGreaterThan(0)
+    expect(results).toEqual(linkTargetTree(g, "proj", DEFAULT_SETTINGS.searchSeparator))
   })
 })

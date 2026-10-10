@@ -10,7 +10,7 @@ export type QueryExpr =
   | { type: "not"; expr: QueryExpr }
   | { type: "and"; exprs: QueryExpr[] }
   | { type: "or"; exprs: QueryExpr[] }
-  // `exact`: a quoted `outline:"name"` / `tree:"name"` (or `:daily`), matched whole rather than as a fragment.
+  // `exact`: a quoted `outline:"name"`, `:daily`, or a `[[note]]` (field `tree`), matched whole rather than as a fragment.
   | { type: "modifier"; field: QueryModifierField; value: string; exact?: true }
 
 export const IS_VALUES = ["page", "header", "text", "folder", "attachment", "task", "subtask", "subtext", "list", "completed", "undated", "archived"]
@@ -87,6 +87,7 @@ type Token =
   | { kind: "stage" }
   | { kind: "word"; value: string }
   | { kind: "quoted"; value: string }
+  | { kind: "link"; value: string }
 
 function tokenize(input: string, separator: string): Token[] {
   const tokens: Token[] = []
@@ -120,6 +121,18 @@ function tokenize(input: string, separator: string): Token[] {
       continue
     }
 
+    // `[[name]]` / `[[name|alias]]`: one link token naming a note (or `note#heading`); separators,
+    // `|` and spaces inside belong to the name. An open `[[` (no `]]` after it) is dropped, so the
+    // fragment's words tokenize as usual.
+    if (c === "[" && input[i + 1] === "[") {
+      const close = input.indexOf("]]", i + 2)
+      if (close === -1) { i += 2; continue }
+      const name = input.slice(i + 2, close).split("|")[0].trim()
+      if (name !== "") tokens.push({ kind: "link", value: name })
+      i = close + 2
+      continue
+    }
+
     // Bareword: read until whitespace or a delimiter. A '-' does not stop
     // this scan once started, so "well-known" stays one word — only a
     // fresh '-' at a token boundary (handled above) is ever an operator.
@@ -129,9 +142,9 @@ function tokenize(input: string, separator: string): Token[] {
       value += input[j]
       j++
     }
-    // `outline:"name with spaces"` / `tree:"…"`: the quoted name belongs to the field, and
+    // `outline:"name with spaces"`: the quoted name belongs to the field, and
     // keeps its quotes so matchField can tell an exact name from a fragment.
-    if ((value === "outline:" || value === "tree:") && input[j] === '"') {
+    if (value === "outline:" && input[j] === '"') {
       const close = input.indexOf('"', j + 1)
       value += `"${input.slice(j + 1, close === -1 ? input.length : close)}"`
       j = close === -1 ? input.length : close + 1
@@ -157,15 +170,15 @@ function tokenize(input: string, separator: string): Token[] {
 // so a partially-typed query never crashes live search.
 
 function matchField(word: string): { field: QueryModifierField; value: string; exact?: true } | null {
-  const m = /^(is|has|in|outline|tree):(.+)$/.exec(word)
+  const m = /^(is|has|in|outline):(.+)$/.exec(word)
   if (!m) return null
   const field = m[1] as QueryModifierField
   const typedValue = m[2]
   // `in:` values are open-ended durations, not an enum — keep the raw string
-  // and validate it at match time via parseDuration. `outline:`/`tree:` name a note:
+  // and validate it at match time via parseDuration. `outline:` names a note:
   // quoted, the exact name; bare, a fragment (searchIndex picks the latest match).
   if (field === "in") return { field, value: typedValue }
-  if (field === "outline" || field === "tree") {
+  if (field === "outline") {
     return typedValue.startsWith('"') ? { field, value: typedValue.slice(1, -1), exact: true } : { field, value: typedValue }
   }
   const values = field === "is" ? IS_VALUES : HAS_VALUES
@@ -242,6 +255,9 @@ function parseTokens(tokens: Token[]): QueryExpr[] {
     if (tok.kind === "quoted") {
       return { type: "equals", value: tok.value }
     }
+    if (tok.kind === "link") {
+      return { type: "modifier", field: "tree", value: tok.value, exact: true }
+    }
     if (tok.kind === "word") {
       const modifier = matchField(tok.value) ?? matchLegacyModifier(tok.value)
       if (modifier) return { type: "modifier", ...modifier }
@@ -258,6 +274,13 @@ function parseTokens(tokens: Token[]): QueryExpr[] {
 export function parseQuery(query: string, separator = "."): QueryExpr[] {
   const tokens = tokenize(query.toLowerCase().trim(), separator)
   return parseTokens(tokens)
+}
+
+/** The open `[[fragment` a query ends with: its last `[[` with no `]]` after it; null when every link is closed. */
+export function openLinkAt(query: string): { start: number; fragment: string } | null {
+  const start = query.lastIndexOf("[[")
+  if (start === -1 || query.indexOf("]]", start + 2) !== -1) return null
+  return { start, fragment: query.slice(start + 2) }
 }
 
 // ── Matching ──────────────────────────────────────────────────────────────────
@@ -291,7 +314,7 @@ function matchModifier(attrs: ParsedNode, field: QueryModifierField, value: stri
     const days = parseDuration(value)
     return days !== null && attrs.ageDays <= days
   }
-  // `outline:`/`tree:` scope the whole search (searchIndex) rather than testing
+  // `outline:`/`[[note]]` scope the whole search (searchIndex) rather than testing
   // one node, so every node they let through satisfies them.
   if (field === "outline" || field === "tree") return true
   // field === "has"
@@ -430,14 +453,14 @@ export function extractArchiveReveal(stages: QueryExpr[]): { reveal: boolean; st
 // ── Outline / tree scope ────────────────────────────────────────────────────────
 //
 // `outline:<note>` / `:daily` is not a per-node matcher either: it restricts the
-// whole search to one note's own outline (searchIndex). `tree:<note>` restricts
+// whole search to one note's own outline (searchIndex). `[[note]]` restricts
 // it to the note's full subtree: all edges the search would follow, from any
 // file. Their targets are collected from anywhere in the query and the modifiers
 // stripped, so the rest of each stage matches as usual; a stage holding only the
-// scope collapses to empty (matches all). A negated `-outline:`/`-tree:` is
+// scope collapses to empty (matches all). A negated `-outline:`/`-[[note]]` is
 // dropped without scoping.
 
-/** A note named by `outline:`/`tree:`: `exact` names it whole (quoted, or `:daily`); otherwise `value` is a fragment. */
+/** A note named by `outline:`/`[[note]]`: `exact` names it whole (quoted, `:daily`, or a link); otherwise `value` is a fragment. */
 export type ScopeTarget = { value: string; exact: boolean }
 
 type ScopeTargets = { outline: ScopeTarget[]; tree: ScopeTarget[] }

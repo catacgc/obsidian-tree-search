@@ -2,7 +2,7 @@
 // set its scheduled date. Single-line edits take a line and return the new line,
 // or null when the line is not a (suitable) task.
 
-import { LIST_ITEM_RE } from "../parser/list-scanner.ts"
+import { LIST_ITEM_RE, isProseText } from "../parser/list-scanner.ts"
 import { splitLines } from "../search/organise-sections.ts"
 import { StaleLineError, indentWidth, linkOnlyTarget } from "./outline-edit.ts"
 
@@ -55,6 +55,33 @@ export function scheduleUnscheduledTasks(text: string, today: string): string {
     if (nested || !m || m[2] !== " " || !m[3].trim() || SCHEDULED_RE.test(m[3])) return line
     return scheduleTask(line, today) ?? line
   }).join("\n")
+}
+
+const ISO_DATE_RE = /\d{4}-\d{2}-\d{2}/
+
+/** A list line without any `YYYY-MM-DD` gets ` [created:: date]` (before a trailing block id); null otherwise. */
+export function addCreatedField(line: string, date: string): string | null {
+  const m = LIST_ITEM_RE.exec(line)
+  if (!m || ISO_DATE_RE.test(line)) return null
+  const prefix = line.slice(0, line.length - m[2].length)
+  return prefix + appendField(m[2], `[created:: ${date}]`)
+}
+
+/** A line appended in a note: an undated open task gets `[scheduled:: today]`, any other undated list line `[created:: today]`. */
+export function stampAppendedLine(line: string, today: string): string {
+  if (ISO_DATE_RE.test(line)) return line
+  const task = TASK_LINE_RE.exec(line)
+  if (task && task[2] === " ") return scheduleTask(line, today) ?? line
+  return addCreatedField(line, today) ?? line
+}
+
+/** Lines of a moved block that are indexed (tasks, or text with links/tags/URLs) and undated get `[created:: date]`. */
+export function stampMovedBlock(block: string[], date: string): string[] {
+  return block.map(l => {
+    const item = LIST_ITEM_RE.exec(l)
+    if (!item) return l
+    return TASK_LINE_RE.test(l) || !isProseText(item[2]) ? addCreatedField(l, date) ?? l : l
+  })
 }
 
 export type TaskLineEdit = { kind: "done"; done: boolean; today: string } | { kind: "schedule"; date: string }

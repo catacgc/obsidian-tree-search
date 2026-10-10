@@ -77,12 +77,13 @@ export function describeQuerySyntax(): QuerySyntaxGroup[] {
       ],
     },
     {
-      title: "Scope — outline:, tree:",
+      title: "Scope — outline:, [[note]]",
       entries: [
         { syntax: "outline:<note>", description: "outline of the latest note matching <note>" },
         { syntax: "outline:\"my note\"", description: "outline of exactly “my note”" },
-        { syntax: "tree:<note>", description: "latest note matching <note> with all its children, from any note" },
-        { syntax: "tree:\"my note\"", description: "exactly “my note” with all its children, from any note" },
+        { syntax: "[[my note]]", description: "exactly “my note” with all its children, from any note" },
+        { syntax: "[[my note#Heading]]", description: "that heading with all its children, from any note" },
+        { syntax: "[[name", description: "notes and headings whose name matches; Enter or Tab completes the link" },
       ],
     },
     {

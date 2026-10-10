@@ -12,8 +12,9 @@ export type ShortcutHandlers = Record<ShortcutId, (keyIndex: number) => unknown>
 export function useShortcutHandlers(): ShortcutHandlers {
     const {
         arrowDownAtom, arrowUpAtom, timelineActiveAtom, toggleViewModeAtom, recencyWindowAtom,
-        incExpandAtom, decExpandAtom, resetCollapseAtom, toggleActionPanelAtom,
+        incExpandAtom, decExpandAtom, resetCollapseAtom, toggleActionPanelAtom, startReparentAtom,
     } = useMolecule(SearchViewMolecule)
+    const startReparent = useSetAtom(startReparentAtom)
     const {isGraphLoadingAtom} = useMolecule(GlobalAppMolecule)
     const {openEditForSelectedAtom, openAppendForSelectedAtom, openBlankEditorAtom} = useMolecule(EditorMolecule)
     const {copyActionAtom, handleDefaultActionAtom, highlightSelectedItemAtom, runRaycastActionAtom} = useMolecule(ActionsMolecule)
@@ -50,7 +51,7 @@ export function useShortcutHandlers(): ShortcutHandlers {
         refresh: () => setGraphLoading(true),
         copy: () => copyAction(),
         insertAfter: () => runRaycastAction(["insert"]),
-        moveTo: () => runRaycastAction(["moveToFolder"]),
+        moveTo: () => startReparent(),
         archive: () => runRaycastAction(["archive", "unarchive", "archivePage", "unarchivePage"]),
         consolidate: () => runRaycastAction(["pullChildren"]),
         append: () => openAppendForSelected(),

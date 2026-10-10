@@ -27,9 +27,8 @@ export const ActionsMolecule = molecule((mol, scope) => {
         const newLine = get(hoveredLineAtom)
         const oldLine = get(selectedLineAtom)
 
-        if (newLine == oldLine) {
-            await set(highlightSelectedItemAtom)
-        }
+        // A second click runs the row's main action: reveal it.
+        if (newLine == oldLine) await set(highlightSelectedItemAtom)
 
         set(selectedLineAtom, newLine)
     })

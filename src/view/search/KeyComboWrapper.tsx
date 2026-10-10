@@ -1,5 +1,5 @@
 import React, {useEffect, useRef} from "react";
-import {useSetAtom} from "jotai";
+import {useAtomValue, useSetAtom} from "jotai";
 import {Platform} from "obsidian";
 import {useMolecule} from "bunshi/react";
 import {SearchViewMolecule} from "../react-context/state";
@@ -10,13 +10,14 @@ import {useShortcutHandlers} from "./shortcut-handlers";
 const ACTIONS_ONLY = SHORTCUTS.filter(s => s.id === "actions")
 
 // Dispatches the search view's keyboard shortcuts (./shortcuts.ts) for keys that bubble up
-// from the search input, the results list and the action panel's filter. The inline editor
-// stops propagation, so none of these fire while typing in it.
+// from the search input, the results list and the action panel's filter. While the view
+// shows the inline editor, none of them fire: the editor owns every key.
 export const KeyComboWrapper = ({children}: { children: React.ReactNode }) => {
-    const {allowEditing, allowTimeline, closeActionPanelAtom, toggleActionPanelAtom} = useMolecule(SearchViewMolecule)
+    const {allowEditing, allowTimeline, closeActionPanelAtom, toggleActionPanelAtom, editorOpenAtom} = useMolecule(SearchViewMolecule)
     const closeActionPanel = useSetAtom(closeActionPanelAtom)
     const toggleActionPanel = useSetAtom(toggleActionPanelAtom)
     const handlers = useShortcutHandlers()
+    const editorOpen = useAtomValue(editorOpenAtom)
     const available = SHORTCUTS.filter(s => isAvailable(s, {allowEditing, allowTimeline}))
     const rootRef = useRef<HTMLDivElement>(null)
 
@@ -37,6 +38,7 @@ export const KeyComboWrapper = ({children}: { children: React.ReactNode }) => {
     }, [])
 
     const handleKeyDown = async (event: React.KeyboardEvent<HTMLDivElement>) => {
+        if (editorOpen) return
         const hit = matchShortcut(event, available, Platform.isMacOS)
         if (!hit) return
         event.preventDefault()

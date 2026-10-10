@@ -10,17 +10,21 @@ const INLINE_TAG_RE = /#([\w/]+)/g
 const META_ACTION_RE = /\(meta-action-[\w-]+::[^)]*\)/g
 const META_MDTREE_RE = /\(meta-mdtree::\s*\w+\)/g
 
+/** A `[created:: YYYY-MM-DD]` inline field: dates a bullet and makes it indexed even when it is otherwise prose. */
+export const CREATED_FIELD_RE = /\[created::\s*\d{4}-\d{2}-\d{2}\s*\]/
+
+/** Pure prose: no links, embeds, tags or URLs. */
+export function isProseText(text: string): boolean {
+  return !text.includes("[[") && !text.includes("![[") && !text.includes("#") && !text.includes("http")
+}
+
 /** Lines that carry no graph-relevant information and should be skipped */
 function shouldSkip(text: string, archiveTag: string, isTask: boolean): boolean {
   if (text.includes(archiveTag)) return true
   if (isTask) return text === ""
-  // skip pure prose: no links, tags or URLs; tasks are always kept
-  return (
-    !text.includes("[[") &&
-    !text.includes("![[") &&
-    !text.includes("#") &&
-    !text.includes("http")
-  )
+  if (CREATED_FIELD_RE.test(text)) return false
+  // skip pure prose; tasks are always kept
+  return isProseText(text)
 }
 
 /** For a trimmed line, undefined if it is not a comment line; otherwise the closer still pending after it ("-->" | "%%"), or null when it closes on the same line. */

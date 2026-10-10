@@ -24,12 +24,15 @@ const SearchPage = (props: SearchPageProps) => {
 }
 
 const _SearchPage = (props: SearchPageProps) => {
-    const { actualQueryAtom, searchVisibleAtom, setDefaultExpandLevelAtom, updateSearchResultsAtom, scopeName } = useMolecule(SearchViewMolecule)
+    const { actualQueryAtom, searchVisibleAtom, setDefaultExpandLevelAtom, updateSearchResultsAtom, scopeName,
+        chainAtom, refreshChainResultsAtom } = useMolecule(SearchViewMolecule)
     const [pin, setPin] = useAtom(GlobalAtoms.pinAtom);
 
     const [showSearch, setShowSearch] = useAtom(searchVisibleAtom)
     const updateSearchResults = useSetAtom(updateSearchResultsAtom)
     const actualQuery = useAtomValue(actualQueryAtom)
+    const chain = useAtomValue(chainAtom)
+    const refreshChainResults = useSetAtom(refreshChainResultsAtom)
     const setDefaultExpand = useSetAtom(setDefaultExpandLevelAtom)
 
     useEffect(() => {
@@ -40,12 +43,16 @@ const _SearchPage = (props: SearchPageProps) => {
     const version = useAtomValue(GlobalAtoms.graphVersionAtom)
 
     useEffect(() => {
+        if (chain) {
+            refreshChainResults()
+            return
+        }
         if (props.searchFn) {
             const results = props.searchFn(actualQuery)
             console.debug("Set results: ", version, scopeName, results)
             updateSearchResults(results)
         }
-    }, [version, activeFile, actualQuery, scopeName.instance])
+    }, [version, activeFile, actualQuery, scopeName.instance, chain])
 
     return <>
         <KeyComboWrapper>

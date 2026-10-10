@@ -42,8 +42,8 @@ export { parseCanvasData, type CanvasData, type NodeTextLine } from "./parser/ca
 export { buildNodesFromTextLines } from "./parser/text-lines.ts"
 
 // Search
-export { searchIndex, advancedSearch, searchParents, flattenTasks, pruneResultTree, linkTargetTree, type ResultNode, type SearchOptions } from "./search/search.ts"
-export { parseQuery, parseDuration, matchQuery, firstPassInclude, nodeMatchesQuery, collectModifiers, extractArchiveReveal, containsEmoji as queryContainsEmoji, type QueryExpr, type QueryModifierField } from "./search/query.ts"
+export { searchIndex, advancedSearch, searchParents, flattenTasks, pruneResultTree, linkTargetTree, newLinkName, type ResultNode, type SearchOptions } from "./search/search.ts"
+export { parseQuery, parseDuration, matchQuery, firstPassInclude, nodeMatchesQuery, collectModifiers, extractArchiveReveal, openLinkAt, containsEmoji as queryContainsEmoji, type QueryExpr, type QueryModifierField } from "./search/query.ts"
 export { suggestAt, spliceSuggestion, type Suggestion } from "./search/suggest.ts"
 export { describeQuerySyntax, type QuerySyntaxEntry, type QuerySyntaxGroup } from "./search/syntax.ts"
 export {
@@ -78,7 +78,7 @@ export {
 export { upsertOrganiseSections } from "./search/organise-sections.ts"
 
 // Edit
-export { LIST_ITEM_RE, HEADER_RE } from "./parser/list-scanner.ts"
+export { LIST_ITEM_RE, HEADER_RE, CREATED_FIELD_RE, isProseText } from "./parser/list-scanner.ts"
 export { splitLines } from "./search/organise-sections.ts"
 export {
   parseOutline,
@@ -97,6 +97,8 @@ export {
   cutSubtree,
   pasteUnderLinkBullet,
   pasteAtOutlineEnd,
+  pasteUnderLine,
+  outlineChanged,
   StaleLineError,
   type OutlineLine,
   type OutlineIssue,
@@ -108,6 +110,9 @@ export {
   applyTaskEdit,
   rescheduleDate,
   localIsoDate,
+  addCreatedField,
+  stampAppendedLine,
+  stampMovedBlock,
   type RescheduleKind,
   type TaskLineEdit,
 } from "./edit/task-edit.ts"
@@ -123,4 +128,14 @@ export {
   type SessionAttachment,
   type AttachmentPlan,
 } from "./edit/attachments.ts"
-export { editorHints, appendOutlineEmpty, type EditorHint } from "./edit/editor-hints.ts"
+export { editorHints, appendOutlineEmpty, renameFileHints, NAMES_HINT, type EditorHint } from "./edit/editor-hints.ts"
+export {
+  parseLinkBullet,
+  renderLinkBullet,
+  planOutlinePatches,
+  ensureHeading,
+  describePatch,
+  type LinkField,
+  type LinkBullet,
+  type NotePatch,
+} from "./edit/note-patches.ts"

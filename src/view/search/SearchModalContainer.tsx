@@ -1,5 +1,6 @@
-import {useAtom} from "jotai";
-import {SearchModalMolecule, SearchViewScope} from "../react-context/state";
+import {useEffect} from "react";
+import {useAtom, useAtomValue} from "jotai";
+import {SearchModalMolecule, SearchViewMolecule, SearchViewScope} from "../react-context/state";
 import {SearchViewFlatten} from "./SearchViewFlatten";
 import {ScopeProvider, useMolecule} from "bunshi/react";
 import {KeyComboWrapper} from "./KeyComboWrapper";
@@ -7,7 +8,8 @@ import {QuickAddView} from "../editor/QuickAddView";
 
 export type SearchModalKind = "search" | "insertLink" | "quickAdd"
 
-export const SearchModalContainer = ({ kind }: { kind: SearchModalKind }) => {
+/** onTitle: sets the hosting modal's title (the Search modal follows searchModalTitleAtom). */
+export const SearchModalContainer = ({ kind, onTitle }: { kind: SearchModalKind; onTitle?: (title: string) => void }) => {
 
     return <ScopeProvider scope={SearchViewScope} value={{
         name: kind === "quickAdd" ? "quickAdd" : "modal",
@@ -22,16 +24,19 @@ export const SearchModalContainer = ({ kind }: { kind: SearchModalKind }) => {
         {kind === "quickAdd"
             ? <QuickAddView/>
             : <KeyComboWrapper>
-                <_SearchModalContainer/>
+                <_SearchModalContainer onTitle={onTitle}/>
             </KeyComboWrapper>}
     </ScopeProvider>
 }
 
-export const _SearchModalContainer = () => {
+export const _SearchModalContainer = ({ onTitle }: { onTitle?: (title: string) => void }) => {
 
     const { searchResultsComputeAtom } = useMolecule(SearchModalMolecule)
+    const { searchModalTitleAtom } = useMolecule(SearchViewMolecule)
+    const title = useAtomValue(searchModalTitleAtom)
 
     useAtom(searchResultsComputeAtom)
+    useEffect(() => { if (title !== null) onTitle?.(title) }, [title])
 
     return <div className="tree-search-modal-body">
             <div className="flex flex-col w-full h-full">

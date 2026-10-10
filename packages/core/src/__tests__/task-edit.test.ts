@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test"
-import { setTaskDone, scheduleTask, rescheduleDate, scheduleUnscheduledTasks, applyTaskEdit } from "../edit/task-edit.ts"
+import { setTaskDone, scheduleTask, rescheduleDate, scheduleUnscheduledTasks, applyTaskEdit, addCreatedField, stampAppendedLine, stampMovedBlock } from "../edit/task-edit.ts"
 import { StaleLineError } from "../edit/outline-edit.ts"
 
 const TODAY = "2026-10-06"
@@ -89,6 +89,39 @@ describe("scheduleUnscheduledTasks", () => {
 
   it("leaves tasks nested under a text line unscheduled", () => {
     expect(scheduleUnscheduledTasks("- [ ] parent\n    - [ ] child", DAY)).toBe("- [ ] parent [scheduled:: 2026-10-07]\n    - [ ] child")
+  })
+
+  it("schedules a task under a [[P#H]] link bullet", () => {
+    expect(scheduleUnscheduledTasks("- [[P#H]]\n    - [ ] t", DAY)).toBe("- [[P#H]]\n    - [ ] t [scheduled:: 2026-10-07]")
+  })
+})
+
+describe("addCreatedField / stampAppendedLine / stampMovedBlock", () => {
+  const DAY = "2026-10-07"
+
+  it("addCreatedField dates an undated list line, else null", () => {
+    expect(addCreatedField("    - note ^id", DAY)).toBe("    - note [created:: 2026-10-07] ^id")
+    expect(addCreatedField("- seen 2026-01-01", DAY)).toBeNull()
+    expect(addCreatedField("# heading", DAY)).toBeNull()
+  })
+
+  it("stampAppendedLine creates text lines and schedules open tasks", () => {
+    expect(stampAppendedLine("- check price", DAY)).toBe("- check price [created:: 2026-10-07]")
+    expect(stampAppendedLine("- [ ] x", DAY)).toBe("- [ ] x [scheduled:: 2026-10-07]")
+    expect(stampAppendedLine("- [ ] x ^abc", DAY)).toBe("- [ ] x [scheduled:: 2026-10-07] ^abc")
+    expect(stampAppendedLine("- [ ] x [scheduled:: 2026-01-01]", DAY)).toBe("- [ ] x [scheduled:: 2026-01-01]")
+    expect(stampAppendedLine("- met 2026-01-01", DAY)).toBe("- met 2026-01-01")
+    expect(stampAppendedLine("## Heading", DAY)).toBe("## Heading")
+  })
+
+  it("stampMovedBlock stamps link and task lines but not prose-only children", () => {
+    expect(stampMovedBlock(["- [[Bob]] call", "    - just prose", "    - [ ] todo", "", "    - [x] done 2026-01-01"], DAY)).toEqual([
+      "- [[Bob]] call [created:: 2026-10-07]",
+      "    - just prose",
+      "    - [ ] todo [created:: 2026-10-07]",
+      "",
+      "    - [x] done 2026-01-01",
+    ])
   })
 })
 

@@ -264,3 +264,52 @@
 	-webkit-user-select: none;
 	user-select: none;
 }
+
+/* Search chains, append (`>`) and reparent (`<`): the chips in the search input row and the prompt below them. */
+.ts-chain-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	flex: none;
+	max-width: 40%;
+	margin-left: 4px;
+	padding: 2px 8px;
+	border: 1px solid var(--interactive-accent);
+	border-radius: 999px;
+	font-size: var(--font-ui-small);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.ts-chain-chip.is-reparent {
+	border-style: dashed;
+}
+
+.ts-chain-chip.is-entry {
+	border-style: dotted;
+}
+
+.ts-chain-preview {
+	margin: 0 4px 6px;
+	padding: 6px 10px;
+	border-radius: var(--radius-s);
+}
+
+.ts-chain-preview-dest {
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+}
+
+.ts-chain-preview-line {
+	font-size: var(--font-ui-small);
+}
+
+.ts-chain-preview-hint {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.ts-chain-preview.is-blocking .ts-chain-preview-dest {
+	color: var(--text-error);
+}

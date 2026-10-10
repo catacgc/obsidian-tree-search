@@ -3,6 +3,7 @@ import {type BlockLine, ParsedNode} from "@mdtree/core";
 import {useMolecule} from "bunshi/react";
 import {Platform} from "obsidian";
 import {SearchViewMolecule} from "../react-context/state";
+import {GlobalAtoms} from "../react-context/global";
 import {SearchTreeNode} from "../SearchTreeNode";
 import {SearchBar} from "./SearchBar";
 import {ActionFooter} from "./ActionFooter";
@@ -10,8 +11,10 @@ import {SearchHelp} from "./SearchHelp";
 import {RecencyFilterBar, TimelineRow} from "./SearchTimeline";
 import React, {useEffect, useMemo, useState} from "react";
 import {EditorMolecule} from "../editor/EditorMolecule";
+import {InlineEditor} from "../editor/InlineEditor";
 import {appendTargetAt, isEditableRow, type AppendTarget} from "../editor/row-editing";
 import {BlockMoreFooter} from "./BlockMore";
+import {ChainPreview} from "./ChainPreview";
 
 export type TreeNode = {
     node: ParsedNode,
@@ -26,12 +29,32 @@ export type TreeNode = {
     compacted?: boolean
     archiveRow?: boolean
     timeline?: { breadcrumb: ParsedNode[]; pinned: boolean; ageDays: number; block?: BlockLine[] }
+    /** Timeline block row showing all its lines, not only the previews ("+N more" or → in the search input). */
+    blockOpen?: boolean
 }
 
+/** The Search modal's / pane's body: the inline editor while this view hosts it (`>`, ⊕, Alt+A/N, Alt-Edit…), else
+ *  the search with its results. */
 export const SearchViewFlatten = () => {
+    const {editorOpenAtom, leaveEditorAtom, scopeName, allowEditing} = useMolecule(SearchViewMolecule)
+    const {editorStateAtom} = useMolecule(EditorMolecule)
+    const editorOpen = useAtomValue(editorOpenAtom)
+    const state = useAtomValue(editorStateAtom)
+    const leaveEditor = useSetAtom(leaveEditorAtom)
+    const setHost = useSetAtom(GlobalAtoms.editorHostAtom)
+    // Another view or Quick Add took the editor: back to this view's search, without stealing focus.
+    useEffect(() => { if (!editorOpen) leaveEditor({saved: null, focus: false}) }, [editorOpen])
+    // Closing the modal or pane while it shows the editor frees it; the draft stays.
+    useEffect(() => () => { if (allowEditing) setHost(h => h === scopeName.name ? null : h) }, [])
+    if (editorOpen) return state ? <InlineEditor key={state.sessionId} state={state}/> : null
+    return <SearchResultsView/>
+}
+
+const SearchResultsView = () => {
     const {searchViewStateAtom, incrementPagesAtom, timelineActiveAtom, recencyWindowAtom, rebuildResultsAtom, actualQueryAtom,
-        allowEditing, allowTimeline, hoveredLineAtom, selectedLineAtom, flashLineAtom, blockFootersAtom} = useMolecule(SearchViewMolecule)
+        allowEditing, allowTimeline, hoveredLineAtom, selectedLineAtom, flashLineAtom, blockFootersAtom, chainAtom} = useMolecule(SearchViewMolecule)
     const {altHeldAtom, ownPathAtom} = useMolecule(EditorMolecule)
+    const chainActive = useAtomValue(chainAtom) !== null
 
     const viewState = useAtomValue(searchViewStateAtom)
     const incrementPages = useSetAtom(incrementPagesAtom)
@@ -99,6 +122,7 @@ export const SearchViewFlatten = () => {
     return <>
         {(viewState.showSearch) && <div className="tw-reset ts-search-block">
                 <SearchBar isQuickLink={viewState.isQuickLink}/>
+                <ChainPreview/>
                 {allowTimeline && <RecencyFilterBar/>}
             </div>
         }
@@ -113,9 +137,9 @@ export const SearchViewFlatten = () => {
             ) : viewState.searchResults.renderableNodes.length === 0 ? (
                 actualQuery.trim().length >= 3 && (timelineActive || recencyWindow !== "all")
                     ? <div className="ts-timeline-empty">No {timelineActive ? "dated " : ""}matches{recencyWindow !== "all" ? ` in the last ${recencyWindow}` : ""}</div>
-                    // Only the main search modal shows the syntax cheat sheet; auxiliary
-                    // panes (file context, parents, tasks, inline results) stay blank.
-                    : viewState.isModal ? <SearchHelp /> : null
+                    // Only the main search modal shows the syntax cheat sheet (not while a `>` / `<` chain
+                    // replaces the search); auxiliary panes (file context, parents, tasks, inline results) stay blank.
+                    : viewState.isModal && !chainActive ? <SearchHelp /> : null
             ) : (
                 <>
                     {rows.map((tree, index) => timelineActive

@@ -6,6 +6,7 @@ import type {RaycastAction} from "../node-actions"
 import {raycastActionOf} from "../node-actions"
 import {SHORTCUTS, type KeySpec, type ShortcutId} from "./shortcuts"
 import {appendTargetAt, dragInfo, isEditableRow, isValidDropTarget, type OwnPath} from "../editor/row-editing"
+import {isMovable} from "./chain"
 import type {TaskChange} from "../../editing/vault-edits"
 
 export type PanelSection = "row" | "task" | "edit" | "view"
@@ -56,7 +57,6 @@ function rowActionShortcut(action: RaycastAction): {id?: ShortcutId; icon: Panel
     if (action.type === "copy") return {id: "copy", icon: "copy"}
     switch (raycastActionOf(action)) {
         case "insert": return {id: "insertAfter", icon: "insert"}
-        case "moveToFolder": return {id: "moveTo", icon: "moveToFolder"}
         case "archive": case "unarchive": case "archivePage": case "unarchivePage": return {id: "archive", icon: "archive"}
         case "pullChildren": return {id: "consolidate", icon: "consolidate"}
     }
@@ -76,11 +76,17 @@ export function panelItems(ctx: PanelContext): PanelItem[] {
     const row = ctx.selectedPos >= 0 ? ctx.rows[ctx.selectedPos] : undefined
 
     ctx.rowActions.forEach((action, i) => {
-        // With editor mode, Insert after opens Append, which the Edit section already offers.
+        // Move To (folder picker) is replaced by Move to… below. With editor mode, Insert after opens Append, which
+        // the Edit section already offers.
+        if (raycastActionOf(action) === "moveToFolder") return
         if (ctx.allowEditing && raycastActionOf(action) === "insert") return
         const {id, icon} = rowActionShortcut(action)
         items.push({id: `row:${i}`, section: "row", title: action.title, icon, key: id && keyOf(id), run: {kind: "action", action}})
     })
+    // Move to…: the `<` flow (search for the new parent), for every row it can move.
+    if (row && !row.archiveRow && isMovable(row.node)) {
+        items.push({id: "moveTo", section: "row", title: "Move to…", icon: "moveToFolder", key: keyOf("moveTo"), run: {kind: "shortcut", id: "moveTo"}})
+    }
 
     // Open tasks: complete or reschedule the line (Tasks plugin fields), in every view like Archive.
     if (row && row.node.nodeType === "text" && row.node.isTask && !row.node.isCompleted) {
@@ -96,7 +102,10 @@ export function panelItems(ctx: PanelContext): PanelItem[] {
     if (ctx.allowEditing && row) {
         const target = appendTargetAt(ctx.rows, ctx.selectedPos, ctx.timelineActive)
         if (target) items.push({id: "append", section: "edit", title: `Append to [[${target.parentName}]]`, icon: "append", key: keyOf("append"), run: {kind: "shortcut", id: "append"}})
-        if (isEditableRow(row, ctx.ownPath, ctx.timelineActive)) items.push({id: "edit", section: "edit", title: "Edit line", icon: "edit", key: keyOf("edit"), run: {kind: "shortcut", id: "edit"}})
+        if (isEditableRow(row, ctx.ownPath, ctx.timelineActive)) {
+            const rename = row.node.nodeType === "header" || row.node.nodeType === "attachment"
+            items.push({id: "edit", section: "edit", title: rename ? "Rename" : "Edit line", icon: "edit", key: keyOf("edit"), run: {kind: "shortcut", id: "edit"}})
+        }
         if (!ctx.timelineActive && moveUnderTargets(ctx.rows, ctx.selectedPos).length > 0) {
             items.push({id: "moveUnder", section: "edit", title: "Move under…", icon: "moveUnder", run: {kind: "moveUnder"}})
         }

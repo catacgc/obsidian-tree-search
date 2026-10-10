@@ -2,7 +2,19 @@ import { describe, it, expect } from "bun:test"
 import yaml from "js-yaml"
 import type { App } from "obsidian"
 import { StaleLineError, type TextNode } from "@mdtree/core"
-import { appendToDailyNote, editLine, editTaskLine, reparent, writeNoteContents } from "../editing/vault-edits"
+import {
+    addFrontmatterValue,
+    applyNotePatch,
+    appendToDailyNote,
+    appendUnderLine,
+    dailyNotePath,
+    editLine,
+    editTaskLine,
+    renameVaultFile,
+    reparent,
+    writeNoteContents,
+    writeWholeNote,
+} from "../editing/vault-edits"
 
 // ── Fake app ─────────────────────────────────────────────────────────────────
 //
@@ -121,6 +133,49 @@ describe("writeNoteContents", () => {
     })
 })
 
+describe("addFrontmatterValue", () => {
+    it("sets a missing key, as a list when asked", () => {
+        const fm: Record<string, unknown> = {}
+        addFrontmatterValue(fm, "is", "project", false)
+        addFrontmatterValue(fm, "aliases", "a", true)
+        expect(fm).toEqual({ is: "project", aliases: ["a"] })
+    })
+
+    it("never overwrites: an equal scalar stays, a different one becomes a list, lists dedupe", () => {
+        const fm: Record<string, unknown> = { is: "Project", tags: ["x"], parent: "" }
+        addFrontmatterValue(fm, "is", "project ", false)
+        expect(fm.is).toBe("Project")
+        addFrontmatterValue(fm, "is", "area", false)
+        expect(fm.is).toEqual(["Project", "area"])
+        addFrontmatterValue(fm, "tags", "X", false)
+        addFrontmatterValue(fm, "tags", "y", false)
+        expect(fm.tags).toEqual(["x", "y"])
+        addFrontmatterValue(fm, "parent", "[[P]]", false)
+        expect(fm.parent).toBe("[[P]]")
+    })
+})
+
+describe("applyNotePatch", () => {
+    const patch = { name: "New", aliases: ["nu"], headings: ["Plan"], fields: [{ key: "is", value: "project" }] }
+
+    it("creates a missing note with the heading and frontmatter, and is idempotent", async () => {
+        const { app, files } = makeFakeApp()
+        const f = await applyNotePatch(app, patch, cfg, now)
+        expect(f.path).toBe("New.md")
+        const once = files.get("New.md")
+        expect(once).toBe("---\naliases:\n  - nu\nis: project\n---\n## Plan\n")
+        await applyNotePatch(app, patch, cfg, now)
+        expect(files.get("New.md")).toBe(once)
+    })
+
+    it("patches today's daily note through its template", async () => {
+        const { app, files } = makeFakeApp({ "Templates/Daily.md": "# {{date}}\n" })
+        const f = await applyNotePatch(app, { name: "2026-09-30", aliases: [], headings: ["Log"], fields: [] }, cfg, now)
+        expect(f.path).toBe("Daily/2026-09-30.md")
+        expect(files.get("Daily/2026-09-30.md")).toBe("# 2026-09-30\n\n## Log\n")
+    })
+})
+
 describe("editLine", () => {
     it("rewrites the expected line", async () => {
         const { app, files } = makeFakeApp({ "a.md": "- one\n- two\n" })
@@ -233,5 +288,161 @@ describe("reparent", () => {
         const { app } = makeFakeApp({ "Child.md": "---\nparent: \"[[Other]]\"\n---\n" })
         await expect(reparent(app, { kind: "frontmatter", childPath: "Child.md", oldName: "Old", newName: "New", relation: "parent" }))
             .rejects.toBeInstanceOf(StaleLineError)
+    })
+})
+
+const fm = (content: string) => yaml.load(content.split("---\n")[1])
+
+describe("appendUnderLine", () => {
+    it("appendUnderLine nests the block under the line and reports where", async () => {
+        const { app, files } = makeFakeApp({ "n.md": "- [ ] buy milk\n- other\n" })
+        const out = await appendUnderLine(app, "n.md", 0, "- [ ] buy milk", ["- check price"])
+        expect(files.get("n.md")).toBe("- [ ] buy milk\n    - check price\n- other\n")
+        expect([out.file.path, out.line]).toEqual(["n.md", 1])
+    })
+
+    it("appendUnderLine throws StaleLineError for a missing file", async () => {
+        const { app } = makeFakeApp()
+        await expect(appendUnderLine(app, "gone.md", 0, "- a", ["- b"])).rejects.toBeInstanceOf(StaleLineError)
+    })
+})
+
+describe("writeWholeNote", () => {
+    it("replaces the note when it is unchanged", async () => {
+        const { app, files } = makeFakeApp({ "P.md": "old\n" })
+        await writeWholeNote(app, "P.md", "old\n", "new\n")
+        expect(files.get("P.md")).toBe("new\n")
+    })
+
+    it("throws when the note changed since it was read", async () => {
+        const { app, files } = makeFakeApp({ "P.md": "edited\n" })
+        await expect(writeWholeNote(app, "P.md", "old\n", "new\n")).rejects.toThrow("Note changed since editing started — reopen the editor")
+        expect(files.get("P.md")).toBe("edited\n")
+    })
+
+    it("creates the note and its folder for a null original", async () => {
+        const { app, files, folders } = makeFakeApp()
+        await writeWholeNote(app, "Notes/P.md", null, "text\n")
+        expect(files.get("Notes/P.md")).toBe("text\n")
+        expect(folders.has("Notes")).toBe(true)
+    })
+
+    it("throws for a null original when the note now exists", async () => {
+        const { app } = makeFakeApp({ "P.md": "x\n" })
+        await expect(writeWholeNote(app, "P.md", null, "new\n")).rejects.toThrow("Note changed since editing started")
+    })
+})
+
+describe("reparent: set-parent / to-folder", () => {
+    const base = { kind: "set-parent" as const, childName: "Child", relation: "parent", newName: "New", cfg }
+
+    it("sets an absent relation", async () => {
+        const { app, files } = makeFakeApp({ "Child.md": "body\n" })
+        await reparent(app, { ...base, childPath: "Child.md", oldName: null })
+        expect(fm(files.get("Child.md")!)).toEqual({ parent: "[[New]]" })
+    })
+
+    it("replaces a string relation", async () => {
+        const { app, files } = makeFakeApp({ "Child.md": "---\nparent: \"[[Other]]\"\n---\n" })
+        await reparent(app, { ...base, childPath: "Child.md", oldName: null })
+        expect(fm(files.get("Child.md")!)).toEqual({ parent: "[[New]]" })
+    })
+
+    it("replaces the old parent's entry in an array", async () => {
+        const { app, files } = makeFakeApp({ "Child.md": "---\nparent:\n  - \"[[A]]\"\n  - \"[[Old|x]]\"\n---\n" })
+        await reparent(app, { ...base, childPath: "Child.md", oldName: "old" })
+        expect(fm(files.get("Child.md")!)).toEqual({ parent: ["[[A]]", "[[New]]"] })
+    })
+
+    it("appends to an array without the old parent", async () => {
+        const { app, files } = makeFakeApp({ "Child.md": "---\nparent:\n  - \"[[A]]\"\n---\n" })
+        await reparent(app, { ...base, childPath: "Child.md", oldName: "Old" })
+        expect(fm(files.get("Child.md")!)).toEqual({ parent: ["[[A]]", "[[New]]"] })
+    })
+
+    it("creates the note of a reference child", async () => {
+        const { app, files } = makeFakeApp()
+        const touched = await reparent(app, { ...base, childPath: null, oldName: null })
+        expect(touched.map(f => f.path)).toEqual(["Child.md"])
+        expect(fm(files.get("Child.md")!)).toEqual({ parent: "[[New]]" })
+    })
+
+    it("to-folder moves the file", async () => {
+        const { app, files } = makeFakeApp({ "P.md": "x\n" })
+        await reparent(app, { kind: "to-folder", childPath: "P.md", folderPath: "Projects" })
+        expect(files.get("Projects/P.md")).toBe("x\n")
+        expect(files.has("P.md")).toBe(false)
+    })
+
+    it("to-folder throws when the name is taken", async () => {
+        const { app, files } = makeFakeApp({ "P.md": "x\n", "Projects/P.md": "y\n" })
+        await expect(reparent(app, { kind: "to-folder", childPath: "P.md", folderPath: "Projects" })).rejects.toThrow("P.md already exists in Projects")
+        expect(files.get("P.md")).toBe("x\n")
+    })
+})
+
+describe("reparent: to-daily / under-line", () => {
+    const daily = dailyNotePath(cfg)
+    const toDaily = { kind: "to-daily" as const, line: 0, head: "- [[Bob]] call", parentLink: "P#H", cfg }
+
+    it("to-daily moves within today's note without stamping", async () => {
+        const { app, files } = makeFakeApp({ [daily]: "- [[Bob]] call\n    - prose\n- [[P#H]]\n    - x\n" })
+        const touched = await reparent(app, { ...toDaily, sourcePath: daily, stampDate: "2026-01-01" })
+        expect(files.get(daily)).toBe("- [[P#H]]\n    - x\n    - [[Bob]] call\n        - prose\n")
+        expect(touched.map(f => f.path)).toEqual([daily])
+    })
+
+    it("to-daily from another note stamps only its indexed lines", async () => {
+        const { app, files } = makeFakeApp({ "Old.md": "- [[Bob]] call\n    - prose\n    - [ ] t\n- keep\n" })
+        const touched = await reparent(app, { ...toDaily, sourcePath: "Old.md", stampDate: "2026-01-01" })
+        expect(files.get(daily)).toBe("- [[P#H]]\n    - [[Bob]] call [created:: 2026-01-01]\n        - prose\n        - [ ] t [created:: 2026-01-01]\n")
+        expect(files.get("Old.md")).toBe("- keep\n")
+        expect(touched.map(f => f.path)).toEqual([daily, "Old.md"])
+    })
+
+    it("to-daily keeps the copy and reports a failed cut", async () => {
+        const { app, files } = makeFakeApp({ "Old.md": "- other\n- [[Bob]] call\n" })
+        app.vault.read = async () => "- [[Bob]] call\n- other\n"
+        await expect(reparent(app, { ...toDaily, sourcePath: "Old.md", stampDate: null }))
+            .rejects.toThrow("Copied to today's daily note but the original line changed — remove it manually")
+        expect(files.get(daily)).toContain("- [[Bob]] call")
+        expect(files.get("Old.md")).toBe("- other\n- [[Bob]] call\n")
+    })
+
+    const underLine = { kind: "under-line" as const, stampDate: null }
+
+    it("under-line in the same file shifts a target after the cut", async () => {
+        const { app, files } = makeFakeApp({ "n.md": "- a\n    - a1\n- b\n" })
+        await reparent(app, { ...underLine, sourcePath: "n.md", line: 0, head: "- a", targetPath: "n.md", targetLine: 2, targetHead: "- b" })
+        expect(files.get("n.md")).toBe("- b\n    - a\n        - a1\n")
+    })
+
+    it("under-line refuses a target inside the moved subtree", async () => {
+        const { app, files } = makeFakeApp({ "n.md": "- a\n    - a1\n- b\n" })
+        await expect(reparent(app, { ...underLine, sourcePath: "n.md", line: 0, head: "- a", targetPath: "n.md", targetLine: 1, targetHead: "    - a1" }))
+            .rejects.toThrow("Can't move a line under itself")
+        expect(files.get("n.md")).toBe("- a\n    - a1\n- b\n")
+    })
+
+    it("under-line across files pastes stamped under the target, then cuts", async () => {
+        const { app, files } = makeFakeApp({ "Old.md": "- [[X]] y\n- keep\n", "T.md": "- [ ] target\n" })
+        const touched = await reparent(app, { kind: "under-line", sourcePath: "Old.md", line: 0, head: "- [[X]] y", targetPath: "T.md", targetLine: 0, targetHead: "- [ ] target", stampDate: "2026-01-01" })
+        expect(files.get("T.md")).toBe("- [ ] target\n    - [[X]] y [created:: 2026-01-01]\n")
+        expect(files.get("Old.md")).toBe("- keep\n")
+        expect(touched.map(f => f.path)).toEqual(["T.md", "Old.md"])
+    })
+})
+
+describe("renameVaultFile", () => {
+    it("renames in the file's folder, keeping its extension", async () => {
+        const { app, files } = makeFakeApp({ "assets/photo.png": "img" })
+        expect(await renameVaultFile(app, "assets/photo.png", " cover ")).toBe("assets/cover.png")
+        expect([...files.keys()]).toEqual(["assets/cover.png"])
+    })
+
+    it("refuses an existing name and a missing file", async () => {
+        const { app } = makeFakeApp({ "photo.png": "a", "cover.png": "b" })
+        await expect(renameVaultFile(app, "photo.png", "cover")).rejects.toThrow('"cover.png" already exists')
+        await expect(renameVaultFile(app, "gone.png", "x")).rejects.toBeInstanceOf(StaleLineError)
     })
 })

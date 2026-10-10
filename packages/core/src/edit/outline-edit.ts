@@ -21,7 +21,7 @@ const INDENT = "    "
 const BULLET_RE = /^\s*(?:[-*+]|\d+\.)(\s+|$)/
 const CHECKBOX_RE = /^\[([ xX])\]\s+/
 const HEADING_TEXT_RE = /^#{1,6}\s+\S/
-const LINK_ONLY_RE = /^\[\[([^\]|#]+)(\|[^\]]*)?\]\]$/
+const LINK_ONLY_RE = /^\[\[([^\]|]+)(\|[^\]]*)?\]\]$/
 
 /** Leading-whitespace width, each tab counted as 4. */
 export function indentWidth(line: string): number {
@@ -149,7 +149,7 @@ function outlineEndOf(lines: string[]): number {
   return lines.length > 0 && lines[lines.length - 1] === "" ? lines.length - 1 : lines.length
 }
 
-/** Page name when `text` is exactly one wikilink `[[X]]` / `[[X|alias]]` (trimmed), else null. */
+/** Link target (`page` or `page#header`) when `text` is exactly one wikilink `[[X]]` / `[[X|alias]]` (trimmed), else null. */
 export function linkOnlyTarget(text: string): string | null {
   const link = text.trim().match(LINK_ONLY_RE)
   return link ? link[1].trim() : null
@@ -182,7 +182,7 @@ export function findSubtreeEnd(lines: string[], headLine: number): number {
   return end
 }
 
-/** First leading-outline bullet that is exactly `[[pageName]]` / `[[pageName|alias]]` (case-insensitive). */
+/** First leading-outline bullet that is exactly `[[pageName]]` / `[[pageName|alias]]` (case-insensitive; `pageName` may be `page#header`). */
 export function findLinkBullet(content: string, pageName: string): number | null {
   return linkBulletOf(splitLines(content).lines, pageName)
 }
@@ -296,7 +296,7 @@ export function cutSubtree(content: string, headLine: number, expectedHead: stri
   return { content: lines.join(eol), block }
 }
 
-/** Inserts `block` as the last children of the leading-outline `[[pageName]]` bullet, adding that bullet at the outline end if missing. */
+/** Inserts `block` as the last children of the leading-outline `[[pageName]]` bullet (`pageName` may be `page#header`), adding that bullet at the outline end if missing. */
 export function pasteUnderLinkBullet(content: string, pageName: string, block: string[]): string {
   const { lines, eol } = splitLines(content)
   const unit = indentUnitOf(lines)
@@ -308,6 +308,28 @@ export function pasteUnderLinkBullet(content: string, pageName: string, block: s
   const depth = Math.floor(indentWidth(lines[bullet]) / 4) + 1
   lines.splice(findSubtreeEnd(lines, bullet), 0, ...block.map(l => (l === "" ? "" : indentBy(l, depth, unit))))
   return lines.join(eol)
+}
+
+/** Inserts `block` as the last children of the line `headLine`; throws `StaleLineError` if it no longer equals `expectedHead`. `line` is the first inserted line. */
+export function pasteUnderLine(content: string, headLine: number, expectedHead: string, block: string[]): { content: string; line: number } {
+  const { lines, eol } = splitLines(content)
+  if (lines[headLine] !== expectedHead) throw new StaleLineError()
+  const depth = Math.floor(indentWidth(expectedHead) / 4) + 1
+  const unit = indentUnitOf(lines)
+  const line = findSubtreeEnd(lines, headLine)
+  lines.splice(line, 0, ...block.map(l => (l === "" ? "" : indentBy(l, depth, unit))))
+  return { content: lines.join(eol), line }
+}
+
+/** Whether the frontmatter or leading outline differs between `before` and `after` (prose after the outline is ignored). */
+export function outlineChanged(before: string, after: string): boolean {
+  const a = splitLines(before).lines
+  const b = splitLines(after).lines
+  const aEnd = outlineEndOf(a)
+  const bEnd = outlineEndOf(b)
+  if (aEnd !== bEnd) return true
+  for (let i = 0; i < aEnd; i++) if (a[i] !== b[i]) return true
+  return false
 }
 
 export function pasteAtOutlineEnd(content: string, block: string[]): string {

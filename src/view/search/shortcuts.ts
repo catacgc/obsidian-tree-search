@@ -55,12 +55,12 @@ export const SHORTCUTS: Shortcut[] = [
 
     {id: "copy", group: "Selected row", keys: [key("KeyC", "C", {ctrl: true})], description: "Copy as a link"},
     {id: "insertAfter", group: "Selected row", keys: [alt("KeyI", "I"), key("KeyI", "I", {ctrl: true})], description: "Insert after"},
-    {id: "moveTo", group: "Selected row", keys: [alt("KeyM", "M")], description: "Move to folder (pages)"},
+    {id: "moveTo", group: "Selected row", keys: [alt("KeyM", "M")], description: "Move to… (search for the new parent)"},
     {id: "archive", group: "Selected row", keys: [alt("KeyX", "X")], description: "Archive / unarchive"},
     {id: "consolidate", group: "Selected row", keys: [alt("KeyP", "P")], description: "Consolidate notes (pages)"},
 
     {id: "append", group: "Editor", keys: [alt("KeyA", "A")], description: "Append to the row's note", needs: "editing"},
-    {id: "edit", group: "Editor", keys: [key(ENTER, "Enter", {macLabel: "↵", alt: true})], description: "Edit the row", needs: "editing"},
+    {id: "edit", group: "Editor", keys: [key(ENTER, "Enter", {macLabel: "↵", alt: true})], description: "Edit the row (Rename a heading or attachment)", needs: "editing"},
     {id: "newEditor", group: "Editor", keys: [alt("KeyN", "N")], description: "Open editor", needs: "editing"},
 ]
 
@@ -69,7 +69,7 @@ export const EDITOR_KEYS: {keys: KeySpec[]; description: string}[] = [
     {keys: [key(ENTER, "Enter", {macLabel: "↵", shift: true}), key(ENTER, "Enter", {macLabel: "↵", mod: true})], description: "Save"},
     {keys: [key("Escape", "Esc")], description: "Cancel"},
     {keys: [key("Tab", "Tab", {macLabel: "⇥"}), key("Tab", "Tab", {macLabel: "⇥", shift: true})], description: "Indent / outdent"},
-    {keys: [key(ENTER, "Enter", {macLabel: "↵", alt: true})], description: "Content of the link at the caret"},
+    {keys: [key(ENTER, "Enter", {macLabel: "↵", alt: true})], description: "Content of the link on the line, else the whole note"},
     {keys: [key("KeyB", "B", {mod: true}), key("KeyI", "I", {mod: true}), key("KeyK", "K", {mod: true})], description: "Bold / italic / link"},
 ]
 

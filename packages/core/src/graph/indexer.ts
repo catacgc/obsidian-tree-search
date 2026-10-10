@@ -5,6 +5,7 @@ import { calculateBoost, getAgeDays, ageDaysFromText, isUndated } from "./boost.
 import { parseTokens, stripUrlQueryStrings } from "../parser/inline-tokens.ts"
 import { extractPageDate } from "../parser/frontmatter.ts"
 import { textSourceDate } from "../search/relative-date.ts"
+import { CREATED_FIELD_RE, isProseText } from "../parser/list-scanner.ts"
 
 export type IndexSettings = {
   parentRelation: string // default: "parent"
@@ -37,16 +38,9 @@ function shouldSkip(lst: DvList): boolean {
   // If meta-actions were stripped (rawText !== text), don't skip — we have parsedTokens to render
   if (lst.rawText !== lst.text) return false
 
-  return isOnlyText(lst.text)
-}
+  if (CREATED_FIELD_RE.test(lst.text)) return false
 
-function isOnlyText(text: string): boolean {
-  return (
-    !text.includes("[[") &&
-    !text.includes("![[") &&
-    !text.includes("#") &&
-    !text.includes("http")
-  )
+  return isProseText(lst.text)
 }
 
 // ── createNodeFromText ────────────────────────────────────────────────────────
