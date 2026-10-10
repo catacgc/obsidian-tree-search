@@ -219,11 +219,27 @@ export function changedRange(from: string, to: string): { from: number; to: numb
     return {from: p, to: from.length - s, insert: to.slice(p, to.length - s)}
 }
 
-/** Note that owns the caret line: its own first link, else the nearest ancestor line's link, else `fallback`. */
-export function outlineBaseNote(text: string, caret: number, fallback: string): string {
+/** Page of the link nearest column `col` of `line`: the last non-embed link starting before it (so a caret between
+ *  `[[A]]` and `[[B]]` gives A), else the line's first link. */
+function pageLinkNear(line: string, col: number): string | null {
+    let first: string | null = null
+    let before: string | null = null
+    for (const m of line.matchAll(LINK_RE)) {
+        if (m[1] === "!") continue
+        const page = m[2].split(/[#|]/)[0].trim()
+        if (!page) continue
+        first ??= page
+        if (m.index! < col) before = page
+    }
+    return before ?? first
+}
+
+/** Note nearest the caret: the caret line's link nearest the caret (pageLinkNear), else the nearest ancestor line's
+ *  (smaller indent) link nearest its end, else null. */
+export function caretNote(text: string, caret: number): string | null {
     const lines = text.split("\n")
     let idx = text.slice(0, caret).split("\n").length - 1
-    const own = firstPageLink(lines[idx])
+    const own = pageLinkNear(lines[idx], caret - lineStartAt(text, caret))
     if (own) return own
     let threshold = indentWidth(lines[idx])
     for (idx--; idx >= 0 && threshold > 0; idx--) {
@@ -231,10 +247,10 @@ export function outlineBaseNote(text: string, caret: number, fallback: string): 
         const w = indentWidth(lines[idx])
         if (w >= threshold) continue
         threshold = w
-        const link = firstPageLink(lines[idx])
+        const link = pageLinkNear(lines[idx], lines[idx].length)
         if (link) return link
     }
-    return fallback
+    return null
 }
 
 /** Pasted attachments in the outline: fill an empty bullet on the caret line, then add child bullets. */

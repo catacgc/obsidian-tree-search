@@ -6,7 +6,7 @@ import {
     treeParentPos, type OwnPath,
 } from "../view/editor/row-editing"
 import {
-    outlineIndent, linkQueryAt, acceptLink, linkAt, insertAttachmentBullets, outlineBaseNote,
+    outlineIndent, linkQueryAt, acceptLink, linkAt, insertAttachmentBullets, caretNote,
     outlineBackspace, pasteOutline, changedRange, pasteLink, pastedUrl, ensureBullet,
     outlineEnter, outlineRepairs, toggleTask,
 } from "../view/editor/textarea-ops"
@@ -353,9 +353,26 @@ describe("links and attachments", () => {
         })
     })
 
-    it("outlineBaseNote walks up to the nearest ancestor with a link", () => {
-        const t = "- [[A]]\n    - plain\n        - deeper"
-        expect(outlineBaseNote(t, t.length, "P")).toBe("A")
-        expect(outlineBaseNote("- x", 3, "P")).toBe("P")
+    it("caretNote picks the caret line's link nearest the caret: the last one starting before it, else the first", () => {
+        const t = "- [[A]] and ![[x.png]] [[B|b]] end"
+        expect(caretNote(t, 0)).toBe("A")                  // before both
+        expect(caretNote(t, 4)).toBe("A")                  // inside A
+        expect(caretNote(t, t.indexOf(" and"))).toBe("A") // between A and B
+        expect(caretNote(t, t.indexOf("[[B"))).toBe("A")  // right before B's `[[`
+        expect(caretNote(t, t.indexOf("B|"))).toBe("B")   // inside B
+        expect(caretNote(t, t.length)).toBe("B")          // after both
+    })
+
+    it("caretNote ignores links on other lines when the caret line has one", () => {
+        const t = "- [[P]]\n    - [[A]] x [[B]]\n    - [[C]]"
+        expect(caretNote(t, t.indexOf(" x"))).toBe("A")
+        expect(caretNote(t, t.indexOf("\n    - [[C"))).toBe("B")
+    })
+
+    it("caretNote walks up to the nearest ancestor with a link, else null", () => {
+        const t = "- [[A]]\n    - [[S]] sibling\n    - plain\n        - deeper"
+        expect(caretNote(t, t.length)).toBe("A")
+        expect(caretNote("- [[Q]]\n- root", 14)).toBeNull()
+        expect(caretNote("- x", 3)).toBeNull()
     })
 })

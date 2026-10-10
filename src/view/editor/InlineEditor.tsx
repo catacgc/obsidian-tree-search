@@ -27,7 +27,7 @@ import {
     insertAttachmentBullets,
     linkAt,
     outlineBackspace,
-    outlineBaseNote,
+    caretNote,
     outlineEnter,
     outlineIndent,
     outlineRepairs,
@@ -203,13 +203,13 @@ export function InlineEditor({state}: { state: EditorState }) {
     const suggestFor = (section: Section): LinkSuggestState => section === "outline" ? outlineSuggest : contentSuggest
     const suggest = suggestFor(focused)
 
-    // The outline's first parent: the first link on its first line (Append's `[[P]]` root as typed or switched, or
-    // the edited line's first link), so the list follows edits to it.
-    const firstParent = firstLinkOnLine(state.outline, 0) ?? undefined
-    // Quick Add's results list follows the open `[[query` of the focused field, else shows the first parent's full
-    // tree (`tree:"P"`), or today's daily outline without one.
-    useEffect(() => setQuery({query: suggest.open ? suggest.query : quickAddDefaultQuery(firstParent)}),
-        [suggest.open, suggest.query, firstParent])
+    // The outline's note nearest its caret (caretNote: the caret line's link nearest the caret, else the nearest
+    // ancestor line's), so the list follows the caret and edits to the links around it.
+    const caretParent = caretNote(state.outline, state.caret) ?? undefined
+    // Quick Add's results list follows the open `[[query` of the focused field, else shows that note's full tree
+    // (`tree:"P"`), or today's daily outline without one.
+    useEffect(() => setQuery({query: suggest.open ? suggest.query : quickAddDefaultQuery(caretParent)}),
+        [suggest.open, suggest.query, caretParent])
 
     /** Escape / ✕ / backdrop: close Quick Add; the Append draft stays for next time. */
     const close = () => leave({kind: "cancelled"})
@@ -457,11 +457,8 @@ export function InlineEditor({state}: { state: EditorState }) {
         if (section === "content" && active !== null) {
             base = active
             sourcePath = contentSourcePath(active)
-        } else if (append) {
-            base = outlineBaseNote(text, caret, parentName)
-            sourcePath = state.sourcePath
         } else {
-            base = firstLinkOnLine(text, caret) ?? basenameOf(state.sourcePath)
+            base = caretNote(text, caret) ?? (append ? parentName : basenameOf(state.sourcePath))
             sourcePath = state.sourcePath
         }
 
@@ -641,7 +638,7 @@ export function InlineEditor({state}: { state: EditorState }) {
             </div>
         </div>
     </div>
-    <LinkResults open={suggest.open} query={suggest.query} parentName={firstParent}
+    <LinkResults open={suggest.open} query={suggest.query} parentName={caretParent}
         onPick={row => { if (!row.archiveRow) accept(focused, row) }}/>
     </>
 }

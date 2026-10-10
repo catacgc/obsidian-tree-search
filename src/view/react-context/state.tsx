@@ -131,8 +131,8 @@ export const GlobalAppMolecule = molecule((_, scope) => {
 /** Quick Add's results list without a parent and no `[[` open: the outline of today's daily note. */
 export const DAILY_OUTLINE_QUERY = ":daily :page"
 
-/** Quick Add's results list while no `[[` is open: the full tree of the editor's first parent, or today's daily outline
- *  without one. A typed name with `"` can't be a note (nor be quoted), so it counts as none. */
+/** Quick Add's results list while no `[[` is open: the full tree of the outline's note nearest the caret (caretNote),
+ *  or today's daily outline without one. A typed name with `"` can't be a note (nor be quoted), so it counts as none. */
 export const quickAddDefaultQuery = (parentName: string | undefined): string =>
     parentName && !parentName.includes('"') ? `tree:"${parentName}"` : DAILY_OUTLINE_QUERY
 
