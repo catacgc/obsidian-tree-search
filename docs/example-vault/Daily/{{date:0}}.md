@@ -1,0 +1,4 @@
+- [[Project Apollo]]
+    - Kickoff with [[Alice]] and [[Bob]] 🚀
+    - [ ] Send the beta invite list #todo
+- Reading [[Thinking in Systems]] #book

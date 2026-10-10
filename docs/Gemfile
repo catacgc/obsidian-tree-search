@@ -1,0 +1,6 @@
+source "https://rubygems.org"
+
+# The same Jekyll, plugins and Markdown settings GitHub Pages uses for its branch builds.
+gem "github-pages", group: :jekyll_plugins
+# Jekyll 3 serves via WEBrick, which Ruby 3 no longer bundles.
+gem "webrick"

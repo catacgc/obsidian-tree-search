@@ -1,0 +1,20 @@
+title: Tree Search
+description: Search and grow the outline of your Obsidian vault
+baseurl: /obsidian-tree-search
+url: https://catacgc.github.io
+markdown: kramdown
+kramdown:
+  input: GFM
+# Setting `exclude` replaces Jekyll's defaults, so the Gemfile is listed again.
+exclude: [superpowers, example-vault, Gemfile, Gemfile.lock]
+defaults:
+  - scope: {path: ""}
+    values: {layout: default}
+nav:
+  - {title: Overview, url: /}
+  - {title: Building the tree, url: /building-the-tree.html}
+  - {title: Searching, url: /searching.html}
+  - {title: Query language, url: /query-language.html}
+  - {title: Editor, url: /editor.html}
+  - {title: Panes & integrations, url: /panes-and-integrations.html}
+  - {title: Shortcuts, url: /shortcuts.html}

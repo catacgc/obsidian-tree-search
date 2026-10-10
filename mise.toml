@@ -59,3 +59,18 @@ run = "bun test packages/core/src/__tests__"
 description = "Run the mdtree CLI from source; extra args are passed through"
 depends = ["install"]
 run = "bun run packages/cli/src/main.ts"
+
+[tasks.docs]
+description = "Rebuild the example vault and recapture docs screenshots (needs Obsidian with CDP on :9223)"
+depends = ["build:plugin"]
+run = ["bun run docs:vault", "bun run docs:shots"]
+
+[tasks."docs:preview"]
+description = "Serve docs/ with live reload at http://127.0.0.1:4000/obsidian-tree-search/ (Jekyll via the github-pages gem)"
+tools = { ruby = "3.3" }
+dir = "{{config_root}}/docs"
+env = { BUNDLE_PATH = "{{config_root}}/.docs-bundle" }
+run = [
+  "bundle install --quiet",
+  "bundle exec jekyll serve --livereload --destination {{config_root}}/.docs-site",
+]

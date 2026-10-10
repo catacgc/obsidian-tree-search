@@ -5,4 +5,4 @@ No special annotation, just record relations whenever you want them.
 
 ![alt text](image.png)
 
-And much more! Checkout docs: https://catacgc.github.io/tree-search-docs
+**Documentation:** https://catacgc.github.io/obsidian-tree-search/ (sources in [docs/](docs/index.md)).

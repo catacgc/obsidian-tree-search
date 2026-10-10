@@ -18,6 +18,8 @@ Tree Search is an Obsidian plugin plus the standalone `mdtree` CLI. Both share a
 | `plugins/` | mdtree CLI plugins (e.g. `arc`: indexes Arc Browser spaces) |
 | `test-support/obsidian-mock.ts` | Virtual `obsidian` module preloaded by `bun test` (`bunfig.toml`) |
 | `dist/` | Build output, gitignored: plugin bundle and the `dist/mdtree` binary |
+| `docs/` | User docs site (Jekyll, GitHub Pages from `main:/docs`); screenshots come from `docs/example-vault/` via `scripts/docs/`. Regenerate with `mise run docs`, preview locally with `mise run docs:preview`; procedure in `.omp/skills/build-docs/SKILL.md` |
+| `.docs-vault/` | Gitignored example vault built by `bun run docs:vault` |
 
 ## Commands
 

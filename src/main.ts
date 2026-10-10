@@ -354,10 +354,9 @@ class SettingsTab extends PluginSettingTab {
         div.setCssStyles({ fontStyle: "italic", borderTop: "1px solid #ddd" })
         const helpDesc = document.createDocumentFragment();
         helpDesc.append("v" + this.plugin.manifest.version, " • ");
-        const strippedVersion = this.plugin.manifest.version.replace(/^v/, "").replace(/\./g, "");
-        helpDesc.append(helpDesc.createEl("a", { href: "https://catacgc.github.io/tree-search-docs/ReleaseNotes#" + strippedVersion, text: "What's new" }))
+        helpDesc.append(helpDesc.createEl("a", { href: "https://github.com/catacgc/obsidian-tree-search/releases/tag/" + this.plugin.manifest.version, text: "What's new" }))
         helpDesc.append(" • ");
-        helpDesc.append(helpDesc.createEl("a", { href: "https://catacgc.github.io/tree-search-docs", text: "Documentation" }))
+        helpDesc.append(helpDesc.createEl("a", { href: "https://catacgc.github.io/obsidian-tree-search/", text: "Documentation" }))
         helpDesc.append(" • ");
         helpDesc.append(helpDesc.createEl("a", { href: "https://github.com/catacgc/obsidian-tree-search", text: "Repo & Issue Reporting" }))
         div.append(helpDesc)

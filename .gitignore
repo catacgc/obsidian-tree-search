@@ -37,3 +37,11 @@ data.json
 
 # mdtree CLI parse cache
 .mdtree/
+
+# docs example vault (built by scripts/docs/build-vault.ts)
+.docs-vault/
+
+# docs preview (mise run docs:preview): gems, built site, Jekyll cache
+.docs-bundle/
+.docs-site/
+docs/.jekyll-cache/

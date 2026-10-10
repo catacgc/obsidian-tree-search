@@ -195,7 +195,8 @@ const BulletOrTask = ({indent, node}: BulletOrTaskProps) => {
 
     if (node.nodeType === "text" && node.isTask && !node.isCompleted) {
         return <label className="task-list-label">
-            <input className="task-list-item-checkbox" type="checkbox" data-task=""/>
+            {/* Controlled: an uncontrolled box kept a reused DOM node's checked state across queries. */}
+            <input className="task-list-item-checkbox" type="checkbox" checked={false} readOnly={true} data-task=""/>
         </label>;
     } else if (node.nodeType === "text" && node.isTask && node.isCompleted) {
         return <label className="task-list-label">

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ page.title }} · {{ site.title }}</title>
+  <meta name="description" content="{{ site.description }}">
+  <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}">
+</head>
+<body>
+  <header>
+    <a class="site-title" href="{{ '/' | relative_url }}">{{ site.title }}</a>
+    <nav>
+      {% for item in site.nav %}
+        {% if page.url == item.url or item.url == "/" and page.url == "/index.html" %}
+          <a class="active" href="{{ item.url | relative_url }}">{{ item.title }}</a>
+        {% else %}
+          <a href="{{ item.url | relative_url }}">{{ item.title }}</a>
+        {% endif %}
+      {% endfor %}
+    </nav>
+  </header>
+  <main>{{ content }}</main>
+  <footer>
+    <a href="https://github.com/catacgc/obsidian-tree-search">GitHub</a>
+    ·
+    <a href="https://github.com/catacgc/obsidian-tree-search/releases">Releases</a>
+  </footer>
+</body>
+</html>

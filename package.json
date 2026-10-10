@@ -10,7 +10,9 @@
 		"dev": "node esbuild.config.mjs",
 		"mdtree:build": "bun build --compile --target=bun packages/cli/src/main.ts --outfile=dist/mdtree",
 		"mdtree:test": "bun test packages/core/src/__tests__",
-		"mdtree:dev": "bun run packages/cli/src/main.ts"
+		"mdtree:dev": "bun run packages/cli/src/main.ts",
+		"docs:vault": "bun scripts/docs/build-vault.ts",
+		"docs:shots": "bun scripts/docs/capture.ts"
 	},
 	"keywords": [],
 	"author": "",
@@ -35,6 +37,7 @@
 		"postcss": "^8.5.3",
 		"postcss-nested": "^7.0.2",
 		"postcss-prefix-selector": "^2.1.1",
+		"puppeteer-core": "^25.12.0",
 		"tailwindcss": "^4.1.7",
 		"tslib": "2.4.0",
 		"typescript": "^5.8.3",

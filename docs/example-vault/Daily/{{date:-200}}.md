@@ -1,0 +1,2 @@
+- [[Reading List]]
+    - Finished [[Deep Work]] #book
