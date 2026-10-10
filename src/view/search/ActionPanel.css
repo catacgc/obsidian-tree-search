@@ -301,10 +301,6 @@
 	color: var(--text-muted);
 }
 
-.ts-chain-preview-line {
-	font-size: var(--font-ui-small);
-}
-
 .ts-chain-preview-hint {
 	font-size: var(--font-ui-smaller);
 	color: var(--text-muted);

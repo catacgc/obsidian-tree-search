@@ -2,7 +2,7 @@
 // every view), where the row goes; for an append chain (`>`), what Enter writes and the note patches it applies.
 import {useAtomValue} from "jotai"
 import {useMolecule} from "bunshi/react"
-import {describePatch, INVALID_NAME_RE, localIsoDate, NAMES_HINT, planOutlinePatches} from "@mdtree/core"
+import {describePatch, INVALID_NAME_RE, localIsoDate, NAMES_HINT, planOutlinePatches, renderOutline} from "@mdtree/core"
 import {SearchViewMolecule} from "../react-context/state"
 import {GlobalAtoms} from "../react-context/global"
 import {basenameOf, dailyConfigOf} from "../editor/draft"
@@ -48,10 +48,9 @@ const AppendPreview = ({write}: {write: ChainOutline}) => {
     const hints = planned.patches.flatMap(p => describePatch(p, !!app.metadataCache.getFirstLinkpathDest(p.name, "")))
     return <div className="ts-chain-preview">
         <div className="ts-chain-preview-dest">{dest}</div>
-        {planned.lines.map((l, i) =>
-            <div key={i} className="ts-chain-preview-line" style={{paddingLeft: l.depth * 16}}>
-                <MarkdownLine app={app} text={l.marker + l.text} sourcePath={write.underLine?.path ?? dailyPath}/>
-            </div>)}
+        {planned.lines.length > 0 && <div className="ts-editor-preview">
+            <MarkdownLine app={app} text={renderOutline(planned.lines, 0).join("\n")} sourcePath={write.underLine?.path ?? dailyPath}/>
+        </div>}
         {hints.map(h => <div key={h} className="ts-chain-preview-hint">{h}</div>)}
         <div className="ts-chain-preview-hint">Enter adds · Alt+Enter opens the editor · paste text or images to continue there</div>
     </div>

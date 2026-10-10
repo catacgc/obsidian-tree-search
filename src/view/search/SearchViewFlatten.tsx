@@ -120,10 +120,11 @@ const SearchResultsView = () => {
     }
 
     return <>
-        {(viewState.showSearch) && <div className="tw-reset ts-search-block">
-                <SearchBar isQuickLink={viewState.isQuickLink}/>
+        {/* tw-reset (Tailwind preflight) strips list and link styles, so the chain preview's rendered markdown stays outside it. */}
+        {(viewState.showSearch) && <div className="ts-search-block">
+                <div className="tw-reset"><SearchBar isQuickLink={viewState.isQuickLink}/></div>
                 <ChainPreview/>
-                {allowTimeline && <RecencyFilterBar/>}
+                {allowTimeline && <div className="tw-reset"><RecencyFilterBar/></div>}
             </div>
         }
 
