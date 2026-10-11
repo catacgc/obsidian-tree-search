@@ -91,7 +91,7 @@ export function describeQuerySyntax(): QuerySyntaxGroup[] {
       entries: [
         { syntax: "a b", description: "AND — both" },
         { syntax: "a | b", description: "OR — either" },
-        { syntax: "-a", description: "NOT — exclude" },
+        { syntax: "-a", description: "NOT — exclude, with everything under it" },
         { syntax: "(a | b) c", description: "grouping" },
         { syntax: "a . b", description: "stage — find a, then b beneath it" },
       ],

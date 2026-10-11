@@ -143,6 +143,24 @@ describe("negation", () => {
   })
 })
 
+// ── exclude-subtree ───────────────────────────────────────────────────────────
+
+describe("exclude-subtree", () => {
+  const g = loadFixture("exclude-subtree")
+
+  it("a negated term next to a positive one drops matching lines with their subtrees", () => {
+    expect(searchKeys(g, "parent . child -exclude")).toEqual(["parent", "child a", "child c"])
+  })
+
+  it("prunes excluded lines from the outline block a nested match is shown in", () => {
+    expect(searchKeys(g, "child -exclude")).toEqual(["parent", "child a", "child c"])
+  })
+
+  it("drops a nested match whose outline block passes through an excluded line", () => {
+    expect(searchKeys(g, "leaf -exclude")).toEqual(["other root", "stray leaf"])
+  })
+})
+
 // ── page-header-link (bug scenario) ──────────────────────────────────────────
 
 describe("page-header-link", () => {
@@ -316,17 +334,13 @@ describe("type-filters", () => {
     expect(keys.some(k => k.includes("groceries"))).toBe(true)
   })
 
-  it("is:page -is:text (single stage) still keeps text lines: matching a node keeps its whole subtree", () => {
-    const keys = searchKeys(g, "is:page -is:text")
-    expect(keys.some(k => k.includes("notes home"))).toBe(true)
-    expect(keys.some(k => k.includes("groceries"))).toBe(true)
-  })
-
-  it("is:page.-is:text (two stages) prunes text lines from within the matched page", () => {
-    const keys = searchKeys(g, "is:page.-is:text")
-    expect(keys.some(k => k.includes("notes home"))).toBe(true)
-    expect(keys.some(k => k.includes("overview"))).toBe(true)
-    expect(keys.some(k => k.includes("groceries"))).toBe(false)
+  it("an exclusion prunes text lines from within the matched page, in its own stage or alongside is:page", () => {
+    for (const q of ["is:page -is:text", "is:page.-is:text"]) {
+      const keys = searchKeys(g, q)
+      expect(keys.some(k => k.includes("notes home"))).toBe(true)
+      expect(keys.some(k => k.includes("overview"))).toBe(true)
+      expect(keys.some(k => k.includes("groceries"))).toBe(false)
+    }
   })
 
   it("has:emoji matches only nodes with an emoji in their search key", () => {

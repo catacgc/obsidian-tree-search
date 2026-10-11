@@ -1,6 +1,6 @@
 import { getKey, type NotesGraph } from "../graph/graph.ts"
 import type { EdgeEntry, ParsedNode } from "../graph/types.ts"
-import { firstPassInclude, matchQuery, parseQuery, extractArchiveReveal, extractScope, queryTargetsFolders, openLinkAt, DAILY_NOTE, type ScopeTarget, type QueryExpr } from "./query.ts"
+import { matchQuery, parseQuery, extractArchiveReveal, extractScope, queryTargetsFolders, openLinkAt, DAILY_NOTE, type ScopeTarget, type QueryExpr } from "./query.ts"
 import { INVALID_NAME_RE } from "../edit/attachments.ts"
 import { partitionArchived } from "./archive.ts"
 import { fileParent } from "./timeline.ts"
@@ -169,21 +169,14 @@ function treeScope(graph: NotesGraph, targets: ScopeTarget[], options: SearchOpt
 
 // ── Filter helpers ────────────────────────────────────────────────────────────
 
-function filterTreeByWord(
-  node: ResultNode,
-  expr: QueryExpr,
-  pruneMatchingTree = false,
-): ResultNode | null {
-  const nodeMatches = matchQuery(node.node, expr)
-
-  if (!nodeMatches && pruneMatchingTree) return null
-  if (nodeMatches && !pruneMatchingTree) return node  // matched: keep entire subtree
+function filterTreeByWord(node: ResultNode, expr: QueryExpr): ResultNode | null {
+  if (matchQuery(node.node, expr)) return node  // matched: keep entire subtree
 
   const matchingChildren = node.children
-    .map(child => filterTreeByWord(child, expr, pruneMatchingTree))
+    .map(child => filterTreeByWord(child, expr))
     .filter((c): c is ResultNode => c !== null)
 
-  if (!nodeMatches && matchingChildren.length === 0) return null
+  if (matchingChildren.length === 0) return null
 
   return { ...node, children: matchingChildren }
 }
@@ -204,48 +197,79 @@ export function pruneResultTree(
   return result
 }
 
-function isNegation(expr: QueryExpr): boolean {
-  return (
-    expr.type === "not" ||
-    (expr.type === "and" && expr.exprs.every(isNegation))
-  )
+// ── Exclusions ────────────────────────────────────────────────────────────────
+//
+// A negated term at the top level of a stage (`-x`, the `-x` of `a -x`) is an
+// exclusion: a node matching any exclusion, from any stage, is left out of the
+// result tree with everything under it. A negation inside an OR (`a | -b`)
+// stays an ordinary term of its stage.
+
+type Excluded = ((node: ParsedNode) => boolean) | null
+
+/** Each stage's positive terms (`empty` when it has none), and the predicate for every stage's exclusions (null when none). */
+function splitStages(stages: QueryExpr[]): { include: QueryExpr[]; excluded: Excluded } {
+  const exclude: QueryExpr[] = []
+  const include = stages.map((stage): QueryExpr => {
+    const kept: QueryExpr[] = []
+    for (const term of stage.type === "and" ? stage.exprs : [stage]) {
+      if (term.type === "not") exclude.push(term.expr)
+      else kept.push(term)
+    }
+    if (kept.length === 0) return { type: "empty" }
+    return kept.length === 1 ? kept[0] : { type: "and", exprs: kept }
+  })
+  return { include, excluded: exclude.length === 0 ? null : node => exclude.some(x => matchQuery(node, x)) }
 }
 
-function filterDown(results: ResultNode[], search: QueryExpr[]): ResultNode[] {
-  if (search.length === 0) return results
-  const expr = search[0]
-  const pruneMatchingTree = isNegation(expr)
-
-  const filtered = results
-    .map(r => filterTreeByWord(r, expr, pruneMatchingTree))
-    .filter((r): r is ResultNode => r !== null)
-
-  return filterDown(filtered, search.slice(1))
+/** `follow` minus edges into excluded nodes, so a built tree never holds an excluded subtree. */
+function skipExcluded(graph: NotesGraph, follow: EdgeFilter, excluded: Excluded): EdgeFilter {
+  return excluded ? edge => follow(edge) && !excluded(graph.getNodeAttributes(edge.target)) : follow
 }
 
-/** Key of the outermost text line above `node` in its own note (walking fileParent while the node is `nested`
- *  and the parent is text), or null when `node` is not nested or no text parent is found. */
-function blockRootKey(graph: NotesGraph, node: ParsedNode): string | null {
+/** Narrows `results` by each stage's positive terms in turn; a stage without any (only exclusions) keeps them all. */
+function filterDown(results: ResultNode[], include: QueryExpr[]): ResultNode[] {
+  let filtered = results
+  for (const expr of include) {
+    if (expr.type === "empty") continue
+    filtered = filtered
+      .map(r => filterTreeByWord(r, expr))
+      .filter((r): r is ResultNode => r !== null)
+  }
+  return filtered
+}
+
+/** Text lines above `node` in its own note, nearest first: fileParent while the line is `nested` and the parent is
+ *  text. Empty when `node` is not nested or no text parent is found; the last one is its block root. */
+function blockAncestors(graph: NotesGraph, node: ParsedNode): ParsedNode[] {
+  const above: ParsedNode[] = []
   let cur = node
   for (let guard = 0; guard < 64 && cur.nodeType === "text" && cur.nested; guard++) {
     const p = fileParent(graph, cur)
     if (!p || p.nodeType !== "text") break
+    above.push(p)
     cur = p
   }
-  return cur === node ? null : getKey(cur)
+  return above
 }
 
 /** Nested lines are shown inside their outline block: a nested text result whose tree parent is not a text line
- *  (a result root, or a child reached through a link) is replaced by its block root built with its whole subtree.
- *  Siblings with the same key are kept once. */
-function liftToBlocks(graph: NotesGraph, nodes: ResultNode[], follow: EdgeFilter, parentIsText = false): ResultNode[] {
+ *  (a result root, or a child reached through a link) is replaced by its block root built with its whole subtree,
+ *  or dropped when a line between them is excluded. Siblings with the same key are kept once. */
+function liftToBlocks(
+  graph: NotesGraph,
+  nodes: ResultNode[],
+  follow: EdgeFilter,
+  excluded: Excluded,
+  parentIsText = false,
+): ResultNode[] {
   const out: ResultNode[] = []
   const seen = new Set<string>()
   for (const r of nodes) {
-    const rootKey = !parentIsText && r.node.nodeType === "text" && r.node.nested ? blockRootKey(graph, r.node) : null
-    const next = rootKey !== null
-      ? buildTree(rootKey, graph, new Map(), new Set(), follow)
-      : { ...r, children: liftToBlocks(graph, r.children, follow, r.node.nodeType === "text") }
+    const above = !parentIsText && r.node.nodeType === "text" && r.node.nested ? blockAncestors(graph, r.node) : []
+    if (excluded && above.some(excluded)) continue
+    const next = above.length > 0
+      ? buildTree(getKey(above[above.length - 1]), graph, new Map(), new Set(), follow)
+      : { ...r, children: liftToBlocks(graph, r.children, follow, excluded, r.node.nodeType === "text") }
     const key = getKey(next.node)
     if (seen.has(key)) continue
     seen.add(key)
@@ -273,19 +297,21 @@ export function searchIndex(
   // `outline:`/`[[note]]` likewise leave the stages: they scope the candidates and edges.
   const { outline, tree, stages: expressions } =
     extractScope(extractArchiveReveal(parseQuery(qs, separator)).stages)
+  const { include, excluded } = splitStages(expressions)
   const baseFollow: EdgeFilter = queryTargetsFolders(expressions) ? () => true : skipFolderEdges
   const scopes: Scope[] = [
     ...(outline.length > 0 ? [outlineScope(graph, outline, options)] : []),
     ...(tree.length > 0 ? [treeScope(graph, tree, options, baseFollow)] : []),
   ]
-  const follow: EdgeFilter = scopes.length === 0 ? baseFollow : edge => scopes.every(s => s.follow(edge))
+  const scoped: EdgeFilter = scopes.length === 0 ? baseFollow : edge => scopes.every(s => s.follow(edge))
+  const follow = skipExcluded(graph, scoped, excluded)
 
   const roots = new Map<string, ResultNode>()
-  const firstPass = expressions[0]
+  const firstPass = include[0]
 
   const firstPageCandidates = graph
     .filterNodes((key, attrs) =>
-      attrs.nodeType !== "pointer" && scopes.every(s => s.keys.has(key)) && firstPassInclude(attrs, firstPass))
+      attrs.nodeType !== "pointer" && !excluded?.(attrs) && scopes.every(s => s.keys.has(key)) && matchQuery(attrs, firstPass))
     .sort((a, b) => b.length - a.length)
 
   const traversed = new Set<string>()
@@ -296,7 +322,7 @@ export function searchIndex(
     roots.set(nodeKey, newNode)
   }
 
-  return liftToBlocks(graph, filterDown(Array.from(roots.values()), expressions.slice(1)), follow).sort(
+  return liftToBlocks(graph, filterDown(Array.from(roots.values()), include.slice(1)), follow, excluded).sort(
     (a, b) => b.children.length - a.children.length,
   )
 }
@@ -339,15 +365,14 @@ export function advancedSearch(
   const nodeKey = exactRef.toLowerCase()
   if (!graph.hasNode(nodeKey)) return []
 
-  const tree = buildTree(nodeKey, graph, new Map(), new Set())
-
-  if (!query) return tree.children
+  if (!query) return buildTree(nodeKey, graph, new Map(), new Set()).children
 
   // Strip `is:archived` from matching (it is a visibility toggle handled by
   // partitionArchived, not a matcher).
-  const { stages: expressions } = extractArchiveReveal(parseQuery(query, separator))
+  const { include, excluded } = splitStages(extractArchiveReveal(parseQuery(query, separator)).stages)
+  const tree = buildTree(nodeKey, graph, new Map(), new Set(), skipExcluded(graph, skipFolderEdges, excluded))
 
-  return filterDown(tree.children, expressions)
+  return filterDown(tree.children, include)
 }
 
 export function searchParents(graph: NotesGraph, basename: string): ResultNode[] {

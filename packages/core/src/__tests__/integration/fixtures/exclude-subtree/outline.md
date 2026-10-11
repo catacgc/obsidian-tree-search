@@ -1,0 +1,10 @@
+- [ ] parent
+    - [ ] child a
+        - [ ] exclude me
+            - [ ] deep item
+    - [ ] exclude section
+        - [ ] child b
+            - [ ] leaf
+    - [ ] child c
+- [ ] other root
+    - [ ] stray leaf

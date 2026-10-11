@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test"
-import { parseQuery, matchQuery, firstPassInclude, nodeMatchesQuery, parseDuration, collectModifiers, extractArchiveReveal, openLinkAt, type QueryExpr, IS_VALUES, HAS_VALUES } from "../search/query.ts"
+import { parseQuery, matchQuery, nodeMatchesQuery, parseDuration, collectModifiers, extractArchiveReveal, openLinkAt, type QueryExpr, IS_VALUES, HAS_VALUES } from "../search/query.ts"
 import { UNDATED_AGE } from "../graph/boost.ts"
 import type { ParsedNode } from "../graph/types.ts"
 
@@ -360,20 +360,6 @@ describe("collectModifiers", () => {
     expect(parseQuery("is:page in:3m", ".").flatMap(e => collectModifiers(e, "is"))).toEqual([
       { type: "modifier", field: "is", value: "page" },
     ])
-  })
-})
-
-describe("firstPassInclude", () => {
-  it("matches non-negated expressions directly", () => {
-    const expr: QueryExpr = { type: "contains", value: "home" }
-    expect(firstPassInclude(page("home"), expr)).toBe(true)
-    expect(firstPassInclude(page("other"), expr)).toBe(false)
-  })
-
-  it("inverts a top-level negation", () => {
-    const expr: QueryExpr = { type: "not", expr: { type: "modifier", field: "is", value: "text" } }
-    expect(firstPassInclude(page("home"), expr)).toBe(true)
-    expect(firstPassInclude(text("hello"), expr)).toBe(false)
   })
 })
 

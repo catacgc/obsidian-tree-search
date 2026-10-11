@@ -75,13 +75,15 @@ While a `[[` is open (no `]]` after it), the results list only notes and heading
 | --- | --- |
 | `a b` | AND — both |
 | <code>a &#124; b</code> | OR — either |
-| `-a` | NOT — exclude |
+| `-a` | NOT — exclude a, with everything under it |
 | <code>(a &#124; b) c</code> | grouping |
 | `a . b` | stage — find a, then b beneath it |
 
 Operators bind in this order, tightest first: NOT, then AND, then OR, then stage (`.`). Use parentheses when you need a different grouping.
 
 The stage separator is `.` by default. You can change it in [Settings](panes-and-integrations.md#settings).
+
+A `-a` term hides every line, heading or note matching `a`, and everything under it, wherever it would appear in the results, whichever stage you write it in. `parent . child -draft` shows the `child` lines under `parent`, minus any `draft` line and the lines nested under it; a `child` line that sits under a `draft` line is hidden too. A NOT inside an OR (<code>a &#124; -b</code>) only applies to that one line.
 
 ## Shortcuts
 

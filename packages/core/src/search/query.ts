@@ -349,11 +349,6 @@ export function matchQuery(attrs: ParsedNode, expr: QueryExpr): boolean {
   }
 }
 
-export function firstPassInclude(attrs: ParsedNode, expr: QueryExpr): boolean {
-  if (expr.type === "not") return !matchQuery(attrs, expr.expr)
-  return matchQuery(attrs, expr)
-}
-
 // Whether a node counts as a query "match" (a real hit) rather than structural
 // context: it satisfies at least one query stage. An empty query matches
 // everything (nothing is dimmed). Used to compute the `matched` flag carried on
