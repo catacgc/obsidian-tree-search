@@ -79,8 +79,8 @@ export function canMoveUnderNewPage(node: ParsedNode): boolean {
 }
 
 /** How `<` moves `child` under `target` (behavior spec R1–R6, plus folders and attachments into a folder). Line plans
- *  carry `head`/`targetHead` "" and no stamp date; the caller reads the heads from the files and dates moves out of
- *  periodic notes. `ownPath` gives a page's or attachment's own file. */
+ *  carry `head`/`targetHead` "" and no stamp date; the caller reads the heads from the files and dates moves to
+ *  another note. `ownPath` gives a page's or attachment's own file. */
 export function planReparent(child: RowRef, target: ParsedNode | NewPageTarget, ctx: {
     ownPath: OwnPath
     relation: string

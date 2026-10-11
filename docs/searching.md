@@ -71,7 +71,7 @@ For an open task, a **Task** section adds **Done**, **Today**, **Tomorrow**, **W
 
 Task lines (`- [ ] …`) show their checkbox in Tree and Timeline rows. Click it to complete the task in its note: the line becomes `- [x] …` and gets `[completion:: <today>]`. Completing a task also completes the open tasks nested under it. Click a completed task's checkbox to reopen it; its completion date is removed, and its subtasks stay as they are. The panel's **Today**, **Tomorrow**, **Weekend** and **Next Week** set the task's `[scheduled:: <date>]`, replacing an existing scheduled date (`[scheduled:: …]`, `(scheduled:: …)` or `⏳ …`); its subtasks keep their own dates. These fields use the [Tasks](https://publish.obsidian.md/tasks/) plugin's Dataview format. Recurring tasks don't get a next occurrence. If the note changed since it was indexed, nothing is written and you see "This row's index is out of date".
 
-When you save an outline in the editor, or edit a single line, every open task without a scheduled date gets `[scheduled:: <today>]`. Subtasks (tasks nested under another line) don't.
+When you add lines with the editor, Quick Add or a search chain, every open task without a scheduled date gets `[scheduled:: <today>]`. When you edit a single line, an open task without a scheduled date gets it too, unless it is nested under another line.
 
 A line with a scheduled or due date (`[scheduled:: …]`, `(due:: …)`, `⏳ …`, `📅 …`; the earliest when it has several) is dated by it, even when a `[created:: …]` comes first. Other lines use their first date. A task with open subtasks shows, and sorts by, the earliest date among its own date and its open subtasks' dates. The note itself is not changed.
 

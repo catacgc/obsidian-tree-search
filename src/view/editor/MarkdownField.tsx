@@ -17,6 +17,8 @@ export type MarkdownFieldHandle = {
     focus(): void
     /** Obsidian's list-aware indent / outdent of the selected lines (what Tab / Shift+Tab do in a note). */
     indent(dir: 1 | -1): void
+    /** Viewport coordinates of the character at `pos` (CodeMirror coordsAtPos), null while not drawn. */
+    coordsAt(pos: number): { left: number; bottom: number } | null
 }
 
 type Props = {
@@ -143,6 +145,7 @@ export function MarkdownField(props: Props) {
                 cm.dispatch({selection: {anchor: clamp(start), head: clamp(end)}, scrollIntoView: true}),
             focus: () => cm.focus(),
             indent: dir => ed.editor.exec(dir > 0 ? "indentMore" : "indentLess"),
+            coordsAt: pos => cm.coordsAtPos(clamp(pos)),
         }
 
         const stop = (ev: Event) => {

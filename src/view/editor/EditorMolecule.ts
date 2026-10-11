@@ -25,6 +25,7 @@ import {
     scheduleUnscheduledTasks,
     splitEditableLine,
     stampAppendedLine,
+    stampNewOutlineLines,
     StaleLineError,
     type EditorHint,
     type ParsedNode,
@@ -157,7 +158,6 @@ export function editorHintsFor(app: App, s: EditorState): EditorHint[] {
         proseNewName: s.prose?.kind === "new" ? s.prose.name : undefined,
         proseOutlineChanged: proseChangesOutline(s),
         proseConfirmed: s.proseConfirmed,
-        datedLines: s.mode === "append" && s.underLine !== undefined,
         patches: s.mode === "append" ? planOutlinePatches(parseOutline(s.outline).lines, {dropPatchOnlyRoots: !s.underLine}).patches : undefined,
     })
 }
@@ -201,7 +201,7 @@ export async function runAppendSteps(
         commit({touchedPaths: [...cur().touchedPaths, path], doneSteps: [...cur().doneSteps, "outline"]})
         return {path, line: r.line}
     }
-    const outline = parseOutline(scheduleUnscheduledTasks(renderOutline(lines, 0).join("\n"), today)).lines
+    const outline = parseOutline(stampNewOutlineLines(renderOutline(lines, 0), today).join("\n")).lines
     const {file, line} = await appendToDailyNote(app, outline, cfg)
     commit({touchedPaths: [...cur().touchedPaths, file.path], doneSteps: [...cur().doneSteps, "outline"]})
     return line === null ? null : {path: file.path, line}
@@ -623,7 +623,7 @@ export const EditorMolecule = molecule((mol, scope) => {
                     await markOutOfDate(app, index, source)
                     return
                 }
-                plan = {...plan, head}
+                plan = plan.kind === "cross-file" ? {...plan, head, stampDate: index?.lineDateOf(plan.sourcePath) ?? null} : {...plan, head}
             }
             const touched = await reparent(app, plan)
             await refreshPaths(app, index, touched.map(f => f.path))
@@ -698,8 +698,7 @@ export const EditorMolecule = molecule((mol, scope) => {
                     return
                 }
                 const destPath = plan.kind === "to-daily" ? dailyNotePath(cfg) : plan.targetPath
-                const ms = destPath !== plan.sourcePath ? index?.periodicDateOf(plan.sourcePath) ?? null : null
-                const stampDate = ms === null ? null : localIsoDate(new Date(ms))
+                const stampDate = destPath !== plan.sourcePath ? index?.lineDateOf(plan.sourcePath) ?? null : null
                 if (plan.kind === "under-line") {
                     const targetHead = await readLine(app, plan.targetPath, plan.targetLine)
                     if (target.nodeType !== "text" || !isRowLine(targetHead, target)) {

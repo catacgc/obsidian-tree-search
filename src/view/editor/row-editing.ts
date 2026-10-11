@@ -154,6 +154,7 @@ export function classifyReparent(rows: TreeNode[], dragPos: number, targetPos: n
     if (child.nodeType === "page" && old.nodeType === "page" && ownPath(child) === file && line === 0) {
         return {kind: "frontmatter", childPath: file, oldName: old.page, newName: target.page, relation}
     }
-    const kind = ownPath(old) === file ? "cross-file" : "same-file"
-    return {kind, sourcePath: file, line, head: "", newName: target.page}
+    return ownPath(old) === file
+        ? {kind: "cross-file", sourcePath: file, line, head: "", newName: target.page, stampDate: null}
+        : {kind: "same-file", sourcePath: file, line, head: "", newName: target.page}
 }

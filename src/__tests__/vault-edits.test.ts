@@ -268,11 +268,23 @@ describe("reparent", () => {
             "New.md": "---\na: 1\n---\n- [[Existing]]\nprose\n",
         })
 
-        const touched = await reparent(app, { kind: "cross-file", sourcePath: "Old.md", line: 0, head: "- [[Child]]", newName: "New" })
+        const touched = await reparent(app, { kind: "cross-file", sourcePath: "Old.md", line: 0, head: "- [[Child]]", newName: "New", stampDate: null })
 
         expect(files.get("New.md")).toBe("---\na: 1\n---\n- [[Existing]]\n- [[Child]]\n    - note\nprose\n")
         expect(files.get("Old.md")).toBe("- [[Other]]\n")
         expect(touched.map(f => f.path)).toEqual(["New.md", "Old.md"])
+    })
+
+    it("dates the moved block's undated indexed lines with stampDate, leaving link-only bullets bare", async () => {
+        const { app, files } = makeFakeApp({
+            "Old.md": "- [[Child]]\n    - [ ] call [[Bob]]\n    - prose\n- [[Other]]\n",
+            "New.md": "",
+        })
+
+        await reparent(app, { kind: "cross-file", sourcePath: "Old.md", line: 0, head: "- [[Child]]", newName: "New", stampDate: "2026-01-01" })
+
+        expect(files.get("New.md")).toContain("- [[Child]]\n    - [ ] call [[Bob]] [created:: 2026-01-01]\n    - prose\n")
+        expect(files.get("Old.md")).toBe("- [[Other]]\n")
     })
 
     it("keeps the copy and reports it when the source line changed before the cut", async () => {
@@ -283,7 +295,7 @@ describe("reparent", () => {
         // The first read sees the pre-change content; the cut inside vault.process sees the real one.
         app.vault.read = async () => "- [[Child]]\n- [[Other]]\n"
 
-        await expect(reparent(app, { kind: "cross-file", sourcePath: "Old.md", line: 0, head: "- [[Child]]", newName: "New" }))
+        await expect(reparent(app, { kind: "cross-file", sourcePath: "Old.md", line: 0, head: "- [[Child]]", newName: "New", stampDate: null }))
             .rejects.toThrow("Copied to [[New]] but the original line changed — remove it manually")
         expect(files.get("New.md")).toContain("- [[Child]]")
         expect(files.get("Old.md")).toBe("- [[Other]]\n- [[Child]]\n")

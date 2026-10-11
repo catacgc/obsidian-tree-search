@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test"
-import { setTaskDone, scheduleTask, rescheduleDate, scheduleUnscheduledTasks, applyTaskEdit, addCreatedField, stampAppendedLine, stampMovedBlock } from "../edit/task-edit.ts"
+import { setTaskDone, scheduleTask, rescheduleDate, scheduleUnscheduledTasks, applyTaskEdit, addCreatedField, stampAppendedLine, stampMovedBlock, stampNewOutlineLines, pageDateIso } from "../edit/task-edit.ts"
 import { StaleLineError } from "../edit/outline-edit.ts"
 
 const TODAY = "2026-10-06"
@@ -75,6 +75,12 @@ describe("rescheduleDate", () => {
       "2026-10-12", "2026-10-12", "2026-10-12", "2026-10-12", "2026-10-12", "2026-10-12", "2026-10-12",
     ])
   })
+
+  it("Later is the Tuesday of next week (the day after Next Week)", () => {
+    expect(days.map((_, i) => rescheduleDate("later", on(i)))).toEqual([
+      "2026-10-13", "2026-10-13", "2026-10-13", "2026-10-13", "2026-10-13", "2026-10-13", "2026-10-13",
+    ])
+  })
 })
 
 describe("scheduleUnscheduledTasks", () => {
@@ -96,7 +102,7 @@ describe("scheduleUnscheduledTasks", () => {
   })
 })
 
-describe("addCreatedField / stampAppendedLine / stampMovedBlock", () => {
+describe("addCreatedField / stampAppendedLine / stampNewOutlineLines / stampMovedBlock", () => {
   const DAY = "2026-10-07"
 
   it("addCreatedField dates an undated list line, else null", () => {
@@ -122,6 +128,40 @@ describe("addCreatedField / stampAppendedLine / stampMovedBlock", () => {
       "",
       "    - [x] done 2026-01-01",
     ])
+  })
+
+  it("stampNewOutlineLines dates new lines but leaves link-only bullets bare", () => {
+    expect(stampNewOutlineLines(["- [[P]]", "    - [[N|a]]", "    - note", "        - [ ] t", "    - [x] done", "    - met 2026-01-01"], DAY)).toEqual([
+      "- [[P]]",
+      "    - [[N|a]]",
+      "    - note [created:: 2026-10-07]",
+      "        - [ ] t [scheduled:: 2026-10-07]",
+      "    - [x] done [created:: 2026-10-07]",
+      "    - met 2026-01-01",
+    ])
+  })
+
+  it("stampMovedBlock leaves link-only bullets bare", () => {
+    expect(stampMovedBlock(["- [[Child]]", "    - [[Sub#H]]", "    - [ ] t"], "2026-01-01")).toEqual([
+      "- [[Child]]",
+      "    - [[Sub#H]]",
+      "    - [ ] t [created:: 2026-01-01]",
+    ])
+  })
+})
+
+describe("pageDateIso", () => {
+  it("prefers a valid date in the file name over the explicit date", () => {
+    expect(pageDateIso("Meeting 2026-01-05", Date.UTC(2020, 0, 1))).toBe("2026-01-05")
+  })
+
+  it("falls back to the explicit date as a local day", () => {
+    expect(pageDateIso("2026-Oct-W41", new Date(2026, 9, 5).getTime())).toBe("2026-10-05")
+  })
+
+  it("is null for an undated note, including an invalid date in the name", () => {
+    expect(pageDateIso("Note", null)).toBeNull()
+    expect(pageDateIso("x 2026-02-30", null)).toBeNull()
   })
 })
 

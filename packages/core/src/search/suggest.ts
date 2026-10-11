@@ -1,6 +1,7 @@
 import { IS_VALUES, HAS_VALUES } from "./query.ts"
 
-export type Suggestion = { label: string; insertText: string }
+/** `detail`: secondary text shown after the label (e.g. a date). */
+export type Suggestion = { label: string; insertText: string; detail?: string }
 
 export function suggestAt(query: string, cursorPos: number): Suggestion[] {
   // The token immediately before the cursor is everything since the last

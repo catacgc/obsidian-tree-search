@@ -113,10 +113,13 @@ export {
   localIsoDate,
   addCreatedField,
   stampAppendedLine,
+  stampNewOutlineLines,
   stampMovedBlock,
+  pageDateIso,
   type RescheduleKind,
   type TaskLineEdit,
 } from "./edit/task-edit.ts"
+export { dateSuggestAt, applyDateSuggestion, isDateSuggestion, type DateSuggestion } from "./edit/date-suggest.ts"
 export {
   slugify,
   attachmentKind,

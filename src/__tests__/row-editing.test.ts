@@ -189,7 +189,7 @@ describe("classifyReparent", () => {
 
     it("cross-file: a bullet written in the old parent's own file", () => {
         expect(classifyReparent(tree, 4, 5, ownPath, "parent")).toEqual({
-            kind: "cross-file", sourcePath: "Project X.md", line: 7, head: "", newName: "New",
+            kind: "cross-file", sourcePath: "Project X.md", line: 7, head: "", newName: "New", stampDate: null,
         })
     })
 

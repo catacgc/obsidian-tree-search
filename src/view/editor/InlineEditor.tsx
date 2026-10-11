@@ -7,7 +7,7 @@ import {useAtomValue, useSetAtom, useStore} from "jotai";
 import {useMolecule} from "bunshi/react";
 import {htmlToMarkdown, Notice, Platform, Scope, type Modifier} from "obsidian";
 import {Brackets, ClipboardPaste, IndentDecrease, IndentIncrease, ListTodo, Paperclip} from "lucide-react";
-import {attachmentExt, attachmentKind, attachmentName, newLinkName, reverseMarkdownParsing} from "@mdtree/core";
+import {applyDateSuggestion, attachmentExt, attachmentKind, attachmentName, newLinkName, reverseMarkdownParsing, type DateSuggestion} from "@mdtree/core";
 import {GlobalAtoms} from "../react-context/global";
 import {quickAddDefaultQuery, SearchViewMolecule} from "../react-context/state";
 import {openFileByName} from "../../obsidian-utils";
@@ -16,6 +16,8 @@ import type {TreeNode} from "../search/SearchViewFlatten";
 import {EditorMolecule, editorHintsFor, isSaveBlocked, type EditorState} from "./EditorMolecule";
 import {basenameOf, editorTitle} from "./draft";
 import {LinkResults, useLinkSuggest, type LinkSuggestState} from "./LinkSuggest";
+import {useDateSuggest} from "./date-suggest";
+import {SearchAutocomplete} from "../search/SearchAutocomplete";
 import {MarkdownLine} from "./MarkdownLine";
 import {MarkdownField, type MarkdownFieldHandle} from "./MarkdownField";
 import {autoConvertHtml} from "./obsidian-editor";
@@ -50,6 +52,14 @@ const ANY_MODIFIERS = null as unknown as Modifier[]
 /** Existing buffer key for `name` (links are case-insensitive), else `name`. */
 const bufferKey = (contents: Record<string, string>, name: string) =>
     Object.keys(contents).find(k => k.toLowerCase() === name.toLowerCase()) ?? name
+
+/** Where the `@` popup opens in the field box: under the character at `pos`. */
+function popupAt(h: MarkdownFieldHandle | null, box: HTMLElement | null, pos: number): {left: number; top: number} | undefined {
+    const c = h?.coordsAt(pos)
+    if (!c || !box) return undefined
+    const r = box.getBoundingClientRect()
+    return {left: c.left - r.left, top: c.bottom - r.top}
+}
 
 /** The clipboard as paste data, for the toolbar's Paste. Non-text items become Files named "" (attachmentExt then
  *  takes the extension from the MIME type). Where `clipboard.read` is missing or denied, plain text only via
@@ -130,6 +140,8 @@ export function InlineEditor({state}: { state: EditorState }) {
 
     const outlineSuggest = useLinkSuggest(state.outline, state.caret, focused === "outline")
     const contentSuggest = useLinkSuggest(contentText, contentCaret, focused === "content" && active !== null)
+    const dateSuggest = useDateSuggest(state.outline, state.caret, focused === "outline", state.linePrefix ?? "")
+    const outlineFieldRef = useRef<HTMLDivElement>(null)
 
     const hintDeps = [app, state.outline, state.contents, state.contentOrder, state.attachments, state.mode, state.editKind, state.parentName, state.prose, state.proseConfirmed]
     const hints = useMemo(() => editorHintsFor(app, state), hintDeps)
@@ -228,6 +240,7 @@ export function InlineEditor({state}: { state: EditorState }) {
     }
 
     escapeRef.current = () => {
+        if (dateSuggest.items.length > 0) return dateSuggest.dismiss()
         if (outlineSuggest.open) return outlineSuggest.dismiss()
         if (contentSuggest.open) return contentSuggest.dismiss()
         if (active !== null && rootRef.current?.querySelector(".ts-editor-content")?.contains(document.activeElement)) {
@@ -298,6 +311,12 @@ export function InlineEditor({state}: { state: EditorState }) {
         if (!fieldOf(section)) return
         if (!suggestFor(section).open && row.node.nodeType !== "page" && row.node.nodeType !== "header") return
         insertLink(section, reverseMarkdownParsing(row.node))
+    }
+
+    /** A picked `@` date: replaces the `@word` with the task's `[scheduled:: date]`. */
+    function acceptDate(s: DateSuggestion) {
+        const h = outlineRef.current
+        if (h) applyEdit("outline", applyDateSuggestion(h.text(), s))
     }
 
     /** Puts `link` in place of the open `[[query` (and a `]]` right after the caret), else at the caret. */
@@ -404,6 +423,17 @@ export function InlineEditor({state}: { state: EditorState }) {
         if (!h) return false
         const {text, start, end} = fieldState(h)
         const sug = suggestFor(section)
+
+        if (section === "outline" && dateSuggest.items.length > 0 && !ev.altKey && !mod) {
+            if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+                dateSuggest.move(ev.key === "ArrowDown" ? 1 : -1)
+                return true
+            }
+            if ((ev.key === "Enter" || ev.key === "Tab") && !ev.shiftKey) {
+                acceptDate(dateSuggest.items[dateSuggest.index])
+                return true
+            }
+        }
 
         const sectionNew = section === focused ? newName : null
         if (sug.open && (rowCount > 0 || sectionNew !== null)) {
@@ -613,13 +643,20 @@ export function InlineEditor({state}: { state: EditorState }) {
                 update(s => s.prose?.kind === "new" ? {...s, prose: {...s.prose, name}} : s)
             }}
         />}
-        <div className="ts-editor-field">
+        <div className="ts-editor-field" ref={outlineFieldRef}>
             <MarkdownField
                 handleRef={outlineRef}
                 className="ts-editor-outline"
                 value={state.outline}
                 {...fieldProps("outline")}
             />
+            {dateSuggest.items.length > 0 && <SearchAutocomplete
+                suggestions={dateSuggest.items}
+                highlightedIndex={dateSuggest.index}
+                onHover={dateSuggest.setIndex}
+                onAccept={s => acceptDate(s as DateSuggestion)}
+                at={popupAt(outlineRef.current, outlineFieldRef.current, dateSuggest.items[0].start)}
+            />}
         </div>
 
         {active !== null && <div className="ts-editor-content-section">

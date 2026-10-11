@@ -7,7 +7,7 @@ import {Scope} from "obsidian";
 import {GlobalAppMolecule, SearchViewMolecule} from "../react-context/state";
 import {GlobalAtoms} from "../react-context/global";
 import {separatorAtom} from "../react-context/settings";
-import {INVALID_NAME_RE, openLinkAt, reverseMarkdownParsing, spliceSuggestion, type Suggestion} from "@mdtree/core";
+import {applyDateSuggestion, INVALID_NAME_RE, isDateSuggestion, openLinkAt, reverseMarkdownParsing, spliceSuggestion, type Suggestion} from "@mdtree/core";
 import {SearchAutocomplete} from "./SearchAutocomplete";
 import {EditorMolecule} from "../editor/EditorMolecule";
 import {linkPasteEdit} from "../editor/clipboard";
@@ -15,6 +15,18 @@ import {canMoveUnderNewPage} from "./chain";
 
 export type SearchBarProps = {
     isQuickLink: boolean
+}
+
+/** Left edge (px, in the input's offset parent) of the character at `pos`: the input's text width before it, in its font. */
+function caretLeft(input: HTMLInputElement, pos: number): number {
+    const style = getComputedStyle(input)
+    const ctx = document.createElement("canvas").getContext("2d")
+    let width = 0
+    if (ctx) {
+        ctx.font = style.font
+        width = ctx.measureText(input.value.slice(0, pos)).width
+    }
+    return input.offsetLeft + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft) + width - input.scrollLeft
 }
 
 export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
@@ -100,7 +112,7 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
     const app = useAtomValue(GlobalAtoms.appAtom)
     const scopeRef = useRef<Scope | null>(null)
     const escapeRef = useRef<() => void>(() => {})
-    escapeRef.current = () => cancelChain()
+    escapeRef.current = () => suggestions.length > 0 ? dismissSuggestions() : cancelChain()
     const altEnterRef = useRef<() => boolean>(() => false)
     altEnterRef.current = () => {
         if (chain?.mode !== "append") return false
@@ -137,9 +149,16 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
     }
 
     const acceptSuggestion = (suggestion: Suggestion) => {
-        const spliced = spliceSuggestion(searchQuery.query, cursorPos, suggestion.insertText)
-        setSearch(spliced.query)
-        setCursorPos(spliced.cursorPos)
+        if (isDateSuggestion(suggestion)) {
+            const edit = applyDateSuggestion(searchQuery.query, suggestion)
+            pendingSelection.current = {start: edit.caret, end: edit.caret}
+            setSearch(edit.text)
+            setCursorPos(edit.caret)
+        } else {
+            const spliced = spliceSuggestion(searchQuery.query, cursorPos, suggestion.insertText)
+            setSearch(spliced.query)
+            setCursorPos(spliced.cursorPos)
+        }
         resetSuggestions()
     }
 
@@ -151,6 +170,8 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
             setSuggestionIndex((suggestionIndex + 1) % suggestions.length)
         } else if (ev.key === "ArrowUp") {
             setSuggestionIndex((suggestionIndex - 1 + suggestions.length) % suggestions.length)
+        } else if (ev.key === "Enter" && !ev.altKey && !ev.shiftKey && isDateSuggestion(suggestions[suggestionIndex])) {
+            acceptSuggestion(suggestions[suggestionIndex])
         } else if (ev.key === "Tab") {
             acceptSuggestion(suggestions[suggestionIndex])
         } else if (ev.key === "Escape") {
@@ -262,6 +283,8 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
         : []
 
     const { linkRef, tryOpenUrl } = useUrlOpener()
+    const dateAt = suggestions.length > 0 && isDateSuggestion(suggestions[0]) && inputRef.current
+        ? {left: caretLeft(inputRef.current, suggestions[0].start)} : undefined
 
     return <>
         <a style={{ display: "none" }} target="_blank" ref={linkRef} href="#"></a>
@@ -295,6 +318,7 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
                         highlightedIndex={suggestionIndex}
                         onHover={setSuggestionIndex}
                         onAccept={acceptSuggestion}
+                        at={dateAt}
                     />
 
                     <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center">

@@ -1,4 +1,4 @@
-import { NotesGraph, buildGraphFromScanner, reindexFileInGraph, makePeriodicDateResolver, type ParseCacheEntry, type IndexSettings, type PeriodicNoteConfig, type MomentParse, type SearchOptions, serializeCache, deserializeCache } from "@mdtree/core"
+import { NotesGraph, buildGraphFromScanner, reindexFileInGraph, makePeriodicDateResolver, extractPageDate, pageDateIso, type ParseCacheEntry, type IndexSettings, type PeriodicNoteConfig, type MomentParse, type SearchOptions, serializeCache, deserializeCache } from "@mdtree/core"
 import { TFile, moment } from "obsidian"
 import { getSettings } from "../view/react-context/settings"
 import { GlobalAtoms, GlobalStore } from "../view/react-context/global"
@@ -78,9 +78,11 @@ export class IndexedTree {
         return this.dailyNoteConfig
     }
 
-    /** Date (ms) of a daily/weekly note at `path`, else null. */
-    periodicDateOf(path: string): number | null {
-        return this.periodicDate(path)
+    /** The day (YYYY-MM-DD) undated lines of the indexed note at `path` are dated by (pageDateIso, as the indexer
+     *  dates its page), else null. */
+    lineDateOf(path: string): string | null {
+        const fm = this.parseCache.get(path)?.page.file.frontmatter ?? {}
+        return pageDateIso(path.split("/").pop()!.replace(/\.md$/, ""), extractPageDate(fm) ?? this.periodicDate(path))
     }
 
     /** Search context: today's daily note, the target of `:daily` (computed per call, so it follows the date). */

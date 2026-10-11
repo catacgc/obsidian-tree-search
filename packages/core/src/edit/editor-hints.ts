@@ -47,8 +47,6 @@ export function editorHints(input: {
   proseOutlineChanged?: boolean
   /** Prose mode: the outline change was confirmed by a first Save. */
   proseConfirmed?: boolean
-  /** Append under a line: Save dates every line ([created::]/[scheduled::]), which indexes plain bullets. */
-  datedLines?: boolean
   /** Append mode: the outline's note patches (planOutlinePatches). */
   patches?: NotePatch[]
 }): EditorHint[] {
@@ -79,7 +77,6 @@ export function editorHints(input: {
   } else if (mode === "append") {
     const { issues } = parseOutline(outline)
     if (issues.some(i => i.kind === "heading")) block(headingHint)
-    plain = !input.datedLines && issues.some(i => i.kind === "plain")
   } else {
     if (outline.trim() === "") block("Empty — use Archive to remove the line")
     else if (HEADING_RE.test(outline.trim())) block(headingHint)

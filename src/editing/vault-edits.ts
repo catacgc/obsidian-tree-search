@@ -38,7 +38,9 @@ export type EditorAttachment = SessionAttachment & { path: string }
 /** The plans drag-to-reparent / Move under produce (`classifyReparent`). */
 export type DragReparentPlan =
     | { kind: "frontmatter"; childPath: string; oldName: string; newName: string; relation: string }
-    | { kind: "cross-file"; sourcePath: string; line: number; head: string; newName: string }
+    /** A line's subtree moves to the end of `[[newName]]`'s outline. `stampDate`: the source note's date, added as
+     *  `[created::]` to the block's undated indexed lines (stampMovedBlock); null leaves them as they are. */
+    | { kind: "cross-file"; sourcePath: string; line: number; head: string; newName: string; stampDate: string | null }
     | { kind: "same-file"; sourcePath: string; line: number; head: string; newName: string }
 
 export type ReparentPlan =
@@ -46,9 +48,11 @@ export type ReparentPlan =
     /** A page's frontmatter parent becomes `[[newName]]`; `childPath: null` is a reference page, whose note is created first. */
     | { kind: "set-parent"; childPath: string | null; childName: string; relation: string; newName: string; oldName: string | null; cfg: DailyNoteConfig }
     | { kind: "to-folder"; childPath: string; folderPath: string }
-    /** A line's subtree moves under `- [[parentLink]]` in today's daily note; `stampDate` dates its indexed lines. */
+    /** A line's subtree moves under `- [[parentLink]]` in today's daily note. `stampDate`: the source note's date, added
+     *  as `[created::]` to the block's undated indexed lines (stampMovedBlock); null leaves them as they are. */
     | { kind: "to-daily"; sourcePath: string; line: number; head: string; parentLink: string; cfg: DailyNoteConfig; stampDate: string | null }
-    /** A line's subtree moves under another line, as its last children. */
+    /** A line's subtree moves under another line, as its last children. `stampDate`: the source note's date, added as
+     *  `[created::]` to the block's undated indexed lines (stampMovedBlock); null leaves them as they are. */
     | { kind: "under-line"; sourcePath: string; line: number; head: string; targetPath: string; targetLine: number; targetHead: string; stampDate: string | null }
 
 type MomentLike = { format(format: string): string }
@@ -391,8 +395,9 @@ export async function reparent(app: App, plan: ReparentPlan): Promise<TFile[]> {
 
     // Cross-file: copy to the destination first, then cut, so nothing is lost if the cut guard fails.
     const {block} = cutSubtree(await app.vault.read(source), plan.line, plan.head)
+    const moved = plan.stampDate ? stampMovedBlock(block, plan.stampDate) : block
     const dest = await noteFileFor(app, plan.newName, plan.sourcePath)
-    await app.vault.process(dest, c => pasteAtOutlineEnd(c, block))
+    await app.vault.process(dest, c => pasteAtOutlineEnd(c, moved))
     await cutAfterCopy(app, source, plan.line, plan.head, `[[${plan.newName}]]`)
     return [dest, source]
 }

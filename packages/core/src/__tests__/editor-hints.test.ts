@@ -54,7 +54,7 @@ describe("editorHints", () => {
     expect(texts.some(t => t.includes("stays a link"))).toBe(false)
   })
 
-  it("distinguishes appending, dangling links and plain bullets", () => {
+  it("distinguishes appending and dangling links", () => {
     const hints = editorHints({
       ...base,
       outline: "- [[Old]] and [[Ghost]]\n- buy milk",
@@ -63,7 +63,6 @@ describe("editorHints", () => {
       noteExists: n => n === "Old",
     })
     expect(hints).toEqual([
-      { text: "Plain bullets aren't indexed — they won't appear in results", blocking: false },
       { text: "Appends to Old.md", blocking: false },
       { text: "[[Ghost]] stays a link without a note — click it to add content", blocking: false },
     ])
@@ -101,10 +100,9 @@ describe("editorHints", () => {
     expect(texts("- ")).toContain(plain)
   })
 
-  it("drops the plain-bullet hint when Save dates every line (append under a picked line)", () => {
+  it("never flags plain bullets in an append outline (Save dates every line)", () => {
     const plain = "Plain bullets aren't indexed — they won't appear in results"
-    expect(editorHints({ ...base, outline: "- buy milk" }).map(h => h.text)).toContain(plain)
-    expect(editorHints({ ...base, outline: "- buy milk", datedLines: true }).map(h => h.text)).not.toContain(plain)
+    expect(editorHints({ ...base, outline: "- buy milk" }).map(h => h.text)).not.toContain(plain)
   })
 
   it("reports an ambiguous attachment", () => {

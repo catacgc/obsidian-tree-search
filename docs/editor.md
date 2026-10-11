@@ -50,7 +50,7 @@ In the Search modal or pane, select a row and type <kbd>&gt;</kbd>. It becomes a
 | `#heading` | a heading in the current note (`## heading` at its end) |
 | `(key:: value)` | a property on the current note, e.g. `(is:: project)` or `(parent:: [[Area]])` |
 
-The preview under the search box shows what will be written. <kbd>Enter</kbd> writes the whole chain: under a note or heading, into today's daily note; under a line, as that line's last children in its own note, each with a `[created:: date]` (or `[scheduled:: date]` for a task) so it is indexed. With nothing selected, it goes to today's daily note; a search that is just a closed link such as `[[New idea]]` adds under that note, even when it doesn't exist yet. For example, `Note > [[New Node]] > |new-alias > #header > [ ] task` creates *New Node* with that alias and heading, and adds the task under `[[New Node#header]]`. An alias, heading or property alone (`Note > (is:: project)`) only changes the note.
+The preview under the search box shows what will be written. <kbd>Enter</kbd> writes the whole chain: under a note or heading, into today's daily note; under a line, as that line's last children in its own note. Each new line gets a `[created:: date]` (or `[scheduled:: date]` for a task) so it is indexed; a bullet that is only a link stays as it is. With nothing selected, it goes to today's daily note; a search that is just a closed link such as `[[New idea]]` adds under that note, even when it doesn't exist yet. For example, `Note > [[New Node]] > |new-alias > #header > [ ] task` creates *New Node* with that alias and heading, and adds the task under `[[New Node#header]]`. An alias, heading or property alone (`Note > (is:: project)`) only changes the note.
 
 <kbd>Alt</kbd>+<kbd>Enter</kbd>, or pasting a list or an image, continues in the editor. Pasting other text opens the whole note to write in. <kbd>Backspace</kbd> in an empty search box drops the last chip; <kbd>Esc</kbd> drops them all. Nothing is written before <kbd>Enter</kbd>.
 
@@ -62,6 +62,8 @@ Type <kbd>&lt;</kbd> instead to move the selected note or line. Search for its n
 
 The same move is **Move to…** (<kbd>Alt</kbd>+<kbd>M</kbd>, or the action panel) in every search view. It also moves folders and attachments into another folder.
 
+A line moved to another note keeps its date: each undated line in it gets `[created:: date]` with the date of the note it came from (the date in its name, its `updated`/`created` property, or its daily note's day). Dragging a line to another note does the same.
+
 ## More editing
 
 - **Reparent by dragging.** In Tree mode on desktop, drag a row onto a note row to move it under that note. You can also use **Move under…**.
@@ -69,5 +71,6 @@ The same move is **Move to…** (<kbd>Alt</kbd>+<kbd>M</kbd>, or the action pane
 - **Note content.** Clicking a link in the editor (or pressing <kbd>Alt</kbd>+<kbd>Enter</kbd> on it) opens a content section that is appended to that note. The note is created if it doesn't exist yet.
 - **Pasting.** Pasted files are saved into your vault and named after the note. Pasted URLs become markdown links.
 - **Indenting.** Press <kbd>Tab</kbd> and <kbd>Shift</kbd>+<kbd>Tab</kbd> to indent and outdent.
+- **Scheduling.** On a task line, type `@` and pick **Today**, **Tomorrow**, **Weekend** (next Saturday) or **Later** (Tuesday next week); keep typing to filter (`@tom`). <kbd>Enter</kbd> or <kbd>Tab</kbd> replaces it with the task's `[scheduled:: date]`, <kbd>Esc</kbd> closes the list. It works in a `>` chain's task entry (`[ ] call Bob @tom`) too.
 
 See [Shortcuts](shortcuts.md) for every key inside the editor.

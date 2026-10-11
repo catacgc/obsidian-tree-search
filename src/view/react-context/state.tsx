@@ -1,5 +1,5 @@
 import {TreeNode} from '../search/SearchViewFlatten'
-import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, linkTargetTree, type QueryExpr, partitionArchived, extractArchiveReveal, suggestAt, type Suggestion, parseDuration, flattenIndex, defaultVisibility, blockFooters, pruneToRecency} from '@mdtree/core'
+import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, linkTargetTree, type QueryExpr, partitionArchived, extractArchiveReveal, suggestAt, dateSuggestAt, type Suggestion, parseDuration, flattenIndex, defaultVisibility, blockFooters, pruneToRecency} from '@mdtree/core'
 import {atom, useAtomValue, type Getter, type Setter} from 'jotai'
 import {findTargetRow, revealRow, rowTargets, type RowTarget} from '../search/select-target'
 import {toggleTaskFilter} from '../search/task-filter'
@@ -578,7 +578,9 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     const rawSuggestionsAtom = atom<Suggestion[]>((get) => {
         const query = get(actualQueryAtom)
         const cursorPos = get(cursorPosAtom)
-        return suggestAt(query, cursorPos)
+        // An append chain's task entry (`[ ] call Bob @tom`) offers scheduled dates instead of query syntax.
+        const dates = get(chainAtom)?.mode === "append" ? dateSuggestAt(query, cursorPos, new Date()) : []
+        return dates.length > 0 ? dates : suggestAt(query, cursorPos)
     })
 
     const suggestionsDismissedAtom = atom(false)

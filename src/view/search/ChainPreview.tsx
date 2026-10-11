@@ -41,10 +41,11 @@ const AppendPreview = ({write}: {write: ChainOutline}) => {
     const index = useAtomValue(GlobalAtoms.indexAtom)
     const dailyPath = dailyNotePath(dailyConfigOf(index))
     const planned = planOutlinePatches(write.lines, {dropPatchOnlyRoots: !write.underLine})
+    const today = localIsoDate(new Date())
     const dest = planned.lines.length === 0 ? "Changes the notes only — nothing is added to an outline"
-        : write.underLine ? `Under "${write.underLine.label}" in ${basenameOf(write.underLine.path)} · dated ${localIsoDate(new Date())}`
-        : write.parentName ? `Today's daily note, under [[${write.parentName}]]`
-        : "Today's daily note"
+        : write.underLine ? `Under "${write.underLine.label}" in ${basenameOf(write.underLine.path)} · dated ${today}`
+        : write.parentName ? `Today's daily note, under [[${write.parentName}]] · dated ${today}`
+        : `Today's daily note · dated ${today}`
     const hints = planned.patches.flatMap(p => describePatch(p, !!app.metadataCache.getFirstLinkpathDest(p.name, "")))
     return <div className="ts-chain-preview">
         <div className="ts-chain-preview-dest">{dest}</div>

@@ -235,6 +235,18 @@
 	height: 44px;
 }
 
+/* Opened under a typed `@word` (date choices) instead of across the input. */
+.ts-suggest.is-at-caret {
+	right: auto;
+	width: max-content;
+	min-width: 180px;
+}
+
+.ts-suggest-detail {
+	flex-shrink: 0;
+	color: var(--text-muted);
+}
+
 /* Scoped to the panel to outrank Obsidian's input[type=text] chrome. */
 .ts-action-panel input.ts-action-panel-filter {
 	flex-shrink: 0;

@@ -2,6 +2,7 @@
 // set its scheduled date. Single-line edits take a line and return the new line,
 // or null when the line is not a (suitable) task.
 
+import { ageDaysFromText } from "../graph/boost.ts"
 import { LIST_ITEM_RE, isProseText } from "../parser/list-scanner.ts"
 import { splitLines } from "../search/organise-sections.ts"
 import { StaleLineError, indentWidth, linkOnlyTarget } from "./outline-edit.ts"
@@ -75,11 +76,22 @@ export function stampAppendedLine(line: string, today: string): string {
   return addCreatedField(line, today) ?? line
 }
 
-/** Lines of a moved block that are indexed (tasks, or text with links/tags/URLs) and undated get `[created:: date]`. */
+/** Lines appended to a note: each list line is stamped by stampAppendedLine, except bullets that are only a
+ *  link (`[[X]]`, `[[X#H]]`, `[[X|A]]`). Those stay bare so they still merge with the note's existing `[[X]]`
+ *  bullet and are indexed as the linked note. */
+export function stampNewOutlineLines(lines: string[], today: string): string[] {
+  return lines.map(l => {
+    const item = LIST_ITEM_RE.exec(l)
+    return item && linkOnlyTarget(item[2]) !== null ? l : stampAppendedLine(l, today)
+  })
+}
+
+/** Lines of a moved block that are indexed (tasks, or text with links/tags/URLs) and undated get `[created:: date]`.
+ *  Bullets that are only a link (`[[X]]`, `[[X#H]]`, `[[X|A]]`) stay bare: they are indexed as the linked note. */
 export function stampMovedBlock(block: string[], date: string): string[] {
   return block.map(l => {
     const item = LIST_ITEM_RE.exec(l)
-    if (!item) return l
+    if (!item || linkOnlyTarget(item[2]) !== null) return l
     return TASK_LINE_RE.test(l) || !isProseText(item[2]) ? addCreatedField(l, date) ?? l : l
   })
 }
@@ -109,20 +121,32 @@ export function applyTaskEdit(content: string, line: number, expectedLine: strin
   return lines.join(eol)
 }
 
-export type RescheduleKind = "today" | "tomorrow" | "weekend" | "nextWeek"
+export type RescheduleKind = "today" | "tomorrow" | "weekend" | "nextWeek" | "later"
 
-/** Local `YYYY-MM-DD` for a reschedule: today, tomorrow, the next Saturday after today, or the next Monday after today. */
+/** Local `YYYY-MM-DD` for a reschedule: today, tomorrow, the next Saturday after today, the next Monday after today,
+ *  or (later) the Tuesday after that Monday. */
 export function rescheduleDate(kind: RescheduleKind, today: Date): string {
   const d = new Date(today.getFullYear(), today.getMonth(), today.getDate())
   const weekday = d.getDay() // 0 = Sunday
+  const nextMonday = (1 - weekday + 7) % 7 || 7
   const ahead = kind === "today" ? 0
     : kind === "tomorrow" ? 1
     : kind === "weekend" ? (6 - weekday + 7) % 7 || 7
-    : (1 - weekday + 7) % 7 || 7
+    : kind === "later" ? nextMonday + 1
+    : nextMonday
   d.setDate(d.getDate() + ahead)
   return localIsoDate(d)
 }
 
 export function localIsoDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+}
+
+/** The day (YYYY-MM-DD) a note's undated lines are dated by. Uses indexSinglePage's page-date order: a valid
+ *  `YYYY-MM-DD` in `fileName`, else `explicitDateMs` (frontmatter `updated`/`created`, else the daily/weekly-note
+ *  date) as a local day. Null when the note has no date. */
+export function pageDateIso(fileName: string, explicitDateMs: number | null): string | null {
+  const named = ISO_DATE_RE.exec(fileName)
+  if (named && ageDaysFromText(named[0]) !== null) return named[0]
+  return explicitDateMs === null ? null : localIsoDate(new Date(explicitDateMs))
 }
