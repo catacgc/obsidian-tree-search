@@ -1,8 +1,10 @@
 .ts-timeline-row { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 4px; }
 .ts-timeline-body { flex: 1; min-width: 0; }
 .ts-timeline-breadcrumb { font-size: var(--font-ui-smaller); color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ts-timeline-filters { display: flex; gap: 6px; padding: 4px 8px; }
-.ts-timeline-chip { padding: 2px 10px; border-radius: 999px; border: 1px solid var(--background-modifier-border); font-size: var(--font-ui-smaller); color: var(--text-muted); cursor: pointer; user-select: none; }
+/* One row that scrolls sideways (trackpad, Shift+wheel, Tab) instead of squeezing chips until their labels wrap. */
+.ts-timeline-filters { display: flex; gap: 6px; padding: 4px 8px; overflow-x: auto; scrollbar-width: none; }
+.ts-timeline-filters::-webkit-scrollbar { display: none; }
+.ts-timeline-chip { flex-shrink: 0; white-space: nowrap; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--background-modifier-border); font-size: var(--font-ui-smaller); color: var(--text-muted); cursor: pointer; user-select: none; }
 .ts-timeline-chip:hover { color: var(--text-accent); }
 .ts-timeline-chip.is-active { background-color: var(--interactive-accent); border-color: var(--interactive-accent); color: var(--text-on-accent); }
 /* Offered by the `:` autocomplete (hsla: the CSS bundler flattens color-mix(var(), …)). */

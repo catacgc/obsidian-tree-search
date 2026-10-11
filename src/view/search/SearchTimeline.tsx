@@ -44,8 +44,13 @@ export const RecencyFilterBar = () => {
     const candidates = new Set(suggestions.filter(isFilterSuggestion).map(s => s.filterName))
     const focused = suggestions[suggestionIndex]
     const focusedName = focused && isFilterSuggestion(focused) ? focused.filterName : null
+    const barRef = useRef<HTMLDivElement>(null)
+    // The bar scrolls sideways: keep the `:` autocomplete's current pill visible.
+    useEffect(() => {
+        barRef.current?.querySelector(".is-candidate-selected")?.scrollIntoView({block: "nearest", inline: "nearest"})
+    }, [focusedName])
 
-    return <div className="ts-timeline-filters">
+    return <div className="ts-timeline-filters" ref={barRef}>
         {RECENCY_WINDOWS.map(w => <div
             key={w}
             role="button"
