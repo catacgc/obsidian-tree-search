@@ -149,9 +149,10 @@ export function planReparent(child: RowRef, target: ParsedNode | NewPageTarget, 
     return {error: "This row can't be moved"}
 }
 
-/** Result rows while a chain is active. Reparent: the new-parent candidates for the moved row. Append: the anchor's
- *  children filtered by the query, link targets for an open `[[frag`, and nothing once entries are typed. `query` is
- *  the input as typed (entry and link checks); `searchText` is it as searched (`:Name` filter references expanded). */
+/** Result rows while a chain is active. Reparent: the new-parent candidates for the moved row. Append: link targets
+ *  for an open `[[frag` anywhere in the input, else the anchor's children filtered by the query, and nothing once
+ *  entries are typed. `query` is the input as typed (entry and link checks); `searchText` is it as searched (`:Name`
+ *  filter references expanded). */
 export function chainResults(graph: NotesGraph, chain: ChainState, query: string, searchText: string, separator: string, options: SearchOptions, dailyName: string): ResultNode[] {
     if (chain.mode === "append") return appendChainResults(graph, chain, query, searchText, separator, dailyName)
     const q = searchText.trim()
@@ -168,9 +169,9 @@ export function chainResults(graph: NotesGraph, chain: ChainState, query: string
 }
 
 function appendChainResults(graph: NotesGraph, chain: AppendChain, query: string, searchText: string, separator: string, dailyName: string): ResultNode[] {
-    if (chain.steps.some(s => s.kind === "entry")) return []
     const open = openLinkAt(query)
-    if (open && query.slice(0, open.start).trim() === "") return open.fragment.trim() === "" ? [] : linkTargetTree(graph, open.fragment, separator)
+    if (open) return open.fragment.trim() === "" ? [] : linkTargetTree(graph, open.fragment, separator)
+    if (chain.steps.some(s => s.kind === "entry")) return []
     if (isEntryInput(query)) return []
     const anchor = lastAnchor(chain.steps)
     const key = anchor.kind === "today" ? `[[${dailyName}]]`

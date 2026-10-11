@@ -128,6 +128,17 @@ describe("chainResults", () => {
         const chain = { mode: "append" as const, steps: [row({ kind: "note", name: "Alpha" })] }
         expect(keys(chainResults(g, chain, ":Road", "(road)", ";", {}, "2026-09-30"))).toEqual(["[[roadmap]]"])
     })
+
+    it("append: an open [[frag anywhere in the input lists link targets, also after entry chips", async () => {
+        const g = await buildGraphFromScanner(scanner)
+        const chain = { mode: "append" as const, steps: [row({ kind: "note", name: "Alpha" })] }
+        const q = "[[Beta]] and [[Road"
+        expect(keys(chainResults(g, chain, q, q, ";", {}, "2026-09-30"))).toEqual(["[[roadmap]]"])
+        expect(keys(chainResults(g, chain, "- see [[Road", "- see [[Road", ";", {}, "2026-09-30"))).toEqual(["[[roadmap]]"])
+        const typed = { mode: "append" as const, steps: [...chain.steps, entry({ kind: "item", marker: "- ", text: "x" })] }
+        expect(keys(chainResults(g, typed, "[[Road", "[[Road", ";", {}, "2026-09-30"))).toEqual(["[[roadmap]]"])
+        expect(chainResults(g, chain, "[[Beta]] and [[", "[[Beta]] and [[", ";", {}, "2026-09-30")).toEqual([])
+    })
 })
 
 const row = (anchor: ChainAnchor): ChainStep => ({ kind: "row", anchor, label: "row", prevQuery: "" })
