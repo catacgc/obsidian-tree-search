@@ -19,7 +19,7 @@ Your draft is kept when you close the editor, and even when you restart Obsidian
 
 ## Linking while you type
 
-Type `[[` in the editor and Tree Search suggests notes from the tree. Press <kbd>Enter</kbd> or <kbd>Tab</kbd> to accept a suggestion. When no note has the exact name you typed, a **New note `[[name]]`** row sits above the suggestions: press <kbd>↑</kbd> from the first suggestion to select it (it is selected already when nothing matches). It inserts the link; the note is created only if you add content to it.
+Type `[[` in the editor and Tree Search suggests notes from the tree. To link a heading, type part of the note name, `#`, then part of the heading: `[[not#hea` finds `Note#Header1` and `Noting#Heading`. Press <kbd>Enter</kbd> or <kbd>Tab</kbd> to accept a suggestion. When no note has the exact name you typed, a **New note `[[name]]`** row sits above the suggestions: press <kbd>↑</kbd> from the first suggestion to select it (it is selected already when nothing matches). It inserts the link; the note is created only if you add content to it.
 
 ![Link suggestions while typing a link to Bob](assets/screenshots/insert-link-autocomplete.webp)
 *Typing `[[bob` suggests notes from the tree; suggestions start after three characters.*

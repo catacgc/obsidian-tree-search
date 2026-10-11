@@ -62,6 +62,7 @@ Matching is case-insensitive: `apollo` finds "Project Apollo".
 | `[[my note]]` | exactly “my note” with all its children, from any note |
 | `[[my note#Heading]]` | that heading with all its children, from any note |
 | `[[name` | notes and headings whose name matches; Enter or Tab completes the link |
+| `[[note#head` | headings whose note name contains “note” and heading contains “head” |
 
 `outline:` shows only what is written inside a note. `[[my note]]` goes further and adds everything written about it anywhere in your vault.
 

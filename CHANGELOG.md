@@ -22,7 +22,7 @@ The first release since 0.11.0. Full documentation, with screenshots, is at http
 - **Scopes:**
   - `outline:<note>` limits results to a note's outline.
   - `[[note]]` and `[[note#heading]]` show that note or heading with everything written about it.
-  - An open `[[name` completes to a link.
+  - An open `[[name` completes to a link. `[[not#hea` matches headings by both parts (`Note#Header1`, `Noting#Heading`).
 - **Saved filters (pills):**
   - Save any query as a named pill (action panel → Save as Filter) and delete it again.
   - Refer to a filter in a query with `:Name` or `-:Name`.

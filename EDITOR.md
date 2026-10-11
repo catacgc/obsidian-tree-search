@@ -140,7 +140,7 @@ It works in both sections.
 **Open `[[fragment`** (`openLinkAt`: the query's last `[[` with no `]]` after it): `searchIndex` returns `linkTargetTree(graph, fragment, separator)` and ignores the rest of the query, on every surface (Search, Quick Add, Raycast, code blocks, CLI). In the Search modal and pane, Enter or Tab on a note/heading row replaces the open `[[fragment` with the row's link (`SearchBar`'s `handleLinkKey`), which then shows that tree; not in Insert Link or during a Move to (`<`).
 
 **Results:** the same pipeline as Insert Link, so both surfaces offer the same targets:
-- `linkTargetTree(graph, query, separator): ResultNode[]` in `packages/core/src/search/search.ts` runs `searchIndex` → `pruneResultTree` (keep `page`/`header` nodes whose own key matches the AND of all query stages) → `partitionArchived(…, reveal = false).visible`.
+- `linkTargetTree(graph, query, separator): ResultNode[]` in `packages/core/src/search/search.ts` runs `searchIndex` → `pruneResultTree` (keep `page`/`header` nodes whose own key matches the AND of all query stages) → `partitionArchived(…, reveal = false).visible`. A query with `#` keeps only `header` nodes instead: the note name (`page`) contains every word before the first `#` and the heading every word after it, so `not#hea` matches `Note#Header1` and `Noting#Heading`; the candidates come from `searchIndex` on all those words.
 - `SearchModalMolecule` calls it directly for Insert Link (typed without `[[`); the editor's `[[query` reaches it through `searchIndex`'s open-link case.
 - Hierarchical queries (for example `proj<separator>kick` with the `searchSeparator` setting) work the same way as in Insert Link.
 

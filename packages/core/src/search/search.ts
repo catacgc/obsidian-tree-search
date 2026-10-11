@@ -330,9 +330,24 @@ export function searchIndex(
 /**
  * Link targets for Insert Link and the editor's autocomplete: only page and
  * header nodes whose own key matches every query term (ANDed across stages,
- * regardless of hierarchy boundaries), with archived rows hidden.
+ * regardless of hierarchy boundaries), with archived rows hidden. A `note#heading`
+ * query lists headers instead: the note name contains every word before the first
+ * `#`, and the heading every word after it (`not#hea` → `Note#Header1`, `Noting#Heading`).
  */
 export function linkTargetTree(graph: NotesGraph, query: string, separator: string): ResultNode[] {
+  const hash = query.indexOf("#")
+  if (hash !== -1) {
+    const words = (s: string) => s.toLowerCase().split(/\s+/).filter(w => w !== "")
+    const noteWords = words(query.slice(0, hash))
+    const headingWords = words(query.slice(hash + 1))
+    const pruned = pruneResultTree(
+      searchIndex(graph, [...noteWords, ...headingWords].join(" "), separator),
+      n => n.nodeType === "header" &&
+        noteWords.every(w => n.page.toLowerCase().includes(w)) &&
+        headingWords.every(w => n.header.toLowerCase().includes(w)),
+    )
+    return partitionArchived(pruned, false).visible
+  }
   const expr: QueryExpr = { type: "and", exprs: parseQuery(query, separator) }
   const pruned = pruneResultTree(
     searchIndex(graph, query, separator),

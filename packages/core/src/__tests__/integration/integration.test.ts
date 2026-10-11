@@ -290,6 +290,29 @@ describe("insert-mode", () => {
     expect(keys).not.toContain("[[old plan]]")
   })
 
+  describe("[[note#heading fragments", () => {
+    const g2 = new NotesGraph()
+    const files: Record<string, string> = {
+      "Note.md": "# Header1\n",
+      "Noting.md": "# Heading\n",
+      "Notary.md": "# Summary\n",
+      "Other.md": "# Not heavy\n",
+    }
+    for (const [path, content] of Object.entries(files)) {
+      indexSinglePage(parseVaultFile(content, path, 1_700_000_000_000), g2, DEFAULT_SETTINGS)
+    }
+    const keys = (q: string) => collectKeysFromResults(linkTargetTree(g2, q, ".")).sort()
+
+    it("matches the note part against the note name and the heading part against the heading", () => {
+      expect(keys("not#hea")).toEqual(["note#header1", "noting#heading"])
+      expect(keys("Noting#hea")).toEqual(["noting#heading"])
+    })
+
+    it("lists every heading of the matching notes when the heading part is empty", () => {
+      expect(keys("notary#")).toEqual(["notary#summary"])
+    })
+  })
+
   describe("newLinkName", () => {
     const g2 = new NotesGraph()
     const files: Record<string, string> = {

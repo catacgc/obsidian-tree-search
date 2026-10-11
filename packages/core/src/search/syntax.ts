@@ -85,6 +85,7 @@ export function describeQuerySyntax(): QuerySyntaxGroup[] {
         { syntax: "[[my note]]", description: "exactly “my note” with all its children, from any note" },
         { syntax: "[[my note#Heading]]", description: "that heading with all its children, from any note" },
         { syntax: "[[name", description: "notes and headings whose name matches; Enter or Tab completes the link" },
+        { syntax: "[[note#head", description: "headings whose note name contains “note” and heading contains “head”" },
       ],
     },
     {
