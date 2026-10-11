@@ -1,5 +1,5 @@
 import type { App, TFile } from "obsidian"
-import { buildTimeline, fileParent, type NotesGraph, type ParsedNode, type QueryExpr, type ResultNode } from "@mdtree/core"
+import { buildTimeline, fileParent, outlineContext, type NotesGraph, type ParsedNode, type QueryExpr, type ResultNode } from "@mdtree/core"
 import type { TreeNode } from "./SearchViewFlatten"
 
 export const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif"]
@@ -113,10 +113,13 @@ export function fileAgeDays(app: App | null | undefined, node: ParsedNode): numb
 // Timeline rows for a search result tree (Search view and the Raycast server).
 // Undated items take their file's age (fileAgeDays). Results start at the
 // matched node, so a hit with no matched ancestor gets its in-note parent
-// (e.g. the enclosing header) as breadcrumb.
+// (e.g. the enclosing header) as breadcrumb. An item whose last matched
+// ancestor is one of its inline parents (a note the line links) shows its
+// outline parent instead.
 export function buildTimelineRows(app: App | null | undefined, graph: NotesGraph, results: ResultNode[], matchExprs: QueryExpr[], windowDays: number | null): TreeNode[] {
     return buildTimeline(results, matchExprs, windowDays, n => fileAgeDays(app, n)).map((item, i) => {
-        const parent = item.breadcrumb.length === 0 ? fileParent(graph, item.node) : null
+        const last = item.breadcrumb[item.breadcrumb.length - 1]
+        const parent = last === undefined ? fileParent(graph, item.node) : outlineContext(graph, item.node, last)
         return {
             node: item.node,
             indent: 0,
@@ -129,6 +132,19 @@ export function buildTimelineRows(app: App | null | undefined, graph: NotesGraph
             timeline: { breadcrumb: parent ? [parent] : item.breadcrumb, pinned: item.pinned, ageDays: item.ageDays, block: item.block }
         }
     })
+}
+
+/** Sets `outlineParent` (outlineContext) on each Tree row shown under one of its inline parents. `rows`: pre-order, indent = depth. */
+export function tagOutlineParents(graph: NotesGraph, rows: TreeNode[]): void {
+    const path: ParsedNode[] = []
+    for (const row of rows) {
+        if (row.archiveRow) continue
+        path.length = row.indent
+        const parent = path[row.indent - 1]
+        const outline = parent ? outlineContext(graph, row.node, parent) : null
+        if (outline) row.outlineParent = outline
+        path.push(row.node)
+    }
 }
 
 // Breadcrumb segments shown under a timeline row: its matched ancestors, else

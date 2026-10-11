@@ -471,3 +471,20 @@ describe("archive visibility (end-to-end)", () => {
     expect(visible.some(n => n.node.searchKey.includes("keep me"))).toBe(false)
   })
 })
+
+describe("parent edge tags", () => {
+  function inboundTags(g: NotesGraph, lineText: string) {
+    const [key] = g.filterNodes((_, n) => n.nodeType === "text" && n.searchKey.includes(lineText))
+    return Object.fromEntries(g.inboundEdgeEntries(key).map(e => [e.source, e.attributes.inline]))
+  }
+
+  it("tags the edge from a linked note inline and leaves the outline edge untagged", () => {
+    const g = buildGraph(parse("- [[UAE]]\n    - [[Rares Vlasceanu]] [analysis for requirements](https://example.com/a)", "2026-10-01.md"))
+    expect(inboundTags(g, "analysis for requirements")).toStrictEqual({ "[[uae]]": undefined, "[[rares vlasceanu]]": true })
+  })
+
+  it("keeps the outline edge untagged when the line also links its outline parent", () => {
+    const g = buildGraph(parse("- [[UAE]]\n    - [[UAE]] sync with [[Bob]] https://example.com/b", "2026-10-01.md"))
+    expect(inboundTags(g, "sync with")).toStrictEqual({ "[[uae]]": undefined, "[[bob]]": true })
+  })
+})

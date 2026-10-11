@@ -119,7 +119,7 @@ function createTextNode(
   // Virtual pages referenced in text become parents of the text node
   const refNodes = graph.createRefsNodes(refs, textNode, ageDays)
   for (const refNode of refNodes) {
-    graph.addChild(refNode, textNode, textNode.location, ageDays)
+    graph.addChild(refNode, textNode, textNode.location, ageDays, true)
   }
 
   return textNode

@@ -91,6 +91,7 @@ export async function reindexFile(
           srcPath: edge.attributes.location.path,
           mtime: edge.attributes.mtime,
           location: edge.attributes.location,
+          inline: edge.attributes.inline === true,
         })
       }
     }

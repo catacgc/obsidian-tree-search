@@ -52,7 +52,9 @@ export const RecencyFilterBar = () => {
 
 // Flat timeline row: matched line + date, with a faint breadcrumb of matched
 // ancestors (else its in-note parent, else the source note) below and an
-// optional image thumbnail.
+// optional image thumbnail. When the last matched ancestor is a note the line
+// links (an inline parent), the breadcrumb is its outline parent instead
+// (buildTimelineRows).
 // Interaction mirrors SearchTreeNode (click selects, click again opens).
 type TimelineRowProps = {
     node: TreeNode

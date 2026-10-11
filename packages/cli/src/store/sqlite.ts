@@ -35,6 +35,14 @@ export class VaultStore {
     } catch {
       // column already exists — safe to ignore
     }
+    // Migrate DBs that predate edges.is_inline: their edges lack the tag, so drop the indexed data; the next
+    // index/serve/watch rebuilds it.
+    try {
+      this.db.exec("ALTER TABLE edges ADD COLUMN is_inline INTEGER NOT NULL DEFAULT 0")
+      this.db.exec("DELETE FROM nodes; DELETE FROM edges; DELETE FROM meta")
+    } catch {
+      // column already exists — safe to ignore
+    }
   }
 
   // ── Load ────────────────────────────────────────────────────────────────────
@@ -58,7 +66,7 @@ export class VaultStore {
 
     const edges = this.db
       .query(
-        "SELECT from_key, to_key, edge_type, mtime, location FROM edges WHERE vault = ?",
+        "SELECT from_key, to_key, edge_type, mtime, location, is_inline FROM edges WHERE vault = ?",
       )
       .all(vault) as {
       from_key: string
@@ -66,6 +74,7 @@ export class VaultStore {
       edge_type: string
       mtime: number
       location: string
+      is_inline: number
     }[]
 
     for (const row of edges) {
@@ -84,7 +93,7 @@ export class VaultStore {
         const fromNode = graph.hasNode(row.from_key) ? graph.getNodeAttributes(row.from_key) : null
         const toNode = graph.hasNode(row.to_key) ? graph.getNodeAttributes(row.to_key) : null
         if (fromNode && toNode) {
-          graph.addChild(fromNode, toNode, loc, row.mtime)
+          graph.addChild(fromNode, toNode, loc, row.mtime, row.is_inline === 1)
         }
       }
     }
@@ -107,7 +116,7 @@ export class VaultStore {
       "INSERT OR REPLACE INTO nodes (vault, key, node_type, src_path, boost, age_days, data) VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
     const insertEdge = this.db.prepare(
-      "INSERT INTO edges (vault, from_key, to_key, edge_type, src_path, mtime, location) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO edges (vault, from_key, to_key, edge_type, src_path, mtime, location, is_inline) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
 
     // Clear existing data for this vault (parameterized to avoid injection)
@@ -134,6 +143,7 @@ export class VaultStore {
             edge.attributes.location.path,
             edge.attributes.mtime,
             JSON.stringify(edge.attributes.location),
+            edge.attributes.inline ? 1 : 0,
           )
         }
       }
@@ -181,14 +191,15 @@ export class VaultStore {
       srcPath: string
       mtime: number
       location: Location
+      inline: boolean
     }[],
   ): void {
     const stmt = this.db.prepare(
-      "INSERT INTO edges (vault, from_key, to_key, edge_type, src_path, mtime, location) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO edges (vault, from_key, to_key, edge_type, src_path, mtime, location, is_inline) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
     const tx = this.db.transaction(() => {
       for (const e of edges) {
-        stmt.run(vault, e.from, e.to, e.type, e.srcPath, e.mtime, JSON.stringify(e.location))
+        stmt.run(vault, e.from, e.to, e.type, e.srcPath, e.mtime, JSON.stringify(e.location), e.inline ? 1 : 0)
       }
     })
     tx()

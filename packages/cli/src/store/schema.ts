@@ -18,7 +18,8 @@ CREATE TABLE IF NOT EXISTS edges (
   edge_type TEXT    NOT NULL,
   src_path  TEXT    NOT NULL,
   mtime     INTEGER NOT NULL DEFAULT 0,
-  location  TEXT    NOT NULL
+  location  TEXT    NOT NULL,
+  is_inline INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS meta (

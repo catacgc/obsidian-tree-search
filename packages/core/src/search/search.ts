@@ -1,4 +1,4 @@
-import { getKey, linkTargetKeys, type NotesGraph } from "../graph/graph.ts"
+import { getKey, type NotesGraph } from "../graph/graph.ts"
 import type { EdgeEntry, ParsedNode } from "../graph/types.ts"
 import { firstPassInclude, matchQuery, parseQuery, extractArchiveReveal, extractScope, queryTargetsFolders, openLinkAt, DAILY_NOTE, type ScopeTarget, type QueryExpr } from "./query.ts"
 import { INVALID_NAME_RE } from "../edit/attachments.ts"
@@ -72,11 +72,9 @@ function buildTree(
 //
 // `outline:<note>` keeps a search inside a note's own outline: its headings and
 // bullets as written in that file, without following links out of it. An
-// outline edge is a "parent" edge recorded in that file, minus the edges the
-// indexer adds from every page/header a line links to (same location as the
-// line): those make the line a child of the linked note, not of its outline
-// parent. A line nested under a bullet that links the same note shares that
-// edge (edges are unique per pair), so it is dropped too, as in `fileParent`.
+// outline edge is a "parent" edge recorded in that file, minus inline parent
+// edges (`EdgeAttributes.inline`), which make the line a child of the note it
+// links rather than of its outline parent.
 //
 // `[[note]]` keeps it inside the note's full subtree: every edge the search
 // would follow anyway, recorded in any file, so children written elsewhere
@@ -154,11 +152,8 @@ function reachable(graph: NotesGraph, roots: string[], follow: EdgeFilter): Set<
 
 function outlineScope(graph: NotesGraph, targets: ScopeTarget[], options: SearchOptions): Scope {
   const paths = new Set(pickNotes(graph, targets, options, false).map(n => n.path))
-  const follow: EdgeFilter = edge => {
-    if (edge.attributes.type !== "parent" || !paths.has(edge.attributes.location.path)) return false
-    const target = graph.getNodeAttributes(edge.target)
-    return target.nodeType !== "text" || !linkTargetKeys(target.parsedTokens).has(edge.source)
-  }
+  const follow: EdgeFilter = edge =>
+    edge.attributes.type === "parent" && paths.has(edge.attributes.location.path) && !edge.attributes.inline
   const roots = graph
     .filterNodes((_, attrs) => attrs.nodeType === "page" && !attrs.isReference && paths.has(attrs.location.path))
   return { keys: reachable(graph, roots, follow), follow }

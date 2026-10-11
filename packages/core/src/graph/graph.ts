@@ -39,17 +39,6 @@ export function getKey(node: ParsedNode): string {
   }
 }
 
-/** Keys of the page/header nodes a line's `[[links]]` point at: the sources of the
- *  link "parent" edges the indexer adds to that line (createVirtualPage keys). Embeds add none. */
-export function linkTargetKeys(tokens: ParsedTextToken[]): Set<string> {
-  const keys = new Set<string>()
-  for (const t of tokens) {
-    if (t.tokenType !== "obsidian_link" || t.embed) continue
-    keys.add((t.headerName ? `${t.pageTarget}#${t.headerName}` : `[[${t.pageTarget.replace(/\.canvas$/i, "")}]]`).toLowerCase())
-  }
-  return keys
-}
-
 // ── Edge storage ───────────────────────────────────────────────────────────────
 
 type StoredEdge = {
@@ -149,8 +138,12 @@ export class NotesGraph {
     if (from === to) return
     if (!this.nodes.has(from) || !this.nodes.has(to)) return
     // deduplicate: only one edge per (from, to) pair
-    const existing = this.out.get(from)
-    if (existing?.some(e => e.to === to)) return
+    const existing = this.out.get(from)?.find(e => e.to === to)
+    if (existing) {
+      // Outline wins: an inline edge for a pair that is also an outline edge loses its tag.
+      if (existing.attributes.inline && attrs.type === "parent" && !attrs.inline) delete existing.attributes.inline
+      return
+    }
 
     const id = `e${++this.edgeCounter}`
     const edge: StoredEdge = { id, from, to, attributes: attrs }
@@ -171,8 +164,9 @@ export class NotesGraph {
     child: ParsedNode,
     location: BaseNode["location"],
     mtime: number,
+    inline = false,
   ): void {
-    this.addEdge(getKey(parent), getKey(child), { mtime, type: "parent", location })
+    this.addEdge(getKey(parent), getKey(child), { mtime, type: "parent", location, ...(inline ? { inline: true as const } : {}) })
   }
 
   addRelatedEdge(fromKey: string, toKey: string, location: Location, mtime = 0): void {

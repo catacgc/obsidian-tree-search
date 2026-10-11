@@ -179,6 +179,29 @@ describe("NotesGraph", () => {
       g.addChild(a, a, loc("A.md"), 0)
       expect(g.size).toBe(0)
     })
+
+    it("tags an inline parent edge", () => {
+      const a = makePage("A")
+      const b = makeText("b line", "A.md")
+      g.addOrUpdateNode(a)
+      g.addOrUpdateNode(b)
+      g.addChild(a, b, loc("A.md"), 0, true)
+      expect(g.outboundEdgeEntries("[[a]]")[0].attributes.inline).toBe(true)
+    })
+
+    it("an outline edge for the same pair wins over an inline one, in either order", () => {
+      for (const order of [[true, false], [false, true]]) {
+        const graph = new NotesGraph()
+        const a = makePage("A")
+        const b = makeText("b line", "A.md")
+        graph.addOrUpdateNode(a)
+        graph.addOrUpdateNode(b)
+        for (const inline of order) graph.addChild(a, b, loc("A.md"), 0, inline)
+        const edges = graph.outboundEdgeEntries("[[a]]")
+        expect(edges).toHaveLength(1)
+        expect(edges[0].attributes.inline).toBeUndefined()
+      }
+    })
   })
 
   describe("addRelatedEdge", () => {

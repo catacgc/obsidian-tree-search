@@ -57,7 +57,7 @@ export {
   type RowVisibility,
   type BlockFooter,
 } from "./search/flatten.ts"
-export { buildTimeline, fileParent, type TimelineItem, type BlockLine } from "./search/timeline.ts"
+export { buildTimeline, fileParent, outlineContext, type TimelineItem, type BlockLine } from "./search/timeline.ts"
 export { pruneToRecency } from "./search/recency.ts"
 export { formatRelativeDate, textSourceDate } from "./search/relative-date.ts"
 export { reverseMarkdownParsing } from "./search/copy.ts"

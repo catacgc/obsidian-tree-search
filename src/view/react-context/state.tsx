@@ -3,7 +3,7 @@ import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, pa
 import {atom, useAtomValue, type Getter, type Setter} from 'jotai'
 import {findTargetRow, revealRow, rowTargets, type RowTarget} from '../search/select-target'
 import {toggleTaskFilter} from '../search/task-filter'
-import {buildTimelineRows} from '../search/timeline-utils'
+import {buildTimelineRows, tagOutlineParents} from '../search/timeline-utils'
 import {chainOutline, chainPrevQuery, chainReplacesSearch, chainResults, isEntryInput, isMovable, isPatchable, parseChainEntry, rowLabel, type ChainOutline, type ChainState, type RowRef} from '../search/chain'
 import {basenameOf, dailyConfigOf, searchModalTitle} from '../editor/draft'
 import {dailyNotePath} from '../../editing/vault-edits'
@@ -385,6 +385,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         // `matched` flag against the active query (drives dimming in the view).
         // Greyed-out subtrees start collapsed (defaultVisibility).
         const nodesWithVisibility: TreeNode[] = flattenIndex(result, expandLevel, get(matchExprsAtom))
+        tagOutlineParents(get(GlobalAtoms.graphAtom), nodesWithVisibility)
 
         const searchVisible = get(searchVisibleAtom)
 

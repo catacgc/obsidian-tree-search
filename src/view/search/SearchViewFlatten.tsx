@@ -31,6 +31,8 @@ export type TreeNode = {
     timeline?: { breadcrumb: ParsedNode[]; pinned: boolean; ageDays: number; block?: BlockLine[] }
     /** Timeline block row showing all its lines, not only the previews ("+N more" or → in the search input). */
     blockOpen?: boolean
+    /** Tree row shown under one of its inline parents (a note its line links): its outline parent, shown as a subtitle. */
+    outlineParent?: ParsedNode
 }
 
 /** The Search modal's / pane's body: the inline editor while this view hosts it (`>`, ⊕, Alt+A/N, Alt-Edit…), else

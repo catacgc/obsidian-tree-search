@@ -146,6 +146,10 @@ export type EdgeAttributes = {
   // traversed when a query targets folders (see buildTree), so folder trees
   // surface under `is:folder` without leaking into ordinary searches.
   type: "parent" | "related" | "month" | "folder"
+  // Set on a "parent" edge the indexer adds because the child line links its source ([[note]] / [[note#heading]]):
+  // an inline parent. Absent on outline parent edges (bullet nesting, heading, note, frontmatter `parent`). Edges are
+  // unique per pair, so a pair that is both (a line under `- [[X]]` that also links [[X]]) is an outline edge.
+  inline?: true
   location: Location
 }
 

@@ -1,6 +1,6 @@
 import type { ParsedNode } from "../graph/types.ts"
 import type { ResultNode } from "./search.ts"
-import { getKey, linkTargetKeys, type NotesGraph } from "../graph/graph.ts"
+import { getKey, type NotesGraph } from "../graph/graph.ts"
 import { containsEmoji, isUndated, UNDATED_AGE } from "../graph/boost.ts"
 import { matchQuery, nodeMatchesQuery, type QueryExpr } from "./query.ts"
 import { compareOpenTasks, isOpenTask } from "./task-order.ts"
@@ -107,19 +107,33 @@ export function buildTimeline(
   )
 }
 
-// Structural parent of a text line or header inside its own note: the
-// enclosing header, the parent bullet, or the note itself. Search results
-// start at the matched node, so this is the context shown when no matched
-// ancestor exists. Lines also get "parent" edges (same location) from every
-// page/header they link to; those refs are skipped.
+// Outline parent of a text line or header inside its own note: the enclosing
+// header, the parent bullet, or the note itself. Search results start at the
+// matched node, so this is the context shown when no matched ancestor exists.
+// Inline parent edges (`EdgeAttributes.inline`, from the notes a line links)
+// are skipped.
 export function fileParent(graph: NotesGraph, node: ParsedNode): ParsedNode | null {
   if (node.nodeType !== "text" && node.nodeType !== "header") return null
-  const refs = node.nodeType === "text" ? linkTargetKeys(node.parsedTokens) : undefined
   for (const e of graph.inboundEdgeEntries(getKey(node))) {
-    if (e.attributes.type !== "parent" || e.attributes.location.path !== node.location.path) continue
-    if (refs?.has(e.source)) continue
+    if (e.attributes.type !== "parent" || e.attributes.inline || e.attributes.location.path !== node.location.path) continue
     const parent = graph.getNodeAttributes(e.source)
     if (parent.nodeType !== "pointer") return parent
   }
   return null
+}
+
+/** The outline parent to show as context for `node` displayed under `shownParent`, when `shownParent` is one of its
+ *  inline parents (the line links it): `fileParent(graph, node)`, else null. Also null when that adds nothing: it is
+ *  `shownParent` itself, or the note of a linked heading (`[[Note#Heading]]` already renders "Note > Heading"). */
+export function outlineContext(graph: NotesGraph, node: ParsedNode, shownParent: ParsedNode): ParsedNode | null {
+  if (node.nodeType !== "text") return null
+  const from = getKey(shownParent)
+  const edge = graph.inboundEdgeEntries(getKey(node)).find(e => e.source === from && e.attributes.type === "parent")
+  if (!edge?.attributes.inline) return null
+  const outline = fileParent(graph, node)
+  if (!outline) return null
+  const key = getKey(outline)
+  if (key === from) return null
+  if (shownParent.nodeType === "header" && key === `[[${shownParent.page.toLowerCase()}]]`) return null
+  return outline
 }

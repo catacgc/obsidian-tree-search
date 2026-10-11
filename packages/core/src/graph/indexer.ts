@@ -101,7 +101,7 @@ function createNodeFromText(
   // Referenced pages become parents of the text node
   const refNodes = graph.createRefsNodes(refs, textNode, ageDays)
   for (const refNode of refNodes) {
-    graph.addChild(refNode, textNode, textNode.location, page.file.mtime.ts)
+    graph.addChild(refNode, textNode, textNode.location, page.file.mtime.ts, true)
   }
 
   return textNode

@@ -3,7 +3,7 @@ import type { ParsedNode, TextNode, PageNode } from "../graph/types.ts"
 import type { ResultNode } from "../search/search.ts"
 import { UNDATED_AGE } from "../graph/boost.ts"
 import { parseQuery } from "../search/query.ts"
-import { buildTimeline, fileParent } from "../search/timeline.ts"
+import { buildTimeline, fileParent, outlineContext } from "../search/timeline.ts"
 import { NotesGraph, getKey } from "../graph/graph.ts"
 import { indexSinglePage, DEFAULT_SETTINGS } from "../graph/indexer.ts"
 import { parseVaultFile } from "../parser/vault-file.ts"
@@ -163,6 +163,8 @@ describe("fileParent", () => {
     "- [ ] advertise on Reddit https://example.com/b",
     "\t- [ ] follow-up https://example.com/c",
     "- [ ] ship [[Release]] notes",
+    "- [[Release]]",
+    "\t- [[Release]] retro https://example.com/d",
   ].join("\n"), "Plugin.md", 1_700_000_000_000), g, DEFAULT_SETTINGS)
   const find = (prefix: string) =>
     g.getNodeAttributes(g.filterNodes((_k, n) => n.nodeType === "text" && n.searchKey.startsWith(prefix))[0])
@@ -185,5 +187,47 @@ describe("fileParent", () => {
 
   it("returns the note for a bullet outside any header", () => {
     expect(parentKey("intro")).toBe("[[plugin]]")
+  })
+
+  it("returns a bullet the line also links", () => {
+    expect(parentKey("[[release]] retro")).toBe("[[release]]")
+  })
+})
+
+describe("outlineContext", () => {
+  const g = new NotesGraph()
+  indexSinglePage(parseVaultFile(
+    "- [[UAE]]\n    - [[Rares Vlasceanu]] [analysis for requirements](https://example.com/a)",
+    "2026-10-01.md", 1_700_000_000_000), g, DEFAULT_SETTINGS)
+  const line = g.getNodeAttributes(g.filterNodes((_k, n) => n.nodeType === "text" && n.searchKey.includes("analysis"))[0])
+
+  it("returns the outline parent for a line shown under an inline parent", () => {
+    const ctx = outlineContext(g, line, g.getNodeAttributes("[[rares vlasceanu]]"))
+    expect(ctx && getKey(ctx)).toBe("[[uae]]")
+  })
+
+  it("returns null for a line shown under its outline parent", () => {
+    expect(outlineContext(g, line, g.getNodeAttributes("[[uae]]"))).toBeNull()
+  })
+
+  describe("line linking a heading", () => {
+    const h = new NotesGraph()
+    indexSinglePage(parseVaultFile(
+      "- [[Rares Vlasceanu#2026]] [2026 goals](https://example.com/g)\n\n## 2026\n- shipped",
+      "Rares Vlasceanu.md", 1_700_000_000_000), h, DEFAULT_SETTINGS)
+    indexSinglePage(parseVaultFile(
+      "- [[Rares Vlasceanu#2026]] review https://example.com/r",
+      "2026-10-02.md", 1_700_000_000_000), h, DEFAULT_SETTINGS)
+    const lineWith = (word: string) =>
+      h.getNodeAttributes(h.filterNodes((_k, n) => n.nodeType === "text" && n.searchKey.includes(word))[0])
+
+    it("returns null when the outline parent is the note the heading link already names", () => {
+      expect(outlineContext(h, lineWith("goals"), h.getNodeAttributes("rares vlasceanu#2026"))).toBeNull()
+    })
+
+    it("returns the outline parent when it is another note", () => {
+      const ctx = outlineContext(h, lineWith("review"), h.getNodeAttributes("rares vlasceanu#2026"))
+      expect(ctx && getKey(ctx)).toBe("[[2026-10-02]]")
+    })
   })
 })

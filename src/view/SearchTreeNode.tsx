@@ -2,8 +2,8 @@ import {useEffect, useMemo, useRef} from "react";
 import {formatRelativeDate, isUndated, ParsedNode, textSourceDate, UNDATED_AGE} from "@mdtree/core";
 import {Platform} from "obsidian";
 import {Pencil} from "lucide-react";
-import {BaseNodeRender} from "./NodeRenderer";
-import {fileAgeDays, resolveThumbnail, stripDateAnnotations} from "./search/timeline-utils";
+import {BaseNodeRender, highlightText} from "./NodeRenderer";
+import {fileAgeDays, nodeLabel, resolveThumbnail, stripDateAnnotations} from "./search/timeline-utils";
 import {TreeNode} from "./search/SearchViewFlatten";
 import {useAtomValue, useSetAtom} from "jotai";
 import {useMolecule} from "bunshi/react";
@@ -155,6 +155,7 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
             props.onPick!(props.node)
         },
     } : editGestures
+    const text = <span className="ts-row-text"><BaseNodeRender node={shownNode} matchTerms={matchTerms}/></span>
 
     return (
         <div className="tree-node"
@@ -181,7 +182,12 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
                 </div>
                 <div className="ts-list-content"
                      area-label={props.node.node.location.path} title={drag.refusal ?? props.node.node.location.path}>
-                    <span className="ts-row-text"><BaseNodeRender node={shownNode} matchTerms={matchTerms}/></span>
+                    {props.node.outlineParent
+                        ? <div className="ts-timeline-body">
+                            {text}
+                            <div className="ts-timeline-breadcrumb">{highlightText(nodeLabel(props.node.outlineParent), matchTerms)}</div>
+                        </div>
+                        : text}
                     {thumb && <img className="ts-row-thumb" src={thumb} alt="" loading="lazy"/>}
                     {date && <span className="ts-row-date" title={fromFile ? `${date.absolute} · file created` : date.absolute}>{date.label}</span>}
                 </div>
