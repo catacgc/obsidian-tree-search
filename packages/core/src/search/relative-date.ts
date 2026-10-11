@@ -1,8 +1,8 @@
 import type { ParsedNode } from "../graph/types.ts"
 import { isUndated, lineDate } from "../graph/boost.ts"
 
-// The date a text row shows: the date inherited from its earliest-dated open
-// subtask, else its own `lineDate`. Either one sets the indexer's age
+// The date a text row shows: the date inherited from its earliest open
+// subtask's scheduled/due date, else its own `lineDate`. Either one sets the indexer's age
 // computation, so it is exactly the date the row shows.
 export function textSourceDate(node: ParsedNode): string | null {
   if (node.nodeType !== "text") return null

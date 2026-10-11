@@ -1,7 +1,7 @@
 import type { DvList, DvPage, HeaderNode, ParsedNode, ParsedTextToken, TextNode } from "./types.ts"
 import type { NotesGraph } from "./graph.ts"
 import { getKey } from "./graph.ts"
-import { calculateBoost, getAgeDays, ageDaysFromText, isUndated } from "./boost.ts"
+import { calculateBoost, getAgeDays, ageDaysFromText, deadlineDate, isUndated } from "./boost.ts"
 import { parseTokens, stripUrlQueryStrings } from "../parser/inline-tokens.ts"
 import { extractPageDate } from "../parser/frontmatter.ts"
 import { textSourceDate } from "../search/relative-date.ts"
@@ -217,17 +217,17 @@ function createHeadersNodes(graph: NotesGraph, pageRef: ParsedNode, page: DvPage
 
 // ── finishTextNode ────────────────────────────────────────────────────────────
 
-/** Sets `nested` (parent is a text line), `list` (has text children) and, when an open-task child (or a child that
- *  itself inherited) carries a date earlier than its own scheduled date, or it has none, inherits that child's
- *  `ageDays` + `inheritedDate`. Re-stores the node and returns the stored copy. */
+/** Sets `nested` (parent is a text line), `list` (has text children) and, when an open-task child carries a
+ *  scheduled/due date (or a child itself inherited one) earlier than its own date, or it has none, inherits that
+ *  child's `ageDays` + `inheritedDate`. Other dates (`[created::]`, a date in the text) are not deadlines and are
+ *  never inherited. Re-stores the node and returns the stored copy. */
 function finishTextNode(graph: NotesGraph, node: TextNode, parent: ParsedNode, kids: ParsedNode[]): TextNode {
   const textKids = kids.filter((k): k is TextNode => k.nodeType === "text")
   const next: TextNode = { ...node }
   if (parent.nodeType === "text") next.nested = true
   if (textKids.length > 0) next.list = true
   const dated = textKids
-    .filter(k => (k.isTask && !k.isCompleted) || k.inheritedDate !== undefined)
-    .map(k => ({ age: k.ageDays, date: textSourceDate(k) }))
+    .map(k => ({ age: k.ageDays, date: k.inheritedDate ?? (k.isTask && !k.isCompleted ? deadlineDate(k.searchKey) : null) }))
     .filter((d): d is { age: number; date: string } => d.date !== null && !isUndated(d.age))
   if (dated.length > 0) {
     const earliest = dated.reduce((a, b) => (b.age > a.age ? b : a))

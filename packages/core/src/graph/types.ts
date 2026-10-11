@@ -45,7 +45,7 @@ export type TextNode = BaseNode & {
   nested?: true
   /** It has in-note text children: `is:list`. Search shows its children (compacted) and its block. */
   list?: true
-  /** `YYYY-MM-DD` taken from its earliest-dated open subtask; `ageDays` then is that subtask's. */
+  /** `YYYY-MM-DD` taken from its earliest open subtask's scheduled/due date; `ageDays` then is that subtask's. */
   inheritedDate?: string
 }
 

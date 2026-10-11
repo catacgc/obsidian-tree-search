@@ -32,12 +32,17 @@ const ISO_DATE_RE = /\d{4}-\d{2}-\d{2}/
 /** Task date fields: Dataview `[scheduled:: d]` / `(due:: d)`, Tasks emoji `⏳ d` (scheduled) / `📅 d` (due). */
 const TASK_DATE_RE = /(?:[[(](?:scheduled|due)::\s*|(?:⏳|📅)\s*)(\d{4}-\d{2}-\d{2})/giu
 
-/** The `YYYY-MM-DD` a line is dated by: its earliest scheduled/due field, so a `[created::]` stamp written before
- *  the schedule doesn't date a task; else its first date; null without one. */
-export function lineDate(text: string): string | null {
+/** The earliest scheduled/due field of a line (`YYYY-MM-DD`), or null when it has none. */
+export function deadlineDate(text: string): string | null {
   let task: string | null = null
   for (const m of text.matchAll(TASK_DATE_RE)) if (task === null || m[1] < task) task = m[1]
-  return task ?? ISO_DATE_RE.exec(text)?.[0] ?? null
+  return task
+}
+
+/** The `YYYY-MM-DD` a line is dated by: its deadlineDate, so a `[created::]` stamp written before the schedule
+ *  doesn't date a task; else its first date; null without one. */
+export function lineDate(text: string): string | null {
+  return deadlineDate(text) ?? ISO_DATE_RE.exec(text)?.[0] ?? null
 }
 
 // A `YYYY-MM-DD` is a calendar day in the user's time zone: local midnight,

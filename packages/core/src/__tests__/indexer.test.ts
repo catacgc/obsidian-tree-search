@@ -168,6 +168,18 @@ describe("indexSinglePage", () => {
       expect(parent.ageDays).toBe(sub.ageDays + 2)
     })
 
+    it("inherits only scheduled/due dates, not [created::] or other dates in a subtask", () => {
+      const g = buildGraph(parse(
+        "- [ ] parent [scheduled:: 2026-10-20]\n    - [ ] moved [created:: 2026-10-01]\n    - [ ] review [[2026-09-30]] notes\n" +
+          "- [ ] list\n    - [ ] sub\n        - [ ] leaf [scheduled:: 2026-10-05]\n        - [ ] old [created:: 2026-09-01]",
+        "n.md",
+      ))
+      const parent = textNode(g, "parent [scheduled:: 2026-10-20]")
+      expect(parent.inheritedDate).toBeUndefined()
+      expect(parent.ageDays).toBe(textNode(buildGraph(parse("- [ ] t 2026-10-20", "m.md")), "t 2026-10-20").ageDays)
+      expect(textNode(g, "list").inheritedDate).toBe("2026-10-05")
+    })
+
     it("indexes a prose child that carries [created:: date], dated by it", () => {
       const g = buildGraph(parse("- [ ] buy milk\n    - check price [created:: 2026-10-07]\n    - plain prose\n", "n.md"))
       const child = textNode(g, "check price [created:: 2026-10-07]")
