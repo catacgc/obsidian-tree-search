@@ -73,7 +73,7 @@ Task lines (`- [ ] …`) show their checkbox in Tree and Timeline rows. Click it
 
 When you save an outline in the editor, or edit a single line, every open task without a scheduled date gets `[scheduled:: <today>]`. Subtasks (tasks nested under another line) don't.
 
-A task with open subtasks shows, and sorts by, the earliest date among its own scheduled date and its open subtasks' dates. The note itself is not changed.
+A line with a scheduled or due date (`[scheduled:: …]`, `(due:: …)`, `⏳ …`, `📅 …`; the earliest when it has several) is dated by it, even when a `[created:: …]` comes first. Other lines use their first date. A task with open subtasks shows, and sorts by, the earliest date among its own date and its open subtasks' dates. The note itself is not changed.
 
 Open tasks sort oldest first, so overdue tasks come first and future ones last: in the Timeline, right after pinned items; in the Tree, before the other lines under the same parent. Undated open tasks come after the dated ones in the Tree. Completed tasks sort like any other line.
 

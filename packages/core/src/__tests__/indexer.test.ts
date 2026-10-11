@@ -156,6 +156,18 @@ describe("indexSinglePage", () => {
       expect(parent.ageDays).toBeGreaterThan(textNode(g, "sub [scheduled:: 2026-10-10]").ageDays)
     })
 
+    it("a subtask stamped [created::] before its [scheduled::] is dated by the schedule, so the parent keeps its own date", () => {
+      const g = buildGraph(parse(
+        "- [ ] parent [scheduled:: 2026-10-10]\n    - [ ] sub #task [created:: 2026-09-27] [scheduled:: 2026-10-12]",
+        "n.md",
+      ))
+      const parent = textNode(g, "parent [scheduled:: 2026-10-10]")
+      const sub = textNode(g, "sub #task [created:: 2026-09-27] [scheduled:: 2026-10-12]")
+      expect(sub.ageDays).toBe(textNode(buildGraph(parse("- [ ] t 2026-10-12", "m.md")), "t 2026-10-12").ageDays)
+      expect(parent.inheritedDate).toBeUndefined()
+      expect(parent.ageDays).toBe(sub.ageDays + 2)
+    })
+
     it("indexes a prose child that carries [created:: date], dated by it", () => {
       const g = buildGraph(parse("- [ ] buy milk\n    - check price [created:: 2026-10-07]\n    - plain prose\n", "n.md"))
       const child = textNode(g, "check price [created:: 2026-10-07]")

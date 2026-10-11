@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, setSystemTime } from "bun:test"
-import { getAgeDays, ageDaysFromText, isUndated, calculateBoost, UNDATED_AGE } from "../graph/boost.ts"
+import { getAgeDays, ageDaysFromText, isUndated, calculateBoost, lineDate, UNDATED_AGE } from "../graph/boost.ts"
 import { extractPageDate } from "../parser/frontmatter.ts"
 import { makePeriodicDateResolver, type MomentParse } from "../parser/periodic-notes.ts"
 
@@ -72,6 +72,19 @@ describe("ageDaysFromText", () => {
       expect(getAgeDays(undefined, new Date(2026, 9, 6, 22, 0).getTime())).toBe(0)
       expect(getAgeDays(undefined, new Date(2026, 9, 7, 0, 30).getTime())).toBe(-1)
     })
+  })
+})
+
+describe("lineDate", () => {
+  it("dates a line by its earliest scheduled/due field, not an earlier [created::] stamp", () => {
+    expect(lineDate("t #task [created:: 2026-09-27] [scheduled:: 2026-10-12]")).toBe("2026-10-12")
+    expect(lineDate("t (due:: 2026-10-20) ⏳ 2026-10-14 [created:: 2026-09-01]")).toBe("2026-10-14")
+    expect(lineDate("t [created:: 2026-09-27] 📅 2026-10-15")).toBe("2026-10-15")
+  })
+
+  it("falls back to the first YYYY-MM-DD, null without one", () => {
+    expect(lineDate("check price [created:: 2026-10-07] then 2026-10-09")).toBe("2026-10-07")
+    expect(lineDate("no date")).toBeNull()
   })
 })
 
