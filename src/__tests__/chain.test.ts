@@ -109,18 +109,24 @@ describe("chainResults", () => {
         const g = await buildGraphFromScanner(scanner)
         const child = ref(page("Alpha", "Projects/Alpha.md"))
         const chain = { mode: "reparent" as const, child, prevQuery: "", confirm: null }
-        expect(keys(chainResults(g, chain, "proj", ";", {}, "2026-09-30"))).toEqual(["projects"])
-        expect(keys(chainResults(g, chain, "alph", ";", {}, "2026-09-30"))).not.toContain("[[alpha]]")
-        expect(keys(chainResults(g, chain, "road", ";", {}, "2026-09-30"))).toEqual(["[[roadmap]]"])
+        expect(keys(chainResults(g, chain, "proj", "proj", ";", {}, "2026-09-30"))).toEqual(["projects"])
+        expect(keys(chainResults(g, chain, "alph", "alph", ";", {}, "2026-09-30"))).not.toContain("[[alpha]]")
+        expect(keys(chainResults(g, chain, "road", "road", ";", {}, "2026-09-30"))).toEqual(["[[roadmap]]"])
     })
 
     it("append under a note: its children, filtered by the query; nothing once an entry is typed", async () => {
         const g = await buildGraphFromScanner(scanner)
         const chain = { mode: "append" as const, steps: [row({ kind: "note", name: "Alpha" })] }
-        expect(keys(chainResults(g, chain, "", ";", {}, "2026-09-30"))).toEqual(["[[roadmap]]", "ship [[alpha]]"])
-        expect(keys(chainResults(g, chain, "zzz", ";", {}, "2026-09-30"))).toEqual([])
+        expect(keys(chainResults(g, chain, "", "", ";", {}, "2026-09-30"))).toEqual(["[[roadmap]]", "ship [[alpha]]"])
+        expect(keys(chainResults(g, chain, "zzz", "zzz", ";", {}, "2026-09-30"))).toEqual([])
         const typed = { mode: "append" as const, steps: [...chain.steps, entry({ kind: "item", marker: "- ", text: "x" })] }
-        expect(chainResults(g, typed, "", ";", {}, "2026-09-30")).toEqual([])
+        expect(chainResults(g, typed, "", "", ";", {}, "2026-09-30")).toEqual([])
+    })
+
+    it("append: an expanded filter reference searches, though its `(` would read as an entry", async () => {
+        const g = await buildGraphFromScanner(scanner)
+        const chain = { mode: "append" as const, steps: [row({ kind: "note", name: "Alpha" })] }
+        expect(keys(chainResults(g, chain, ":Road", "(road)", ";", {}, "2026-09-30"))).toEqual(["[[roadmap]]"])
     })
 })
 

@@ -85,7 +85,7 @@ export class IndexedTree {
         return pageDateIso(path.split("/").pop()!.replace(/\.md$/, ""), extractPageDate(fm) ?? this.periodicDate(path))
     }
 
-    /** Search context: today's daily note, the target of `:daily` (computed per call, so it follows the date). */
+    /** Search context: today's daily note, the target of `outline:":daily"` (computed per call, so it follows the date). */
     searchOptions(): SearchOptions {
         return { dailyNote: dailyNotePath(this.dailyNoteConfig) }
     }

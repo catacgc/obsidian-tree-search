@@ -11,10 +11,8 @@ export function suggestAt(query: string, cursorPos: number): Suggestion[] {
   const token = before.slice(tokenStart).toLowerCase()
 
   // Only a complete "is:x" / "has:x" / "in:x" token triggers suggestions — bare
-  // letters or a leading ":" don't (see the design doc's Non-goals: bare
-  // letters collide with normal search terms, and a leading ":" belongs
-  // only to the legacy grammar, not this one). Digits are allowed so `in:7`
-  // can be completed.
+  // letters don't (see the design doc's Non-goals: bare letters collide with
+  // normal search terms). Digits are allowed so `in:7` can be completed.
   const match = /^(is|has|in):([a-z0-9]*)$/.exec(token)
   if (!match) return []
 

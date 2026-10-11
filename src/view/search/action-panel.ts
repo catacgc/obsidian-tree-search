@@ -11,7 +11,7 @@ import {
 import {isMovable, isPatchable} from "./chain"
 import type {TaskChange} from "../../editing/vault-edits"
 import type {SearchFilter} from "../react-context/settings"
-import {hasFilter, sameFilterQuery} from "./search-filter"
+import {filterActive, sameFilterQuery} from "./search-filter"
 
 export type PanelSection = "row" | "task" | "edit" | "filter" | "view"
 
@@ -185,11 +185,11 @@ export function panelItems(ctx: PanelContext): PanelItem[] {
 
     // Filter pills (Search modal and pane, which show the filter bar and the editor); not over a chain's sub-search.
     if (ctx.allowEditing && ctx.allowTimeline && ctx.chainMode === null) {
-        if (ctx.query.trim() !== "" && !ctx.filters.some(f => sameFilterQuery(f.query, ctx.query))) {
+        if (ctx.query.trim() !== "" && !ctx.filters.some(f => sameFilterQuery(f.query, ctx.query) || ctx.query.trim().toLowerCase() === `:${f.name.toLowerCase()}`)) {
             items.push({id: "saveFilter", section: "filter", title: "Save as Filter", icon: "saveFilter", run: {kind: "saveFilter"}})
         }
         for (const f of ctx.filters) {
-            if (hasFilter(ctx.query, f.query)) items.push({id: `deleteFilter:${f.name}`, section: "filter", title: `Delete Filter "${f.name}"`, icon: "deleteFilter", run: {kind: "deleteFilter", name: f.name}})
+            if (filterActive(ctx.query, f)) items.push({id: `deleteFilter:${f.name}`, section: "filter", title: `Delete Filter "${f.name}"`, icon: "deleteFilter", run: {kind: "deleteFilter", name: f.name}})
         }
     }
 

@@ -42,9 +42,9 @@ export function fileRenameState(path: string, name: string): EditorState {
     return {...emptySession(), mode: "edit", editKind: "file", sourcePath: path, originalLine: name, outline: stem, caret: stem.length}
 }
 
-/** A Save as Filter session for `query`: the outline holds the filter's name, prefilled with the query. */
+/** A Save as Filter session for `query`: the outline holds the filter's name, empty to start. */
 export function saveFilterState(query: string): EditorState {
-    return {...emptySession(), mode: "edit", editKind: "filter", sourcePath: "", filterQuery: query, outline: query, caret: query.length}
+    return {...emptySession(), mode: "edit", editKind: "filter", sourcePath: "", filterQuery: query, outline: "", caret: 0}
 }
 
 const INVALID_NAME_CHARS = new RegExp(INVALID_NAME_RE.source, "g")

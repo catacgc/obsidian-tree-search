@@ -67,7 +67,7 @@ describe("buildTimeline", () => {
     const childPage = pageNode("Data governance archive", 1)
     const tree = [rn(page, [rn(textNode("governance review", 2)), rn(childPage), rn(pageNode("Unrelated", 0))])]
 
-    expect(keys(buildTimeline(tree, parseQuery("governa :page", ".")))).toEqual(["Data governance archive", "Data governance"])
+    expect(keys(buildTimeline(tree, parseQuery("governa is:page", ".")))).toEqual(["Data governance archive", "Data governance"])
   })
 
   it("pins emoji hits on top but keeps them inside the recency window", () => {

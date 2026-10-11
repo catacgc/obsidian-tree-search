@@ -44,8 +44,10 @@ export function updateSettings(store: GlobalStore, data: PluginData | null) {
 	store.set(settingsAtom, {...getSettings(store), ...settings})
 	store.set(searchViewModesAtom, searchViewModes ?? {})
 	store.set(appendDraftAtom, draftFromData(quickAddDraft))
-	// Absent: never saved, so the default pills; [] means the user deleted them all.
-	store.set(searchFiltersAtom, searchFilters ?? DEFAULT_SEARCH_FILTERS)
+	// Absent: never saved, so the default pills; [] means the user deleted them all. Names are rewritten to the
+	// `:Name` reference charset (letters, digits, `_`, `-`; any other run becomes `-`), so a name saved with
+	// spaces (`Recent tasks`) loads as `Recent-tasks` and can still be typed as a reference.
+	store.set(searchFiltersAtom, (searchFilters ?? DEFAULT_SEARCH_FILTERS).map(f => ({...f, name: f.name.trim().replace(/[^\p{L}\p{N}_-]+/gu, "-")})))
 }
 
 export function getPluginData(store: GlobalStore): PluginData {

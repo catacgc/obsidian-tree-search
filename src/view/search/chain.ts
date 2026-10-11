@@ -150,10 +150,11 @@ export function planReparent(child: RowRef, target: ParsedNode | NewPageTarget, 
 }
 
 /** Result rows while a chain is active. Reparent: the new-parent candidates for the moved row. Append: the anchor's
- *  children filtered by the query, link targets for an open `[[frag`, and nothing once entries are typed. */
-export function chainResults(graph: NotesGraph, chain: ChainState, query: string, separator: string, options: SearchOptions, dailyName: string): ResultNode[] {
-    if (chain.mode === "append") return appendChainResults(graph, chain, query, separator, dailyName)
-    const q = query.trim()
+ *  children filtered by the query, link targets for an open `[[frag`, and nothing once entries are typed. `query` is
+ *  the input as typed (entry and link checks); `searchText` is it as searched (`:Name` filter references expanded). */
+export function chainResults(graph: NotesGraph, chain: ChainState, query: string, searchText: string, separator: string, options: SearchOptions, dailyName: string): ResultNode[] {
+    if (chain.mode === "append") return appendChainResults(graph, chain, query, searchText, separator, dailyName)
+    const q = searchText.trim()
     if (q.length < 3) return []
     const key = getKey(chain.child.node)
     const folders = () => pruneResultTree(searchIndex(graph, `${q} is:folder`, separator, options), n => n.nodeType === "folder" && getKey(n) !== key)
@@ -166,7 +167,7 @@ export function chainResults(graph: NotesGraph, chain: ChainState, query: string
         n => (n.nodeType === "page" || n.nodeType === "header" || n.nodeType === "text") && getKey(n) !== key)
 }
 
-function appendChainResults(graph: NotesGraph, chain: AppendChain, query: string, separator: string, dailyName: string): ResultNode[] {
+function appendChainResults(graph: NotesGraph, chain: AppendChain, query: string, searchText: string, separator: string, dailyName: string): ResultNode[] {
     if (chain.steps.some(s => s.kind === "entry")) return []
     const open = openLinkAt(query)
     if (open && query.slice(0, open.start).trim() === "") return open.fragment.trim() === "" ? [] : linkTargetTree(graph, open.fragment, separator)
@@ -176,8 +177,8 @@ function appendChainResults(graph: NotesGraph, chain: AppendChain, query: string
         : anchor.kind === "note" ? `[[${anchor.name}]]`
         : anchor.kind === "header" ? `${anchor.page}#${anchor.header}`
         : getKey(anchor.node)
-    const reveal = extractArchiveReveal(parseQuery(query, separator)).reveal
-    return partitionArchived(advancedSearch(graph, key, query, separator), reveal).visible
+    const reveal = extractArchiveReveal(parseQuery(searchText, separator)).reveal
+    return partitionArchived(advancedSearch(graph, key, searchText, separator), reveal).visible
 }
 
 function lastAnchor(steps: ChainStep[]): ChainAnchor {

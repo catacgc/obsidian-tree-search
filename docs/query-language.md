@@ -58,6 +58,7 @@ Matching is case-insensitive: `apollo` finds "Project Apollo".
 | --- | --- |
 | `outline:<note>` | outline of the latest note matching &lt;note&gt; |
 | `outline:"my note"` | outline of exactly “my note” |
+| `outline:":daily"` | outline of today's daily note |
 | `[[my note]]` | exactly “my note” with all its children, from any note |
 | `[[my note#Heading]]` | that heading with all its children, from any note |
 | `[[name` | notes and headings whose name matches; Enter or Tab completes the link |
@@ -85,21 +86,13 @@ The stage separator is `.` by default. You can change it in [Settings](panes-and
 
 A `-a` term hides every line, heading or note matching `a`, and everything under it, wherever it would appear in the results, whichever stage you write it in. `parent . child -draft` shows the `child` lines under `parent`, minus any `draft` line and the lines nested under it; a `child` line that sits under a `draft` line is hidden too. A NOT inside an OR (<code>a &#124; -b</code>) only applies to that one line.
 
-## Shortcuts
+## Saved filters — :Name
 
-| Syntax | Meaning |
-| --- | --- |
-| `:page` | pages |
-| `:header` | headings |
-| `:folder` | folders |
-| `:attachment` | attachments |
-| `:task` | open tasks |
-| `:subtask` | nested open tasks |
-| `:subtext` | nested lines |
-| `:list` | lines with nested lines |
-| `:archived` | reveal archived (greyed) |
-| `:emoji` | has an emoji |
-| `:daily` | outline of today's daily note |
+`:Name` stands for the query of your saved filter called *Name* (see [filter pills](searching.md#recency)), matched whole and ignoring case. `:Tasks` searches `is:task`, `-:Tasks` excludes it, and `(:Work | :Home)` takes either. A word after `:` that names no filter is plain text.
 
-![Search results for :daily](assets/screenshots/query-daily.webp)
-*`:daily` shows the outline of today's daily note.*
+Type `:` to list your filters; keep typing to narrow the list (`:T` → `:Tasks`), and press <kbd>Tab</kbd> or <kbd>Enter</kbd> to insert one. The pills offered by the list are highlighted while it is open.
+
+There are no built-in `:` shortcuts. To get one back, save it as a filter: for example a filter named `page` with query `is:page` makes `:page` work again, and `daily` with `outline:":daily"` brings back `:daily`.
+
+![Search results for outline:":daily"](assets/screenshots/query-daily.webp)
+*`outline:":daily"` shows the outline of today's daily note.*

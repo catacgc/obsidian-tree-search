@@ -1,7 +1,8 @@
 import http, {IncomingMessage, Server, ServerResponse} from "http";
 import {Platform, type FileSystemAdapter} from "obsidian";
 import {searchIndex, partitionArchived, parseQuery, extractArchiveReveal, flattenIndex, parseDuration} from "@mdtree/core";
-import {getSettings, separatorAtom} from "../react-context/settings";
+import {getSettings, searchFiltersAtom, separatorAtom} from "../react-context/settings";
+import {expandFilterRefs} from "../search/search-filter";
 import fs from "fs";
 import {createRaycastResponse, createRaycastTimelineResponse} from "../node-actions";
 import {GlobalAtoms, GlobalStore} from "../react-context/global";
@@ -63,8 +64,9 @@ export class RaycastServer {
             const app = this.store.get(GlobalAtoms.appAtom);
             const separator = this.store.get(separatorAtom);
             const graph = this.store.get(GlobalAtoms.graphAtom);
-            const result = searchIndex(graph, decodedQuery, separator, this.store.get(GlobalAtoms.indexAtom)?.searchOptions());
-            const { reveal, stages: matchExprs } = extractArchiveReveal(parseQuery(decodedQuery, separator))
+            const searchText = expandFilterRefs(decodedQuery, this.store.get(searchFiltersAtom), separator);
+            const result = searchIndex(graph, searchText, separator, this.store.get(GlobalAtoms.indexAtom)?.searchOptions());
+            const { reveal, stages: matchExprs } = extractArchiveReveal(parseQuery(searchText, separator))
             const { visible } = partitionArchived(result, reveal)
             const recency = params.get("window")
             // Raycast loads images from disk, not Obsidian's app:// resource URLs.

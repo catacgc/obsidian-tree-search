@@ -5,15 +5,17 @@ import {Platform} from "obsidian";
 import {describeQuerySyntax} from "@mdtree/core";
 import {SearchViewMolecule} from "../react-context/state";
 import {EDITOR_KEYS, formatKey, isAvailable, SHORTCUTS, type KeySpec} from "./shortcuts";
+import {searchFiltersAtom} from "../react-context/settings";
 
 // Zero-state panel shown when there are no results to render: an inline,
 // click-to-insert cheat sheet for the query language, then the view's keyboard
-// shortcuts. Concrete tokens (is:/has:/in:/legacy) are buttons that append
+// shortcuts. Concrete tokens (is:/has:/in:, saved filters) are buttons that append
 // themselves to the query; grammar patterns and free-text examples are static.
 export const SearchHelp = () => {
     const {actualQueryAtom, appendQueryTokenAtom, allowEditing, allowTimeline} = useMolecule(SearchViewMolecule)
     const query = useAtomValue(actualQueryAtom)
     const appendToken = useSetAtom(appendQueryTokenAtom)
+    const filters = useAtomValue(searchFiltersAtom)
 
     const trimmed = query.trim()
     // Below the 3-char search minimum we treat the state as idle ("keep typing")
@@ -46,6 +48,14 @@ export const SearchHelp = () => {
                         </div>
                     </section>
                 ))}
+                {filters.length > 0 && <section key="Filters">
+                    <div className="text-xs uppercase tracking-wide text-obs-base-40 mb-1">Filters</div>
+                    <div className="flex flex-col gap-1">
+                        {filters.map(f => (
+                            <SyntaxRow key={f.name} syntax={`:${f.name}`} description={f.query} onInsert={() => appendToken(`:${f.name}`)}/>
+                        ))}
+                    </div>
+                </section>}
             </div>
 
             <div className="text-sm font-semibold mt-6 mb-3 text-obs-base-100">Shortcuts</div>

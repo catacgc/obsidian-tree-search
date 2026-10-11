@@ -16,7 +16,7 @@ export type ResultNode = {
 
 /** Runtime context a query can refer to but the graph can't name. */
 export type SearchOptions = {
-  /** Vault path of today's daily note: the target of `:daily`. Unset, `:daily` matches nothing. */
+  /** Vault path of today's daily note: the target of `outline:":daily"`. Unset, `outline:":daily"` matches nothing. */
   dailyNote?: string
 }
 
@@ -86,7 +86,7 @@ type Scope = { keys: Set<string>; follow: EdgeFilter }
 type NoteCandidate = { key: string; name: string; path: string; lowerPath: string; ageDays: number; isReference: boolean }
 
 /** The notes `outline:`/`[[note]]` targets name, compared lowercase:
- *  - `:daily`: today's daily note (`SearchOptions.dailyNote`), by path;
+ *  - `outline:":daily"`: today's daily note (`SearchOptions.dailyNote`), by path;
  *  - exact (quoted, or a link): every note whose name or vault path (with or without `.md`) equals it;
  *  - a fragment: the note whose name equals it, else the most recent one whose name
  *    (or, for a fragment with a `/`, vault path) contains it.

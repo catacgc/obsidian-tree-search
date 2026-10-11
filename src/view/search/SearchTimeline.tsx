@@ -13,7 +13,7 @@ import {AppendDot} from "../editor/AppendDot";
 import type {AppendTarget} from "../editor/row-editing";
 import {useRowGestures} from "./row-gestures";
 import {TaskCheckbox} from "./TaskCheckbox";
-import {hasFilter} from "./search-filter";
+import {filterActive, isFilterSuggestion} from "./search-filter";
 import {searchFiltersAtom} from "../react-context/settings";
 
 /** Enter/Space handler for a div-button chip: runs `run`, keeping KeyComboWrapper's Enter (open selection) from
@@ -28,14 +28,22 @@ const chipKeys = (run: () => void) => (ev: React.KeyboardEvent) => {
 // Recency chips (All / 7d / 30d / 1y), in Tree and Timeline mode, filter the
 // results locally with `in:` semantics without touching the query. After a
 // separator, the user's filter pills (searchFiltersAtom; Tasks = `is:task` by
-// default) toggle their query in the search query. Divs, not
-// <button>s: Obsidian's button chrome breaks the layout (see SearchHelp's SyntaxRow).
+// default) toggle their `:Name` reference in the search query. While the `:`
+// autocomplete is open, the pills it offers are tinted, and the dropdown's
+// current row a bit stronger. Divs, not <button>s: Obsidian's button chrome
+// breaks the layout (see SearchHelp's SyntaxRow).
 export const RecencyFilterBar = () => {
-    const {recencyWindowAtom, actualQueryAtom, toggleFilterAtom} = useMolecule(SearchViewMolecule)
+    const {recencyWindowAtom, actualQueryAtom, toggleFilterAtom, suggestionsAtom, suggestionIndexAtom} = useMolecule(SearchViewMolecule)
     const [recencyWindow, setRecencyWindow] = useAtom(recencyWindowAtom)
     const query = useAtomValue(actualQueryAtom)
     const filters = useAtomValue(searchFiltersAtom)
+    const suggestions = useAtomValue(suggestionsAtom)
+    const suggestionIndex = useAtomValue(suggestionIndexAtom)
     const toggle = useSetAtom(toggleFilterAtom)
+
+    const candidates = new Set(suggestions.filter(isFilterSuggestion).map(s => s.filterName))
+    const focused = suggestions[suggestionIndex]
+    const focusedName = focused && isFilterSuggestion(focused) ? focused.filterName : null
 
     return <div className="ts-timeline-filters">
         {RECENCY_WINDOWS.map(w => <div
@@ -49,8 +57,11 @@ export const RecencyFilterBar = () => {
         >{w === "all" ? "All" : w}</div>)}
         {filters.length > 0 && <span className="ts-timeline-filters-sep" aria-hidden="true">|</span>}
         {filters.map(f => <div key={f.name} role="button" tabIndex={0}
-             className={`ts-timeline-chip ${hasFilter(query, f.query) ? "is-active" : ""}`}
-             title={f.query} onClick={() => toggle(f.query)} onKeyDown={chipKeys(() => toggle(f.query))}>{f.name}</div>)}
+             className={["ts-timeline-chip",
+                 filterActive(query, f) && "is-active",
+                 candidates.has(f.name) && "is-candidate",
+                 focusedName === f.name && "is-candidate-selected"].filter(Boolean).join(" ")}
+             title={`:${f.name} — ${f.query}`} onClick={() => toggle(f)} onKeyDown={chipKeys(() => toggle(f))}>{f.name}</div>)}
     </div>
 }
 

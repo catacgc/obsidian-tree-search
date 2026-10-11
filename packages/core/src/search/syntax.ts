@@ -81,6 +81,7 @@ export function describeQuerySyntax(): QuerySyntaxGroup[] {
       entries: [
         { syntax: "outline:<note>", description: "outline of the latest note matching <note>" },
         { syntax: "outline:\"my note\"", description: "outline of exactly “my note”" },
+        { syntax: "outline:\":daily\"", description: "outline of today's daily note", insertText: "outline:\":daily\"" },
         { syntax: "[[my note]]", description: "exactly “my note” with all its children, from any note" },
         { syntax: "[[my note#Heading]]", description: "that heading with all its children, from any note" },
         { syntax: "[[name", description: "notes and headings whose name matches; Enter or Tab completes the link" },
@@ -94,22 +95,6 @@ export function describeQuerySyntax(): QuerySyntaxGroup[] {
         { syntax: "-a", description: "NOT — exclude, with everything under it" },
         { syntax: "(a | b) c", description: "grouping" },
         { syntax: "a . b", description: "stage — find a, then b beneath it" },
-      ],
-    },
-    {
-      title: "Shortcuts",
-      entries: [
-        { syntax: ":page", description: "pages", insertText: ":page" },
-        { syntax: ":header", description: "headings", insertText: ":header" },
-        { syntax: ":folder", description: "folders", insertText: ":folder" },
-        { syntax: ":attachment", description: "attachments", insertText: ":attachment" },
-        { syntax: ":task", description: "open tasks", insertText: ":task" },
-        { syntax: ":subtask", description: "nested open tasks", insertText: ":subtask" },
-        { syntax: ":subtext", description: "nested lines", insertText: ":subtext" },
-        { syntax: ":list", description: "lines with nested lines", insertText: ":list" },
-        { syntax: ":archived", description: "reveal archived (greyed)", insertText: ":archived" },
-        { syntax: ":emoji", description: "has an emoji", insertText: ":emoji" },
-        { syntax: ":daily", description: "outline of today's daily note", insertText: ":daily" }
       ],
     },
   ]

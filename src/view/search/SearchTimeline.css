@@ -5,6 +5,10 @@
 .ts-timeline-chip { padding: 2px 10px; border-radius: 999px; border: 1px solid var(--background-modifier-border); font-size: var(--font-ui-smaller); color: var(--text-muted); cursor: pointer; user-select: none; }
 .ts-timeline-chip:hover { color: var(--text-accent); }
 .ts-timeline-chip.is-active { background-color: var(--interactive-accent); border-color: var(--interactive-accent); color: var(--text-on-accent); }
+/* Offered by the `:` autocomplete (hsla: the CSS bundler flattens color-mix(var(), …)). */
+.ts-timeline-chip.is-candidate { border-color: var(--interactive-accent); color: var(--text-accent); background-color: hsla(var(--interactive-accent-hsl), 0.1); }
+.ts-timeline-chip.is-candidate-selected { background-color: hsla(var(--interactive-accent-hsl), 0.25); }
+.ts-timeline-chip.is-active.is-candidate { color: var(--text-on-accent); background-color: var(--interactive-accent); }
 .ts-timeline-filters-sep { align-self: center; color: var(--text-faint); font-size: var(--font-ui-smaller); user-select: none; }
 .ts-block-lines { margin-top: 2px; font-size: var(--font-ui-small); }
 .ts-block-line { display: flex; align-items: center; gap: 6px; }

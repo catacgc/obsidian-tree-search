@@ -146,6 +146,11 @@ describe("panelItems", () => {
         expect(titles(ctx({ query: " is:task ", filters: DEFAULT_SEARCH_FILTERS }), "filter")).toEqual(['Delete Filter "Tasks"'])
     })
 
+    it("Filter: a :Name reference counts as the active pill and as the saved query", () => {
+        expect(titles(ctx({ query: ":tasks foo", filters: DEFAULT_SEARCH_FILTERS }), "filter")).toEqual(["Save as Filter", 'Delete Filter "Tasks"'])
+        expect(titles(ctx({ query: " :Tasks ", filters: DEFAULT_SEARCH_FILTERS }), "filter")).toEqual(['Delete Filter "Tasks"'])
+    })
+
     it("Filter: nothing for a blank query", () => {
         expect(titles(ctx({ query: "", filters: DEFAULT_SEARCH_FILTERS }), "filter")).toEqual([])
     })

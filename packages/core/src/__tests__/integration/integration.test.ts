@@ -351,7 +351,7 @@ describe("type-filters", () => {
 
 // ── outline ───────────────────────────────────────────────────────────────────
 
-describe("outline:<note> / :daily", () => {
+describe('outline:<note> / outline:":daily"', () => {
   const g = loadFixture("outline")
   const daily = { dailyNote: "2026-10-03.md" }
   const DAILY_OUTLINE = ["2026-10-03|", "2026-10-03#morning", "project x|", "kickoff with [[bob]]", "call [[alice]] about #budget", "prep slides #todo"]
@@ -364,12 +364,12 @@ describe("outline:<note> / :daily", () => {
     expect(collectKeysFromResults(results).sort()).toEqual([...DAILY_OUTLINE].sort())
   })
 
-  it(":daily :page targets the runtime's daily note, by path", () => {
-    expect(collectKeysFromResults(searchIndex(g, ":daily :page", ".", daily)).sort()).toEqual([...DAILY_OUTLINE].sort())
+  it('outline:":daily" is:page targets the runtime\'s daily note, by path', () => {
+    expect(collectKeysFromResults(searchIndex(g, 'outline:":daily" is:page', ".", daily)).sort()).toEqual([...DAILY_OUTLINE].sort())
   })
 
-  it(":daily matches nothing when the runtime names no daily note", () => {
-    expect(search(g, ":daily :page")).toEqual([])
+  it('outline:":daily" matches nothing when the runtime names no daily note', () => {
+    expect(search(g, 'outline:":daily" is:page')).toEqual([])
   })
 
   it("other terms only match inside the outline", () => {

@@ -186,7 +186,6 @@ describe("matchQuery", () => {
     expect([sub, note, top, doneSub].map(n => matchQuery(n, is("subtext")))).toEqual([false, true, false, false])
     expect([sub, note, top, doneSub].map(n => matchQuery(n, is("list")))).toEqual([false, false, true, false])
     expect(matchQuery(sub, is("task"))).toBe(true)
-    expect(parseQuery(":list", ".")).toEqual(parseQuery("is:list", "."))
   })
 
   it("is:completed matches only completed task-flagged text nodes", () => {
@@ -399,8 +398,12 @@ describe("outline: field", () => {
     expect(parseQuery("outline:sep", ".")[0]).toEqual({ type: "modifier", field: "outline", value: "sep" })
   })
 
-  it(":daily targets the runtime's daily note exactly", () => {
-    expect(parseQuery(":daily", ".")[0]).toEqual({ type: "modifier", field: "outline", value: ":daily", exact: true })
+  it('outline:":daily" targets the runtime\'s daily note exactly', () => {
+    expect(parseQuery('outline:":daily"', ".")[0]).toEqual({ type: "modifier", field: "outline", value: ":daily", exact: true })
+  })
+
+  it("treats :name as plain text", () => {
+    expect(parseQuery(":page", ".")[0]).toEqual({ type: "contains", value: ":page" })
   })
 })
 
@@ -446,52 +449,6 @@ describe("openLinkAt", () => {
   })
 })
 
-describe("legacy bare shortcuts", () => {
-  it("resolves :p to is:page", () => {
-    expect(parseQuery(":p", ".")[0]).toEqual({ type: "modifier", field: "is", value: "page" })
-  })
-
-  it("resolves :e to has:emoji", () => {
-    expect(parseQuery(":e", ".")[0]).toEqual({ type: "modifier", field: "has", value: "emoji" })
-  })
-
-  it("resolves :t to is:task, unambiguous even though is:text now exists", () => {
-    expect(parseQuery(":t", ".")[0]).toEqual({ type: "modifier", field: "is", value: "task" })
-  })
-
-  it("resolves full legacy names too, e.g. :page and :header", () => {
-    expect(parseQuery(":page", ".")[0]).toEqual({ type: "modifier", field: "is", value: "page" })
-    expect(parseQuery(":header", ".")[0]).toEqual({ type: "modifier", field: "is", value: "header" })
-  })
-
-  it("resolves the remaining single-letter shortcuts: :f, :h", () => {
-    expect(parseQuery(":f", ".")[0]).toEqual({ type: "modifier", field: "is", value: "folder" })
-    expect(parseQuery(":h", ".")[0]).toEqual({ type: "modifier", field: "is", value: "header" })
-  })
-
-  it("treats :a as ambiguous now that both :attachment and :archived exist", () => {
-    // Both start with 'a', so the single letter can no longer resolve uniquely.
-    expect(parseQuery(":a", ".")[0]).toEqual({ type: "contains", value: ":a" })
-    expect(parseQuery(":at", ".")[0]).toEqual({ type: "modifier", field: "is", value: "attachment" })
-    expect(parseQuery(":ar", ".")[0]).toEqual({ type: "modifier", field: "is", value: "archived" })
-  })
-
-  it("resolves :archived to is:archived (the reveal toggle)", () => {
-    expect(parseQuery(":archived", ".")[0]).toEqual({ type: "modifier", field: "is", value: "archived" })
-  })
-
-  it("falls back to a literal search for an unrecognized bare shortcut", () => {
-    expect(parseQuery(":xyz", ".")[0]).toEqual({ type: "contains", value: ":xyz" })
-  })
-
-  it("negates a legacy shortcut like the new syntax", () => {
-    expect(parseQuery("-:p", ".")[0]).toEqual({
-      type: "not",
-      expr: { type: "modifier", field: "is", value: "page" },
-    })
-  })
-})
-
 describe("extractArchiveReveal", () => {
   const ARCHIVED: QueryExpr = { type: "modifier", field: "is", value: "archived" }
 
@@ -509,12 +466,6 @@ describe("extractArchiveReveal", () => {
 
   it("bare is:archived degrades to the archived predicate", () => {
     const { reveal, stages } = extractArchiveReveal(parseQuery("is:archived", "."))
-    expect(reveal).toBe(true)
-    expect(stages).toEqual([ARCHIVED])
-  })
-
-  it("legacy :archived behaves the same", () => {
-    const { reveal, stages } = extractArchiveReveal(parseQuery(":archived", "."))
     expect(reveal).toBe(true)
     expect(stages).toEqual([ARCHIVED])
   })

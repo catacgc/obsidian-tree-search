@@ -10,13 +10,13 @@ export type QueryExpr =
   | { type: "not"; expr: QueryExpr }
   | { type: "and"; exprs: QueryExpr[] }
   | { type: "or"; exprs: QueryExpr[] }
-  // `exact`: a quoted `outline:"name"`, `:daily`, or a `[[note]]` (field `tree`), matched whole rather than as a fragment.
+  // `exact`: a quoted `outline:"name"` (e.g. `outline:":daily"`), or a `[[note]]` (field `tree`), matched whole rather than as a fragment.
   | { type: "modifier"; field: QueryModifierField; value: string; exact?: true }
 
 export const IS_VALUES = ["page", "header", "text", "folder", "attachment", "task", "subtask", "subtext", "list", "completed", "undated", "archived"]
 export const HAS_VALUES = ["emoji", "link", "page"]
 
-// `outline:` target written by the `:daily` shortcut: today's daily note, which
+// `outline:` target written as the quoted `outline:":daily"`: today's daily note, which
 // only the runtime can name (`SearchOptions.dailyNote`). A note name can't
 // contain ":", so it never collides with an `outline:<note>` value.
 export const DAILY_NOTE = ":daily"
@@ -54,21 +54,6 @@ export function parseDuration(value: string): number | null {
   const unit = UNIT_DAYS[m[2]]
   if (unit === undefined || n <= 0) return null
   return n * unit
-}
-
-const LEGACY_MODIFIERS: Record<string, { field: QueryModifierField; value: string; exact?: true }> = {
-  page: { field: "is", value: "page" },
-  header: { field: "is", value: "header" },
-  folder: { field: "is", value: "folder" },
-  attachment: { field: "is", value: "attachment" },
-  task: { field: "is", value: "task" },
-  subtask: { field: "is", value: "subtask" },
-  subtext: { field: "is", value: "subtext" },
-  list: { field: "is", value: "list" },
-  completed: { field: "is", value: "completed" },
-  archived: { field: "is", value: "archived" },
-  emoji: { field: "has", value: "emoji" },
-  daily: { field: "outline", value: DAILY_NOTE, exact: true },
 }
 
 function resolveUniquePrefix(candidates: string[], typed: string): string | null {
@@ -186,13 +171,6 @@ function matchField(word: string): { field: QueryModifierField; value: string; e
   return { field, value: resolved ?? typedValue }
 }
 
-function matchLegacyModifier(word: string): { field: QueryModifierField; value: string; exact?: true } | null {
-  const m = /^:([a-z]+)$/.exec(word)
-  if (!m) return null
-  const resolved = resolveUniquePrefix(Object.keys(LEGACY_MODIFIERS), m[1])
-  return resolved ? LEGACY_MODIFIERS[resolved] : null
-}
-
 function parseTokens(tokens: Token[]): QueryExpr[] {
   let pos = 0
   const peek = (): Token | undefined => tokens[pos]
@@ -259,7 +237,7 @@ function parseTokens(tokens: Token[]): QueryExpr[] {
       return { type: "modifier", field: "tree", value: tok.value, exact: true }
     }
     if (tok.kind === "word") {
-      const modifier = matchField(tok.value) ?? matchLegacyModifier(tok.value)
+      const modifier = matchField(tok.value)
       if (modifier) return { type: "modifier", ...modifier }
       return { type: "contains", value: tok.value }
     }
@@ -387,7 +365,7 @@ export function collectModifiers(expr: QueryExpr, field: QueryModifierField): Qu
 
 // ── Archive reveal ──────────────────────────────────────────────────────────────
 //
-// `is:archived` / `:archived` is not an ordinary matcher — as a matcher it would
+// `is:archived` is not an ordinary matcher — as a matcher it would
 // mean "AND archived" (only-archived), but the intent is a *reveal toggle*: keep
 // the normal results and additionally show archived items (greyed). So it is
 // extracted from the query into a `reveal` flag and stripped from matching, with
@@ -447,7 +425,7 @@ export function extractArchiveReveal(stages: QueryExpr[]): { reveal: boolean; st
 
 // ── Outline / tree scope ────────────────────────────────────────────────────────
 //
-// `outline:<note>` / `:daily` is not a per-node matcher either: it restricts the
+// `outline:<note>` / `outline:":daily"` is not a per-node matcher either: it restricts the
 // whole search to one note's own outline (searchIndex). `[[note]]` restricts
 // it to the note's full subtree: all edges the search would follow, from any
 // file. Their targets are collected from anywhere in the query and the modifiers
@@ -455,7 +433,7 @@ export function extractArchiveReveal(stages: QueryExpr[]): { reveal: boolean; st
 // scope collapses to empty (matches all). A negated `-outline:`/`-[[note]]` is
 // dropped without scoping.
 
-/** A note named by `outline:`/`[[note]]`: `exact` names it whole (quoted, `:daily`, or a link); otherwise `value` is a fragment. */
+/** A note named by `outline:`/`[[note]]`: `exact` names it whole (quoted, e.g. `outline:":daily"`, or a link); otherwise `value` is a fragment. */
 export type ScopeTarget = { value: string; exact: boolean }
 
 type ScopeTargets = { outline: ScopeTarget[]; tree: ScopeTarget[] }

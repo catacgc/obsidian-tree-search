@@ -12,6 +12,7 @@ import {SearchAutocomplete} from "./SearchAutocomplete";
 import {EditorMolecule} from "../editor/EditorMolecule";
 import {linkPasteEdit} from "../editor/clipboard";
 import {canMoveUnderNewPage} from "./chain";
+import {isFilterSuggestion} from "./search-filter";
 
 export type SearchBarProps = {
     isQuickLink: boolean
@@ -119,7 +120,8 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
 
     // During a chain (`>` append, `<` Move to), Escape leaves it (clears the chips, restores the query) instead of
     // closing the modal, and Alt+Enter opens an append chain in the editor (Obsidian's hotkeys would take it before
-    // React sees it). Claimed through an Obsidian Scope (like the action panel), pushed only while the input has focus.
+    // React sees it). While the autocomplete is open, Escape closes only it. Claimed through an Obsidian Scope (like
+    // the action panel), pushed only while the input has focus and a chain or the autocomplete is open.
     const app = useAtomValue(GlobalAtoms.appAtom)
     const scopeRef = useRef<Scope | null>(null)
     const escapeRef = useRef<() => void>(() => {})
@@ -144,10 +146,11 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
         app.keymap.popScope(scopeRef.current)
         scopeRef.current = null
     }
+    const claimKeys = chain !== null || suggestions.length > 0
     useEffect(() => {
-        if (chain && document.activeElement === inputRef.current) pushScope()
-        else if (!chain) popScope()
-    }, [chain])
+        if (claimKeys && document.activeElement === inputRef.current) pushScope()
+        else if (!claimKeys) popScope()
+    }, [claimKeys])
     useEffect(() => popScope, [])
 
     const setSearch = (search: string) => {
@@ -181,7 +184,8 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
             setSuggestionIndex((suggestionIndex + 1) % suggestions.length)
         } else if (ev.key === "ArrowUp") {
             setSuggestionIndex((suggestionIndex - 1 + suggestions.length) % suggestions.length)
-        } else if (ev.key === "Enter" && !ev.altKey && !ev.shiftKey && isDateSuggestion(suggestions[suggestionIndex])) {
+        } else if (ev.key === "Enter" && !ev.altKey && !ev.shiftKey
+            && (isDateSuggestion(suggestions[suggestionIndex]) || isFilterSuggestion(suggestions[suggestionIndex]))) {
             acceptSuggestion(suggestions[suggestionIndex])
         } else if (ev.key === "Tab") {
             acceptSuggestion(suggestions[suggestionIndex])
@@ -315,7 +319,7 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
                         onKeyDown={handleKeyDown}
                         onPaste={onPaste}
                         onSelect={ev => { updateCursor(ev); repositionSuggestions() }}
-                        onFocus={() => { if (chain) pushScope() }}
+                        onFocus={() => { if (claimKeys) pushScope() }}
                         onBlur={popScope}
                         value={searchQuery.query}
                         placeholder={searchPlaceholder}

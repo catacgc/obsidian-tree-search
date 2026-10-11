@@ -3,7 +3,8 @@ import {advancedSearch, searchIndex, partitionArchived, parseQuery, extractArchi
 import SearchPage from "../SearchPage";
 import {MarkdownContextSettings} from "./ContextCodeBlock";
 import {useAtomValue} from "jotai";
-import {separatorAtom} from "../react-context/settings";
+import {searchFiltersAtom, separatorAtom} from "../react-context/settings";
+import {expandFilterRefs} from "../search/search-filter";
 import {GlobalAtoms} from "../react-context/global";
 
 export type InlineMarkdownResultsProps = {
@@ -14,6 +15,7 @@ export const InlineMarkdownResults: React.FC<InlineMarkdownResultsProps> = (prop
     const {settings} = props
     const graph = useAtomValue(GlobalAtoms.graphAtom)
     const separator = useAtomValue(separatorAtom)
+    const filters = useAtomValue(searchFiltersAtom)
     const index = useAtomValue(GlobalAtoms.indexAtom)
 
     const children = settings.heading ? settings.basename + ' > ' + settings.heading : settings.basename;
@@ -22,7 +24,8 @@ export const InlineMarkdownResults: React.FC<InlineMarkdownResultsProps> = (prop
     // Results go through SearchPage's own searchFn so they land in the molecule its
     // ScopeProvider creates; a molecule resolved out here was a different instance.
     const search = (query: string) => {
-        const combinedQuery = `${settings.query} . ${query}`
+        // `query` (typed in the block's search) arrives expanded from SearchPage.
+        const combinedQuery = `${expandFilterRefs(settings.query, filters, separator)} . ${query}`
         const { reveal } = extractArchiveReveal(parseQuery(combinedQuery, separator))
         const rawResults = settings.query && settings.inferred
             ? searchIndex(graph, combinedQuery, separator, index?.searchOptions())

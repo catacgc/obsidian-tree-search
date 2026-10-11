@@ -12,7 +12,7 @@ export type VaultIndex = {
   graph: NotesGraph
   settings: IndexSettings
   vaultName: string
-  /** Today's daily-note path (`:daily`), if the vault configures daily notes. */
+  /** Today's daily-note path (`outline:":daily"`), if the vault configures daily notes. */
   dailyNote: () => string | undefined
 }
 

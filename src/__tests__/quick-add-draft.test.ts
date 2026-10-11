@@ -73,4 +73,10 @@ describe("filter pills in data.json", () => {
         expect(b.get(searchFiltersAtom)).toEqual(filters)
         expect("searchFilters" in getSettings(b)).toBe(false)
     })
+
+    it("rewrites a saved name with spaces so it can be typed as a :Name reference", () => {
+        const store = createStore()
+        updateSettings(store, { ...throughJson(createStore()), searchFilters: [{ name: "Recent tasks", query: "in:7d" }] })
+        expect(store.get(searchFiltersAtom)).toEqual([{ name: "Recent-tasks", query: "in:7d" }])
+    })
 })

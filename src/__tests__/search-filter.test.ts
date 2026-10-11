@@ -1,6 +1,9 @@
 import { describe, it, expect } from "bun:test"
-import { filterNameHints, hasFilter, saveFilter, toggleFilter } from "../view/search/search-filter"
+import { parseQuery } from "@mdtree/core"
+import { expandFilterRefs, filterActive, filterNameHints, filterSuggestionsAt, hasFilter, saveFilter, scanFilterRefs, toggleFilterPill } from "../view/search/search-filter"
 import { DEFAULT_SEARCH_FILTERS } from "../view/react-context/settings"
+
+const F = [{ name: "Tasks", query: "is:task" }, { name: "Work", query: "is:task -home" }, { name: "Home", query: "is:task home" }]
 
 describe("hasFilter", () => {
     it("detects only a standalone is:task token", () => {
@@ -23,19 +26,70 @@ describe("hasFilter", () => {
     })
 })
 
-describe("toggleFilter", () => {
-    it("appends is:task when absent and removes it when present", () => {
-        expect(toggleFilter("", "is:task")).toBe("is:task")
-        expect(toggleFilter("foo  ", "is:task")).toBe("foo is:task")
-        expect(toggleFilter("foo is:task bar", "is:task")).toBe("foo bar")
-        expect(toggleFilter("is:task foo", "is:task")).toBe("foo")
-        expect(toggleFilter("foo is:task", "is:task")).toBe("foo")
-        expect(toggleFilter("-is:task", "is:task")).toBe("-is:task is:task")
+describe("scanFilterRefs", () => {
+    it("finds :name and -:name words, not colons inside words, quotes or links", () => {
+        const refs = scanFilterRefs('a :Tasks -:work b:c 10:30 ":q" [[:z]] (:p|:h) x-:y')
+        expect(refs.map(r => [r.name, r.negated])).toEqual([["Tasks", false], ["work", true], ["p", false], ["h", false]])
+    })
+})
+
+describe("expandFilterRefs", () => {
+    it("replaces a known reference (any case) with its query in parentheses; unknown names stay", () => {
+        expect(expandFilterRefs(":Tasks foo", F, ".")).toBe("(is:task) foo")
+        expect(expandFilterRefs("-:tasks", F, ".")).toBe("-(is:task)")
+        expect(expandFilterRefs(":nope x", F, ".")).toBe(":nope x")
     })
 
-    it("appends a multi-token filter as stored and removes it whole", () => {
-        expect(toggleFilter("foo", " is:task  #work ")).toBe("foo is:task  #work")
-        expect(toggleFilter("a is:task #work b", "is:task #work")).toBe("a b")
+    it("negates a multi-term filter as a whole", () => {
+        expect(parseQuery(expandFilterRefs("-:Work", F, "."), ".")).toEqual(parseQuery("-(is:task -home)", "."))
+    })
+
+    it("expands references inside a filter's query", () => {
+        expect(expandFilterRefs(":A", [{ name: "A", query: ":B x" }, { name: "B", query: "is:task" }], ".")).toBe("((is:task) x)")
+    })
+
+    it("leaves a cyclic reference as typed", () => {
+        expect(expandFilterRefs(":A", [{ name: "A", query: ":B" }, { name: "B", query: ":A" }], ".")).toBe("((:A))")
+    })
+
+    it("keeps a filter with stages unwrapped so its stages stay top-level", () => {
+        expect(expandFilterRefs("foo :S", [{ name: "S", query: "work . is:task" }], ".")).toBe("foo work . is:task")
+    })
+})
+
+describe("filterActive", () => {
+    it("is true for a non-negated reference or the filter's query text", () => {
+        expect([":tasks foo", "-:Tasks", "is:task", ":Taskss"].map(q => filterActive(q, F[0]))).toEqual([true, false, true, false])
+    })
+})
+
+describe("toggleFilterPill", () => {
+    it("appends the reference when inactive and removes references and query text when active", () => {
+        expect(toggleFilterPill("foo", F[0])).toBe("foo :Tasks")
+        expect(toggleFilterPill("", F[0])).toBe(":Tasks")
+        expect(toggleFilterPill("foo :tasks bar", F[0])).toBe("foo bar")
+        expect(toggleFilterPill(":Tasks is:task x", F[0])).toBe("x")
+        expect(toggleFilterPill("-:Tasks", F[0])).toBe("-:Tasks :Tasks")
+    })
+})
+
+describe("filterSuggestionsAt", () => {
+    it("offers every filter for a bare `:`, in saved order", () => {
+        expect(filterSuggestionsAt(":", 1, F).map(s => s.filterName)).toEqual(["Tasks", "Work", "Home"])
+    })
+
+    it("narrows by prefix, case-insensitive, and adds a space unless one follows", () => {
+        expect(filterSuggestionsAt("x :t", 4, F)).toEqual([{ label: ":Tasks", insertText: ":Tasks ", detail: "is:task", filterName: "Tasks" }])
+        expect(filterSuggestionsAt(":t x", 2, F)[0].insertText).toBe(":Tasks")
+    })
+
+    it("keeps a negation", () => {
+        expect(filterSuggestionsAt("-:w", 3, F)[0].insertText).toBe("-:Work ")
+    })
+
+    it("offers nothing for a complete name or a colon inside a word", () => {
+        expect(filterSuggestionsAt(":tasks", 6, F)).toEqual([])
+        expect(filterSuggestionsAt("a:t", 3, F)).toEqual([])
     })
 })
 
@@ -51,13 +105,17 @@ describe("filterNameHints", () => {
     it("accepts a new name", () => {
         expect(filterNameHints("Work", DEFAULT_SEARCH_FILTERS)).toEqual([])
     })
+
+    it("blocks a name that can't be one query word", () => {
+        expect(filterNameHints("Recent tasks", F)).toEqual([{ text: 'Use letters, digits, "-" or "_"', blocking: true }])
+    })
 })
 
 describe("saveFilter", () => {
     const filters = [{ name: "Tasks", query: "is:task" }, { name: "Work", query: "#work" }]
 
-    it("appends a new name, normalizing its spacing", () => {
-        expect(saveFilter(filters, "  Recent   tasks ", "in:7d")).toEqual([...filters, { name: "Recent tasks", query: "in:7d" }])
+    it("appends a new name, trimmed", () => {
+        expect(saveFilter(filters, "  Recent-tasks ", "in:7d")).toEqual([...filters, { name: "Recent-tasks", query: "in:7d" }])
     })
 
     it("replaces the filter with the same name in place, ignoring case", () => {

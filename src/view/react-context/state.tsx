@@ -2,7 +2,7 @@ import {TreeNode} from '../search/SearchViewFlatten'
 import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, linkTargetTree, type QueryExpr, partitionArchived, extractArchiveReveal, suggestAt, dateSuggestAt, type Suggestion, parseDuration, flattenIndex, defaultVisibility, blockFooters, pruneToRecency} from '@mdtree/core'
 import {atom, useAtomValue, type Getter, type Setter} from 'jotai'
 import {findTargetRow, revealRow, rowTargets, type RowTarget} from '../search/select-target'
-import {toggleFilter} from '../search/search-filter'
+import {expandFilterRefs, filterSuggestionsAt, toggleFilterPill} from '../search/search-filter'
 import {buildTimelineRows, tagOutlineParents} from '../search/timeline-utils'
 import {chainOutline, chainPrevQuery, chainReplacesSearch, chainResults, isEntryInput, isMovable, isPatchable, parseChainEntry, rowLabel, type ChainOutline, type ChainState, type RowRef} from '../search/chain'
 import {basenameOf, dailyConfigOf, searchModalTitle} from '../editor/draft'
@@ -13,7 +13,7 @@ type SearchQuery = { query: string; file?: string; heading?: string }
 import {createScope, molecule} from "bunshi";
 import {App, Notice} from "obsidian";
 import {GlobalAtoms} from "./global";
-import {searchViewModesAtom, separatorAtom, type SearchViewMode} from "./settings";
+import {searchFiltersAtom, searchViewModesAtom, separatorAtom, type SearchFilter, type SearchViewMode} from "./settings";
 import {atomWithDefault} from "jotai/utils";
 import {withAtomEffect} from "jotai-effect";
 
@@ -133,14 +133,14 @@ export const GlobalAppMolecule = molecule((_, scope) => {
 })
 
 /** The editor's link list without a parent and no `[[` open: the outline of today's daily note. */
-export const DAILY_OUTLINE_QUERY = ":daily :page"
+export const DAILY_OUTLINE_QUERY = 'outline:":daily" is:page'
 
 /** The editor's link list while no `[[` is open: the full tree of the outline's note nearest the caret (caretNote)
  *  as `[[P]]`; else, for an Append under a picked line, the outline of that line's note (`underLinePath`); else
  *  today's daily outline. A name with `[` or `]` can't be written as a link, so it counts as none. */
 export const quickAddDefaultQuery = (parentName: string | undefined, underLinePath?: string): string =>
     parentName && !/[[\]]/.test(parentName) ? `[[${parentName}]]`
-    : underLinePath ? `outline:"${underLinePath.replace(/\.md$/, "")}" :page`
+    : underLinePath ? `outline:"${underLinePath.replace(/\.md$/, "")}" is:page`
     : DAILY_OUTLINE_QUERY
 
 export const SearchModalMolecule = molecule((mol, scope) => {
@@ -162,19 +162,20 @@ export const SearchModalMolecule = molecule((mol, scope) => {
         const graph = get(GlobalAtoms.graphAtom)
         const separator = get(separatorAtom)
         const options = get(GlobalAtoms.indexAtom)?.searchOptions()
+        const searchText = get(searchMol.searchTextAtom)
 
         if (scp.isQuickLink) {
             // Insert Link offers only link targets: notes and headers whose own name/alias/heading
             // matches the query, archived rows hidden. Its input is typed without `[[`.
-            set(searchMol.updateSearchResultsAtom, linkTargetTree(graph, searchQuery, separator), 0)
+            set(searchMol.updateSearchResultsAtom, linkTargetTree(graph, searchText, separator), 0)
             return
         }
 
-        const searchResults = searchIndex(graph, searchQuery, separator, options)
+        const searchResults = searchIndex(graph, searchText, separator, options)
 
         // `is:archived` reveals (rather than hides) archived rows; its presence
         // in the query flips partitioning from drop-with-count to keep-and-grey.
-        const { reveal } = extractArchiveReveal(parseQuery(searchQuery, separator))
+        const { reveal } = extractArchiveReveal(parseQuery(searchText, separator))
         const { visible, archivedCount } = partitionArchived(searchResults, reveal)
         set(searchMol.updateSearchResultsAtom, visible, archivedCount)
     })
@@ -193,6 +194,8 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         scp.isModal ? get(lastSearchAtom) : {query: ""})
 
     const actualQueryAtom = atom<string>(get => get(searchQueryAtom).query)
+    /** The query as searched: `:Name` filter references expanded (expandFilterRefs). The input shows actualQueryAtom. */
+    const searchTextAtom = atom<string>(get => expandFilterRefs(get(actualQueryAtom), get(searchFiltersAtom), get(separatorAtom)))
     const selectedLineValueAtom = atom(-1)
     /** Row to re-find on every recompute while the query is unchanged (a save's follow-up reindexes, a modal's mount-time rebuild); any user selection drops it. */
     const selectAnchorAtom = atom<{targets: RowTarget[]; flash: boolean; query: string} | null>(null)
@@ -566,7 +569,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     })
 
     const matchTermsAtom = atom<string[]>((get) => {
-        const query = get(actualQueryAtom)
+        const query = get(searchTextAtom)
         if (!query) return []
         const separator = get(separatorAtom)
         return parseQuery(query, separator).flatMap(extractTerms)
@@ -576,7 +579,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     // match no stage are pure ancestor/descendant context and get dimmed).
     // Empty when there is no query.
     const matchExprsAtom = atom<QueryExpr[]>((get) => {
-        const query = get(actualQueryAtom)
+        const query = get(searchTextAtom)
         if (!query) return []
         const separator = get(separatorAtom)
         // Strip `is:archived` (a reveal toggle, not a matcher) so it never drives
@@ -591,7 +594,9 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         const cursorPos = get(cursorPosAtom)
         // An append chain's task entry (`[ ] call Bob @tom`) offers scheduled dates instead of query syntax.
         const dates = get(chainAtom)?.mode === "append" ? dateSuggestAt(query, cursorPos, new Date()) : []
-        return dates.length > 0 ? dates : suggestAt(query, cursorPos)
+        if (dates.length > 0) return dates
+        const filterHits = filterSuggestionsAt(query, cursorPos, get(searchFiltersAtom))
+        return filterHits.length > 0 ? filterHits : suggestAt(query, cursorPos)
     })
 
     const suggestionsDismissedAtom = atom(false)
@@ -631,9 +636,9 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         set(focusSearchInputAtom, get(focusSearchInputAtom) + 1)
     })
 
-    /** Filter pill: adds or removes the filter's query in the search query (toggleFilter). */
-    const toggleFilterAtom = atom(null, (get, set, filterQuery: string) => {
-        const next = toggleFilter(get(searchQueryAtom).query, filterQuery)
+    /** Filter pill: adds or removes the filter's `:Name` reference in the search query (toggleFilterPill). */
+    const toggleFilterAtom = atom(null, (get, set, filter: SearchFilter) => {
+        const next = toggleFilterPill(get(searchQueryAtom).query, filter)
         set(searchQueryAtom, {query: next})
         set(lastSearchAtom, {query: next})
     })
@@ -663,7 +668,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         if (!chain) return
         const query = get(actualQueryAtom)
         const options = get(GlobalAtoms.indexAtom)?.searchOptions() ?? {}
-        const results = chainResults(get(GlobalAtoms.graphAtom), chain, query, get(separatorAtom), options, dailyNameOf(get))
+        const results = chainResults(get(GlobalAtoms.graphAtom), chain, query, get(searchTextAtom), get(separatorAtom), options, dailyNameOf(get))
         set(updateSearchResultsAtom, results)
     })
 
@@ -793,6 +798,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     return {
             scopeName: {name: scp.name, instance: instance},
             actualQueryAtom,
+            searchTextAtom,
             searchQueryAtom,
             searchResultsStateAtom,
             searchViewStateAtom,

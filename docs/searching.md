@@ -30,9 +30,11 @@ This is how you narrow a big topic to the part you care about, without rememberi
 
 ## Recency
 
-The chips above the results limit them by date: **All**, **7d**, **30d** and **1y**. You can also press <kbd>Alt</kbd>+<kbd>1</kbd> to <kbd>Alt</kbd>+<kbd>4</kbd>. After the `|` come your filter pills. Clicking a pill adds its query to the search, or removes it when it is already there. **Tasks** (`is:task`) is there to start with.
+The chips above the results limit them by date: **All**, **7d**, **30d** and **1y**. You can also press <kbd>Alt</kbd>+<kbd>1</kbd> to <kbd>Alt</kbd>+<kbd>4</kbd>. After the `|` come your filter pills. Clicking a pill adds its `:Name` reference to the search (for example `:Tasks`), or removes it when it is already there; a pill also shows as active when its query is typed out. **Tasks** (`is:task`) is there to start with.
 
-To make your own pill, type a query, open the action panel and choose **Save as Filter** in its **Filter** section, then name the pill and press <kbd>Enter</kbd>. If a pill with that name already exists, the editor says so and **Save** becomes **Replace**, which gives that pill the new query in its place. While a pill is active, the same section offers **Delete Filter** for it (for example **Delete Filter "Tasks"**), which removes the pill and leaves the query as it is. **Tasks** can be deleted like any other pill.
+You can also type a filter: `:` lists your filters, `:T` narrows them to **Tasks**, and <kbd>Tab</kbd> or <kbd>Enter</kbd> inserts `:Tasks`. While the list is open, the pills it offers are highlighted. See [Saved filters](query-language.md#saved-filters--name).
+
+To make your own pill, type a query, open the action panel and choose **Save as Filter** in its **Filter** section, then name the pill and press <kbd>Enter</kbd>. A name is one word of letters, digits, `-` and `_`, so it can be typed as `:Name`; a name saved earlier with spaces now loads with `-` in their place. If a pill with that name already exists, the editor says so and **Save** becomes **Replace**, which gives that pill the new query in its place. While a pill is active, the same section offers **Delete Filter** for it (for example **Delete Filter "Tasks"**), which removes the pill and leaves the query as it is. **Tasks** can be deleted like any other pill.
 
 In Tree mode, a recency chip prunes the tree to branches with recent activity.
 
