@@ -56,6 +56,12 @@ curl --unix-socket "/tmp/mdtree-Obsidian Vault.sock" "http://localhost/?query=wo
 | CLI parse cache | `<vault>/.mdtree/cache.json` |
 | Plugin parse cache | `<vault>/.obsidian/plugins/tree-search/parse-cache.json` |
 
+## Releasing
+
+- Set the same version in `package.json` and `manifest.json`, and add it to `versions.json` (mapped to `minAppVersion`).
+- Add a `## <version>` section to `CHANGELOG.md`.
+- Pushing a tag named exactly `<version>`, with no `v` prefix, runs `.github/workflows/main.yml`. The workflow checks the tag against `manifest.json`, builds, and publishes `dist/main.js`, `manifest.json` and `styles.css`. The release body is that version's `CHANGELOG.md` section; the step fails if the section is missing. The settings tab's "What's new" link opens this release page.
+
 ## Architecture
 
 ### `@mdtree/core` must stay I/O-free

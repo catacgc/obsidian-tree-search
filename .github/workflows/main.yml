@@ -25,10 +25,15 @@ jobs:
         run: test "$(jq -r .version manifest.json)" = "$GITHUB_REF_NAME"
       - name: Build
         run: bun run build
+      - name: Release notes from CHANGELOG.md
+        run: |
+          awk -v v="## $GITHUB_REF_NAME" '$0 == v {on=1; next} /^## / {on=0} on' CHANGELOG.md > release-notes.md
+          test -s release-notes.md
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ github.ref_name }}
+          body_path: release-notes.md
           generate_release_notes: true
           files: |
             dist/main.js
