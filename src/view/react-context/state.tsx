@@ -4,7 +4,7 @@ import {atom, useAtomValue, type Getter, type Setter} from 'jotai'
 import {findTargetRow, revealRow, rowTargets, type RowTarget} from '../search/select-target'
 import {toggleTaskFilter} from '../search/task-filter'
 import {buildTimelineRows} from '../search/timeline-utils'
-import {chainOutline, chainResults, isEntryInput, isMovable, parseChainEntry, rowLabel, type ChainOutline, type ChainState, type RowRef} from '../search/chain'
+import {chainOutline, chainResults, isEntryInput, isMovable, isPatchable, parseChainEntry, rowLabel, type ChainOutline, type ChainState, type RowRef} from '../search/chain'
 import {basenameOf, dailyConfigOf, searchModalTitle} from '../editor/draft'
 import {dailyNotePath} from '../../editing/vault-edits'
 import {dragInfo, INLINE_LINK_REFUSAL, treeParentPos} from '../editor/row-editing'
@@ -299,6 +299,16 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         const sel = get(selectedLineAtom)
         if (sel == -1) return null
         return get(treeNodesAtom)[sel] ?? null
+    })
+
+    /** In an append chain with nothing to write (the input searches under the chips), the selected row Enter adds as
+     *  the next chip, as `>` does; null otherwise. */
+    const chainPatchRowAtom = atom<TreeNode | null>(get => {
+        const chain = get(chainAtom)
+        if (chain?.mode !== "append" || get(chainWriteAtom) !== null) return null
+        if (chain.steps.some(s => s.kind === "entry") || isEntryInput(get(actualQueryAtom))) return null
+        const sel = get(selectedNodeAtom)
+        return sel && !sel.archiveRow && isPatchable(sel.node) ? sel : null
     })
 
     // Per-view (scope name) Tree/Timeline mode, persisted to data.json by main.ts.
@@ -793,7 +803,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             allowTimeline: scp.allowTimeline,
             allowEditing: scp.allowEditing,
             flashLineAtom,
-            chainAtom, chainWriteAtom, refreshChainResultsAtom, popChainAtom, cancelChainAtom, startReparentAtom, clearChainAtom,
+            chainAtom, chainWriteAtom, chainPatchRowAtom, refreshChainResultsAtom, popChainAtom, cancelChainAtom, startReparentAtom, clearChainAtom,
             editorOpenAtom, enterEditorAtom, leaveEditorAtom, searchModalTitleAtom,
     }
 })

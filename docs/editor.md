@@ -40,7 +40,7 @@ Run the **Tree Search: Quick Link** command while you are writing a note. Search
 
 ## Adding from Search
 
-In the Search modal or pane, select a row and type <kbd>&gt;</kbd>. It becomes a chip in the search box, and the search now looks under it. Type <kbd>&gt;</kbd> on a result to go deeper, or type what to add and press <kbd>&gt;</kbd> again to make it a chip:
+In the Search modal or pane, select a row and type <kbd>&gt;</kbd>. It becomes a chip in the search box, and the search now looks under it. Type <kbd>&gt;</kbd> or press <kbd>Enter</kbd> on a result to go deeper (the footer shows **Patch** and the result's name), or type what to add and press <kbd>&gt;</kbd> again to make it a chip:
 
 | Type | Adds |
 | --- | --- |

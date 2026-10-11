@@ -37,7 +37,7 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
         searchPlaceholderAtom, suggestionsAtom, suggestionIndexAtom, cursorPosAtom, dismissSuggestionsAtom,
         resetSuggestionsAtom, repositionSuggestionsAtom, focusSearchInputAtom,
         allowTimeline, timelineActiveAtom, toggleViewModeAtom, scopeName, allowEditing,
-        chainAtom, chainWriteAtom, popChainAtom, cancelChainAtom, startReparentAtom, clearChainAtom,
+        chainAtom, chainWriteAtom, chainPatchRowAtom, popChainAtom, cancelChainAtom, startReparentAtom, clearChainAtom,
         selectedNodeAtom, renderableTreeNodesAtom, toggleRowAtom,
     } = useMolecule(SearchViewMolecule)
     const {pushChainAtom, commitChainAtom, openChainEditorAtom, pasteIntoChainAtom, reparentChainAtom} = useMolecule(EditorMolecule)
@@ -45,6 +45,7 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
     const separator = useAtomValue(separatorAtom)
     const [chain, setChain] = useAtom(chainAtom)
     const chainWrite = useAtomValue(chainWriteAtom)
+    const chainPatchRow = useAtomValue(chainPatchRowAtom)
     const pushChain = useSetAtom(pushChainAtom)
     const commitChain = useSetAtom(commitChainAtom)
     const openChainEditor = useSetAtom(openChainEditorAtom)
@@ -206,9 +207,10 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
                 else setChain({...chain, confirm: name})
             }
         } else if (ev.key === "Enter" && chain?.mode === "append" && !ev.altKey && !ev.shiftKey) {
-            // No pending write: Enter opens the selected row (KeyComboWrapper).
-            if (chainWrite === null) return false
-            void commitChain()
+            // Nothing to write: Enter adds the selected row as the next chip (as `>` does), else opens it (KeyComboWrapper).
+            if (chainWrite !== null) void commitChain()
+            else if (chainPatchRow) void pushChain()
+            else return false
         } else if (ev.key === "Enter" && chain?.mode === "append" && ev.altKey) {
             void openChainEditor(null)
         } else {

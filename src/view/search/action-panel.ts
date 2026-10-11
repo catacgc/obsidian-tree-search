@@ -8,7 +8,7 @@ import {SHORTCUTS, type KeySpec, type ShortcutId} from "./shortcuts"
 import {
     appendTargetAt, deleteTargetOf, dragInfo, isEditableRow, isLinkLineRow, isValidDropTarget, type DeleteTarget, type OwnPath,
 } from "../editor/row-editing"
-import {isMovable} from "./chain"
+import {isMovable, isPatchable} from "./chain"
 import type {TaskChange} from "../../editing/vault-edits"
 
 export type PanelSection = "row" | "task" | "edit" | "view"
@@ -156,7 +156,7 @@ export function panelItems(ctx: PanelContext): PanelItem[] {
         if (target) items.push({id: "append", section: "edit", title: `Append to [[${target.parentName}]]`, icon: "append", key: keyOf("append"), run: {kind: "shortcut", id: "append"}})
         const type = row.node.nodeType
         // Patch: what typing `>` does (`>` is typed text, not a shortcut).
-        if (!row.archiveRow && ctx.chainMode !== "reparent" && (type === "page" || type === "header" || type === "text")) {
+        if (!row.archiveRow && ctx.chainMode !== "reparent" && isPatchable(row.node)) {
             items.push({id: "patch", section: "edit", title: "Patch", icon: "patch", run: {kind: "patch"}})
         }
         if (isEditableRow(row, ctx.ownPath, ctx.timelineActive) && !isLinkLineRow(row, ctx.ownPath, ctx.timelineActive)) {

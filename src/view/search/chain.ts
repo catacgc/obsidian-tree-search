@@ -73,6 +73,11 @@ export function isMovable(node: ParsedNode): boolean {
         || node.nodeType === "attachment" || node.nodeType === "folderNote"
 }
 
+/** Rows `>` (Patch) can add under: pages, headers and lines. */
+export function isPatchable(node: ParsedNode): boolean {
+    return node.nodeType === "page" || node.nodeType === "header" || node.nodeType === "text"
+}
+
 /** True when the moved row can go under a new `[[typed name]]` (pages and lines; folders and attachments need a folder). */
 export function canMoveUnderNewPage(node: ParsedNode): boolean {
     return node.nodeType === "page" || node.nodeType === "text"
