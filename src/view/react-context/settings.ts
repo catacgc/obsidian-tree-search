@@ -30,18 +30,26 @@ export const searchViewModesAtom = atom<SearchViewModes>({})
 // The editor's Append draft; kept until saved or discarded, persisted in data.json.
 export const appendDraftAtom = atom<EditorState | null>(null)
 
+/** A filter pill: `query` is toggled into/out of the search query (search-filter.ts). Names are unique (case-insensitive). */
+export type SearchFilter = {name: string; query: string}
+export const DEFAULT_SEARCH_FILTERS: SearchFilter[] = [{name: "Tasks", query: "is:task"}]
+// Kept apart from settingsAtom for the same reason as searchViewModesAtom. Persisted to data.json by main.ts.
+export const searchFiltersAtom = atom<SearchFilter[]>(DEFAULT_SEARCH_FILTERS)
+
 // Shape of data.json.
-export type PluginData = TreeSearchSettings & { searchViewModes?: SearchViewModes; quickAddDraft?: PersistedDraft }
+export type PluginData = TreeSearchSettings & { searchViewModes?: SearchViewModes; quickAddDraft?: PersistedDraft; searchFilters?: SearchFilter[] }
 
 export function updateSettings(store: GlobalStore, data: PluginData | null) {
-	const { searchViewModes, quickAddDraft, ...settings } = data ?? {}
+	const { searchViewModes, quickAddDraft, searchFilters, ...settings } = data ?? {}
 	store.set(settingsAtom, {...getSettings(store), ...settings})
 	store.set(searchViewModesAtom, searchViewModes ?? {})
 	store.set(appendDraftAtom, draftFromData(quickAddDraft))
+	// Absent: never saved, so the default pills; [] means the user deleted them all.
+	store.set(searchFiltersAtom, searchFilters ?? DEFAULT_SEARCH_FILTERS)
 }
 
 export function getPluginData(store: GlobalStore): PluginData {
-	return {...getSettings(store), searchViewModes: store.get(searchViewModesAtom), quickAddDraft: draftToData(store.get(appendDraftAtom))}
+	return {...getSettings(store), searchViewModes: store.get(searchViewModesAtom), quickAddDraft: draftToData(store.get(appendDraftAtom)), searchFilters: store.get(searchFiltersAtom)}
 }
 
 export function getSettings(store: GlobalStore) {

@@ -389,7 +389,7 @@ An append whose outline is `- #decision ship Friday` and whose `[[Project X]]` c
 - Alt+click must not also select or open the row: call `preventDefault()`. `handleTreeNodeClick` already returns early when the event is `defaultPrevented`.
 - **Edit line** in the action panel's Edit section, shown only for editable rows (titled **Rename** on header and attachment rows). This is the mobile entry point; on mobile a long-press opens the panel, not the editor.
 
-**Titles:** the editor's title (`editorTitle`) is `Edit <file>:<line>` for a line, `Rename <note>#<heading>` for a heading and `Rename <file name>` for an attachment. The Search modal's own title follows the view (`searchModalTitle`, `SearchViewMolecule.searchModalTitleAtom`): an Alt-Edit session shown in it takes the editor's title, which the editor then doesn't repeat; an append chain (§6a) is `Patch <last row chip>`; anything else `Search`.
+**Titles:** the editor's title (`editorTitle`) is `Edit <file>:<line>` for a line, `Rename <note>#<heading>` for a heading, `Rename <file name>` for an attachment and `Save Filter "<query>"` for the action panel's Save as Filter (an `editKind: "filter"` session whose outline holds the new pill's name; `filterNameHints` blocks a blank name and warns about an existing one, in which case the Save button reads **Replace** and `saveFilter` replaces that pill in place; Save returns to the search without writing to the vault). The Search modal's own title follows the view (`searchModalTitle`, `SearchViewMolecule.searchModalTitleAtom`): an Alt-Edit session shown in it takes the editor's title, which the editor then doesn't repeat; an append chain (§6a) is `Patch <last row chip>`; anything else `Search`.
 
 **Editable rows:**
 - text rows;

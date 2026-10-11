@@ -42,6 +42,11 @@ export function fileRenameState(path: string, name: string): EditorState {
     return {...emptySession(), mode: "edit", editKind: "file", sourcePath: path, originalLine: name, outline: stem, caret: stem.length}
 }
 
+/** A Save as Filter session for `query`: the outline holds the filter's name, prefilled with the query. */
+export function saveFilterState(query: string): EditorState {
+    return {...emptySession(), mode: "edit", editKind: "filter", sourcePath: "", filterQuery: query, outline: query, caret: query.length}
+}
+
 const INVALID_NAME_CHARS = new RegExp(INVALID_NAME_RE.source, "g")
 
 /** A new note's name from pasted prose: its first non-blank line without heading/bullet/checkbox markers or
@@ -74,14 +79,15 @@ export function draftFromData(d: PersistedDraft | undefined): EditorState | null
 
 /** The editor's title (rendered by InlineEditor in every host): `Add to <daily basename>`, `Add under "<line>"` for
  *  an Append under a picked line, `Edit <file basename>:<1-based line>` for an Alt-Edit session (`Rename <note>#<heading>`
- *  for a heading, `Rename <file name>` for an attachment), `Write <note basename>` / `New note from <file
- *  basename>:<1-based line>` for a prose session. */
+ *  for a heading, `Rename <file name>` for an attachment, `Save Filter "<query>"` for Save as Filter), `Write <note
+ *  basename>` / `New note from <file basename>:<1-based line>` for a prose session. */
 export function editorTitle(s: EditorState | null): string {
     if (!s) return "Quick Add"
     if (s.prose?.kind === "note") return `Write ${basenameOf(s.prose.path)}`
     if (s.prose?.kind === "new") return `New note from ${basenameOf(s.prose.link.path)}:${s.prose.link.line + 1}`
     if (s.mode === "append" && s.underLine) return `Add under "${s.underLine.label}"`
     if (s.mode !== "edit") return `Add to ${basenameOf(s.sourcePath)}`
+    if (s.editKind === "filter") return `Save Filter "${s.filterQuery}"`
     if (s.editKind === "file") return `Rename ${s.originalLine}`
     if (s.editKind === "heading") return `Rename ${basenameOf(s.sourcePath)}#${(s.originalLine ?? "").replace(/^#+\s*/, "").trim()}`
     return `Edit ${basenameOf(s.sourcePath)}:${(s.line ?? 0) + 1}`

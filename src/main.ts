@@ -9,7 +9,7 @@ import {ContextCodeBlock} from "./view/markdown-code-block/ContextCodeBlock";
 import {SearchModal} from "./view/search-modal/SearchModal";
 import {archiveLine, archivePage, highlightLine, insertLine, moveToFolder, openFileByName, revealFolder, showFolder, unarchiveLine, unarchivePage} from './obsidian-utils';
 import {createStore} from 'jotai';
-import {appendDraftAtom, getPluginData, getSettings, searchViewModesAtom, updateSettings} from './view/react-context/settings';
+import {appendDraftAtom, getPluginData, getSettings, searchFiltersAtom, searchViewModesAtom, updateSettings} from './view/react-context/settings';
 import './view/styles.css';
 import {GlobalAtoms} from "./view/react-context/global";
 import {resetDefaultInjector} from "bunshi";
@@ -155,8 +155,9 @@ export default class TreeSearchPlugin extends Plugin {
 
         this.addSettingTab(new SettingsTab(this.app, this));
         await this.loadSettings();
-        // Tree/Timeline toggles write searchViewModesAtom; persist each change.
+        // Tree/Timeline toggles and filter pills persist each change.
         this.register(this.globalStore.sub(searchViewModesAtom, () => { void this.saveSettings() }))
+        this.register(this.globalStore.sub(searchFiltersAtom, () => { void this.saveSettings() }))
         this.register(this.globalStore.sub(appendDraftAtom, () => this.saveDraft()))
 
         this.server = new RaycastServer(this.globalStore);

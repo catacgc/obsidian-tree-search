@@ -10,13 +10,16 @@ import {
 } from "../editor/row-editing"
 import {isMovable, isPatchable} from "./chain"
 import type {TaskChange} from "../../editing/vault-edits"
+import type {SearchFilter} from "../react-context/settings"
+import {hasFilter, sameFilterQuery} from "./search-filter"
 
-export type PanelSection = "row" | "task" | "edit" | "view"
+export type PanelSection = "row" | "task" | "edit" | "filter" | "view"
 
 export type PanelIcon =
     | "link" | "reveal" | "copy" | "insert" | "moveToFolder" | "archive" | "consolidate"
     | "done" | "schedule"
     | "append" | "edit" | "moveUnder" | "patch" | "rename" | "delete"
+    | "saveFilter" | "deleteFilter"
     | "quickAdd" | "tree" | "timeline" | "expand" | "collapse" | "refresh"
 
 export type PanelRun =
@@ -27,6 +30,8 @@ export type PanelRun =
     | {kind: "patch"}
     | {kind: "renameFile"; path: string}
     | {kind: "delete"}
+    | {kind: "saveFilter"}
+    | {kind: "deleteFilter"; name: string}
 
 export type PanelItem = {
     id: string
@@ -51,6 +56,10 @@ export type PanelContext = {
     /** The view's append-chain mode (`chainAtom`), or null with no chain. */
     chainMode: "append" | "reparent" | null
     resolveLink: ResolveLink
+    /** The search query (actualQueryAtom). */
+    query: string
+    /** The filter pills (searchFiltersAtom). */
+    filters: readonly SearchFilter[]
 }
 
 /** The vault path of the file `linkpath` resolves to from `sourcePath`, or null. */
@@ -97,7 +106,7 @@ export function deleteConfirmText(target: DeleteTarget, label: string): {title: 
     }
 }
 
-export const SECTION_TITLES: Record<Exclude<PanelSection, "row">, string> = {task: "Task", edit: "Edit", view: "View"}
+export const SECTION_TITLES: Record<Exclude<PanelSection, "row">, string> = {task: "Task", edit: "Edit", filter: "Filter", view: "View"}
 
 const keyOf = (id: ShortcutId): KeySpec | undefined => SHORTCUTS.find(s => s.id === id)?.keys[0]
 
@@ -171,6 +180,16 @@ export function panelItems(ctx: PanelContext): PanelItem[] {
         }
         if (deleteTargetOf(row, ctx.ownPath, ctx.timelineActive)) {
             items.push({id: "delete", section: "edit", title: "Delete", icon: "delete", run: {kind: "delete"}})
+        }
+    }
+
+    // Filter pills (Search modal and pane, which show the filter bar and the editor); not over a chain's sub-search.
+    if (ctx.allowEditing && ctx.allowTimeline && ctx.chainMode === null) {
+        if (ctx.query.trim() !== "" && !ctx.filters.some(f => sameFilterQuery(f.query, ctx.query))) {
+            items.push({id: "saveFilter", section: "filter", title: "Save as Filter", icon: "saveFilter", run: {kind: "saveFilter"}})
+        }
+        for (const f of ctx.filters) {
+            if (hasFilter(ctx.query, f.query)) items.push({id: `deleteFilter:${f.name}`, section: "filter", title: `Delete Filter "${f.name}"`, icon: "deleteFilter", run: {kind: "deleteFilter", name: f.name}})
         }
     }
 

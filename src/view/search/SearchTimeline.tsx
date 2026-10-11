@@ -13,7 +13,8 @@ import {AppendDot} from "../editor/AppendDot";
 import type {AppendTarget} from "../editor/row-editing";
 import {useRowGestures} from "./row-gestures";
 import {TaskCheckbox} from "./TaskCheckbox";
-import {hasTaskFilter} from "./task-filter";
+import {hasFilter} from "./search-filter";
+import {searchFiltersAtom} from "../react-context/settings";
 
 /** Enter/Space handler for a div-button chip: runs `run`, keeping KeyComboWrapper's Enter (open selection) from
  *  also firing. */
@@ -26,13 +27,15 @@ const chipKeys = (run: () => void) => (ev: React.KeyboardEvent) => {
 
 // Recency chips (All / 7d / 30d / 1y), in Tree and Timeline mode, filter the
 // results locally with `in:` semantics without touching the query. After a
-// separator, the Tasks chip toggles `is:task` in the query. Divs, not
+// separator, the user's filter pills (searchFiltersAtom; Tasks = `is:task` by
+// default) toggle their query in the search query. Divs, not
 // <button>s: Obsidian's button chrome breaks the layout (see SearchHelp's SyntaxRow).
 export const RecencyFilterBar = () => {
-    const {recencyWindowAtom, actualQueryAtom, toggleTaskFilterAtom} = useMolecule(SearchViewMolecule)
+    const {recencyWindowAtom, actualQueryAtom, toggleFilterAtom} = useMolecule(SearchViewMolecule)
     const [recencyWindow, setRecencyWindow] = useAtom(recencyWindowAtom)
     const query = useAtomValue(actualQueryAtom)
-    const toggleTasks = useSetAtom(toggleTaskFilterAtom)
+    const filters = useAtomValue(searchFiltersAtom)
+    const toggle = useSetAtom(toggleFilterAtom)
 
     return <div className="ts-timeline-filters">
         {RECENCY_WINDOWS.map(w => <div
@@ -44,9 +47,10 @@ export const RecencyFilterBar = () => {
             onClick={() => setRecencyWindow(w)}
             onKeyDown={chipKeys(() => setRecencyWindow(w))}
         >{w === "all" ? "All" : w}</div>)}
-        <span className="ts-timeline-filters-sep" aria-hidden="true">|</span>
-        <div role="button" tabIndex={0} className={`ts-timeline-chip ${hasTaskFilter(query) ? "is-active" : ""}`}
-             title="is:task" onClick={() => toggleTasks()} onKeyDown={chipKeys(toggleTasks)}>Tasks</div>
+        {filters.length > 0 && <span className="ts-timeline-filters-sep" aria-hidden="true">|</span>}
+        {filters.map(f => <div key={f.name} role="button" tabIndex={0}
+             className={`ts-timeline-chip ${hasFilter(query, f.query) ? "is-active" : ""}`}
+             title={f.query} onClick={() => toggle(f.query)} onKeyDown={chipKeys(() => toggle(f.query))}>{f.name}</div>)}
     </div>
 }
 

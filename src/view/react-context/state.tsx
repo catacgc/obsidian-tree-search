@@ -2,7 +2,7 @@ import {TreeNode} from '../search/SearchViewFlatten'
 import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, linkTargetTree, type QueryExpr, partitionArchived, extractArchiveReveal, suggestAt, dateSuggestAt, type Suggestion, parseDuration, flattenIndex, defaultVisibility, blockFooters, pruneToRecency} from '@mdtree/core'
 import {atom, useAtomValue, type Getter, type Setter} from 'jotai'
 import {findTargetRow, revealRow, rowTargets, type RowTarget} from '../search/select-target'
-import {toggleTaskFilter} from '../search/task-filter'
+import {toggleFilter} from '../search/search-filter'
 import {buildTimelineRows, tagOutlineParents} from '../search/timeline-utils'
 import {chainOutline, chainPrevQuery, chainReplacesSearch, chainResults, isEntryInput, isMovable, isPatchable, parseChainEntry, rowLabel, type ChainOutline, type ChainState, type RowRef} from '../search/chain'
 import {basenameOf, dailyConfigOf, searchModalTitle} from '../editor/draft'
@@ -631,9 +631,9 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         set(focusSearchInputAtom, get(focusSearchInputAtom) + 1)
     })
 
-    /** Tasks chip: adds or removes `is:task` in the query (toggleTaskFilter). */
-    const toggleTaskFilterAtom = atom(null, (get, set) => {
-        const next = toggleTaskFilter(get(searchQueryAtom).query)
+    /** Filter pill: adds or removes the filter's query in the search query (toggleFilter). */
+    const toggleFilterAtom = atom(null, (get, set, filterQuery: string) => {
+        const next = toggleFilter(get(searchQueryAtom).query, filterQuery)
         set(searchQueryAtom, {query: next})
         set(lastSearchAtom, {query: next})
     })
@@ -816,7 +816,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             matchExprsAtom,
             cursorPosAtom, suggestionsAtom, suggestionIndexAtom, dismissSuggestionsAtom, resetSuggestionsAtom,
             repositionSuggestionsAtom,
-            focusSearchInputAtom, appendQueryTokenAtom, toggleTaskFilterAtom,
+            focusSearchInputAtom, appendQueryTokenAtom, toggleFilterAtom,
             timelineActiveAtom, toggleViewModeAtom, recencyWindowAtom, rebuildResultsAtom,
             actionPanelAtom, openActionPanelAtom, closeActionPanelAtom, toggleActionPanelAtom,
             allowTimeline: scp.allowTimeline,

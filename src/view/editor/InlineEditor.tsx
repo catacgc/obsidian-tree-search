@@ -15,6 +15,8 @@ import {newNotePath, pasteAttachment, trashSessionAttachments} from "../../editi
 import type {TreeNode} from "../search/SearchViewFlatten";
 import {EditorMolecule, editorHintsFor, isSaveBlocked, type EditorState} from "./EditorMolecule";
 import {basenameOf, editorTitle} from "./draft";
+import {searchFiltersAtom} from "../react-context/settings";
+import {filterIndexNamed} from "../search/search-filter";
 import {LinkResults, useLinkSuggest, type LinkSuggestState} from "./LinkSuggest";
 import {useDateSuggest} from "./date-suggest";
 import {SearchAutocomplete} from "../search/SearchAutocomplete";
@@ -132,8 +134,8 @@ export function InlineEditor({state}: { state: EditorState }) {
     const append = state.mode === "append"
     /** Prose mode: the whole note as Markdown; keys, paste and links behave as in a content section. */
     const prose = state.mode === "prose"
-    /** Rename of an attachment: the outline holds its new name; no pastes of files, links or preview. */
-    const renaming = state.editKind === "file"
+    /** Rename of an attachment, or a new filter's name: the outline holds a name; no pastes of files, links or preview. */
+    const renaming = state.editKind === "file" || state.editKind === "filter"
     const parentName = state.parentName ?? ""
     const active = state.activeContent
     const contentText = active !== null ? state.contents[active] ?? "" : ""
@@ -143,9 +145,12 @@ export function InlineEditor({state}: { state: EditorState }) {
     const dateSuggest = useDateSuggest(state.outline, state.caret, focused === "outline", state.linePrefix ?? "")
     const outlineFieldRef = useRef<HTMLDivElement>(null)
 
-    const hintDeps = [app, state.outline, state.contents, state.contentOrder, state.attachments, state.mode, state.editKind, state.parentName, state.prose, state.proseConfirmed]
-    const hints = useMemo(() => editorHintsFor(app, state), hintDeps)
-    const blocked = useMemo(() => isSaveBlocked(app, state), hintDeps)
+    const filters = useAtomValue(searchFiltersAtom)
+    const hintDeps = [app, state.outline, state.contents, state.contentOrder, state.attachments, state.mode, state.editKind, state.parentName, state.prose, state.proseConfirmed, filters]
+    const hints = useMemo(() => editorHintsFor(app, state, filters), hintDeps)
+    const blocked = useMemo(() => isSaveBlocked(app, state, filters), hintDeps)
+    /** Save as Filter under an existing filter's name: Save replaces that filter. */
+    const replacing = state.editKind === "filter" && filterIndexNamed(state.outline, filters) >= 0
 
     // Where new notes created by this editor go (next to today's daily note, or the edited file).
     const contentSourcePath = (name: string) =>
@@ -707,7 +712,7 @@ export function InlineEditor({state}: { state: EditorState }) {
             </div>
             <div className="ts-editor-buttons">
                 <button className="ts-editor-button" onClick={discard}>{append ? "Discard" : "Cancel"}</button>
-                <button className="ts-editor-button ts-editor-save" disabled={blocked || state.saving} onClick={() => void save()}>Save</button>
+                <button className="ts-editor-button ts-editor-save" disabled={blocked || state.saving} onClick={() => void save()}>{replacing ? "Replace" : "Save"}</button>
             </div>
         </div>
     </div>

@@ -34,9 +34,10 @@ import {SearchViewMolecule, SearchViewScope} from "../react-context/state"
 import {GlobalAtoms} from "../react-context/global"
 import {applyEditorRequestAtom, type EditorRequest} from "../react-context/quick-add-flow"
 import {renamedFileTarget, rowTargets, type RowTarget} from "../search/select-target"
-import {appendDraftAtom, settingsAtom} from "../react-context/settings"
+import {appendDraftAtom, searchFiltersAtom, settingsAtom, type SearchFilter} from "../react-context/settings"
 import type {TreeNode} from "../search/SearchViewFlatten"
-import {basenameOf, dailyConfigOf, emptySession, fileRenameState, proseNameFrom} from "./draft"
+import {filterNameHints, saveFilter} from "../search/search-filter"
+import {basenameOf, dailyConfigOf, emptySession, fileRenameState, proseNameFrom, saveFilterState} from "./draft"
 import type {PasteData} from "./textarea-ops"
 import {
     appendToDailyNote,
@@ -101,8 +102,11 @@ export type EditorState = {
     /** Edit: the line as read from the file; Rename of a file: its current name. */
     originalLine?: string
     linePrefix?: string
-    /** Edit: a list line or a heading (Rename); "file": Rename of an attachment, the outline holds its name without extension. */
-    editKind?: "list" | "heading" | "file"
+    /** Edit: a list line or a heading (Rename); "file": Rename of an attachment, the outline holds its name without extension;
+     *  "filter": Save as Filter, the outline holds the new filter's name. */
+    editKind?: "list" | "heading" | "file" | "filter"
+    /** Save as Filter: the query the filter saves. */
+    filterQuery?: string
     /** Alt-Edit of a nested line (TextNode.nested): no default schedule. */
     nested?: boolean
     outline: string
@@ -138,7 +142,8 @@ export function makeOwnPath(graph: NotesGraph): OwnPath {
 }
 
 /** Footer hints for the editor's current buffers; blocking hints disable Save. */
-export function editorHintsFor(app: App, s: EditorState): EditorHint[] {
+export function editorHintsFor(app: App, s: EditorState, filters: readonly SearchFilter[]): EditorHint[] {
+    if (s.editKind === "filter") return filterNameHints(s.outline, filters)
     const exists = (name: string) => !!app.metadataCache.getFirstLinkpathDest(name, "")
     if (s.editKind === "file") {
         const name = s.originalLine ?? ""
@@ -178,8 +183,8 @@ const isRowLine = (head: string | null, node: ParsedNode): head is string =>
     head !== null && LIST_ITEM_RE.test(head) && lineHasIdentity(head, node)
 
 /** Save is disabled by any blocking hint, or by an Append outline that adds nothing. */
-export function isSaveBlocked(app: App, s: EditorState): boolean {
-    return editorHintsFor(app, s).some(h => h.blocking) || (s.mode === "append" && appendOutlineEmpty(s.outline, s.parentName))
+export function isSaveBlocked(app: App, s: EditorState, filters: readonly SearchFilter[]): boolean {
+    return editorHintsFor(app, s, filters).some(h => h.blocking) || (s.mode === "append" && appendOutlineEmpty(s.outline, s.parentName))
 }
 
 /** The Append outline steps of a Save: note patches (`patch:<name>`), then the outline (daily note, or under a line).
@@ -323,6 +328,9 @@ export const EditorMolecule = molecule((mol, scope) => {
         }
         set(showEditorAtom, {kind: "session", state: fileRenameState(file.path, file.name)})
     })
+
+    /** Save as Filter for `query`: the editor asks for the filter's name. */
+    const openSaveFilterAtom = atom(null, (_get, set, query: string) => set(showEditorAtom, {kind: "session", state: saveFilterState(query)}))
 
     const selectedPos = (get: Getter): {rows: TreeNode[]; pos: number} => {
         const rows = get(view.renderableTreeNodesAtom)
@@ -517,7 +525,15 @@ export const EditorMolecule = molecule((mol, scope) => {
         if (!start || start.saving) return
         const app = get(GlobalAtoms.appAtom)
         const index = get(GlobalAtoms.indexAtom)
-        if (isSaveBlocked(app, start)) return
+        if (isSaveBlocked(app, start, get(searchFiltersAtom))) return
+        // Save as Filter: adds the named pill, or replaces the one with that name; back to the search with its query
+        // and selection (nothing written to flash).
+        if (start.editKind === "filter") {
+            set(searchFiltersAtom, saveFilter(get(searchFiltersAtom), start.outline, start.filterQuery ?? ""))
+            set(editorStateAtom, null)
+            set(closeEditorAtom, {kind: "cancelled"})
+            return
+        }
         // Prose that rewrites the note's outline or frontmatter needs a second Save.
         if (!start.proseConfirmed && proseChangesOutline(start)) {
             set(editorStateAtom, {...start, proseConfirmed: true})
@@ -790,7 +806,7 @@ export const EditorMolecule = molecule((mol, scope) => {
 
     return {
         editorStateAtom, altHeldAtom, dragIndexAtom, dropTargetAtom, ownPathAtom,
-        updateEditorAtom, cancelEditorAtom, closeEditorAtom, openAppendAtom, openEditAtom, openRenameFileAtom,
+        updateEditorAtom, cancelEditorAtom, closeEditorAtom, openAppendAtom, openEditAtom, openRenameFileAtom, openSaveFilterAtom,
         openAppendForSelectedAtom, openEditForSelectedAtom, saveEditorAtom,
         clearDragAtom, reparentAtom, editTaskAtom, deleteRowAtom,
         reparentChainAtom, openProseAtom,

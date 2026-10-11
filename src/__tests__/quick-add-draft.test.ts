@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test"
 import { createStore } from "jotai"
-import { appendDraftAtom, getPluginData, updateSettings, type PluginData } from "../view/react-context/settings"
+import { appendDraftAtom, DEFAULT_SEARCH_FILTERS, getPluginData, getSettings, searchFiltersAtom, updateSettings, type PluginData } from "../view/react-context/settings"
 import type { GlobalStore } from "../view/react-context/global"
 import type { EditorState } from "../view/editor/EditorMolecule"
 
@@ -44,5 +44,33 @@ describe("Quick Add draft in data.json", () => {
         store.set(appendDraftAtom, draft())
         updateSettings(store, throughJson(createStore()))
         expect(store.get(appendDraftAtom)).toBeNull()
+    })
+})
+
+describe("filter pills in data.json", () => {
+    it("loading data without searchFilters gives the default pills", () => {
+        const store = createStore()
+        store.set(searchFiltersAtom, [])
+        const { searchFilters: _f, ...old } = throughJson(createStore())
+        updateSettings(store, old)
+        expect(store.get(searchFiltersAtom)).toEqual(DEFAULT_SEARCH_FILTERS)
+    })
+
+    it("keeps an emptied list empty, so a deleted Tasks doesn't come back", () => {
+        const a = createStore()
+        a.set(searchFiltersAtom, [])
+        const b = createStore()
+        updateSettings(b, throughJson(a))
+        expect(b.get(searchFiltersAtom)).toEqual([])
+    })
+
+    it("round-trips a custom list in order, outside the settings", () => {
+        const filters = [{ name: "Work", query: "#work" }, { name: "Tasks", query: "is:task" }]
+        const a = createStore()
+        a.set(searchFiltersAtom, filters)
+        const b = createStore()
+        updateSettings(b, throughJson(a))
+        expect(b.get(searchFiltersAtom)).toEqual(filters)
+        expect("searchFilters" in getSettings(b)).toBe(false)
     })
 })

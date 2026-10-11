@@ -4,6 +4,7 @@ import type { TreeNode } from "../view/search/SearchViewFlatten"
 import type { RaycastAction } from "../view/node-actions"
 import { deleteTargetOf, type OwnPath } from "../view/editor/row-editing"
 import { deleteConfirmText, filterPanelItems, moveUnderTargets, panelItems, type PanelContext } from "../view/search/action-panel"
+import { DEFAULT_SEARCH_FILTERS } from "../view/react-context/settings"
 
 const loc = (path: string, line: number) => ({ path, position: { start: { line, ch: 0 }, end: { line, ch: 0 } } })
 const base = (path: string, line: number) => ({ searchKey: "", location: loc(path, line), boost: 0, ageDays: 0 })
@@ -38,7 +39,8 @@ const ACTIONS: RaycastAction[] = [
 
 const ctx = (over: Partial<PanelContext> = {}): PanelContext => ({
     rowActions: ACTIONS, rows: tree, selectedPos: 1,
-    allowEditing: true, allowTimeline: true, timelineActive: false, ownPath, chainMode: null, resolveLink: () => null, ...over,
+    allowEditing: true, allowTimeline: true, timelineActive: false, ownPath, chainMode: null, resolveLink: () => null,
+    query: "", filters: [], ...over,
 })
 const titles = (c: PanelContext, section?: string) => panelItems(c).filter(i => !section || i.section === section).map(i => i.title)
 
@@ -132,6 +134,32 @@ describe("panelItems", () => {
         const c = ctx({ rows: tl, selectedPos: 0, timelineActive: true })
         expect(titles(c, "edit")).toEqual(["Append to [[Project X]]", "Patch", "Edit line", "Delete"])
         expect(titles(c, "view")).toEqual(["Quick Add", "Show tree", "Rebuild index"])
+    })
+
+    it("Filter: Save as Filter for a new query, Delete Filter for each active pill", () => {
+        const c = ctx({ query: "foo is:task", filters: DEFAULT_SEARCH_FILTERS })
+        expect(titles(c, "filter")).toEqual(["Save as Filter", 'Delete Filter "Tasks"'])
+        expect(panelItems(c).find(i => i.id === "deleteFilter:Tasks")?.run).toEqual({ kind: "deleteFilter", name: "Tasks" })
+    })
+
+    it("Filter: no Save when the query is a saved filter's, ignoring whitespace", () => {
+        expect(titles(ctx({ query: " is:task ", filters: DEFAULT_SEARCH_FILTERS }), "filter")).toEqual(['Delete Filter "Tasks"'])
+    })
+
+    it("Filter: nothing for a blank query", () => {
+        expect(titles(ctx({ query: "", filters: DEFAULT_SEARCH_FILTERS }), "filter")).toEqual([])
+    })
+
+    it("Filter: nothing over a chain or in views without editor mode", () => {
+        const over = { query: "is:task", filters: DEFAULT_SEARCH_FILTERS }
+        expect(titles(ctx({ ...over, chainMode: "append" }), "filter")).toEqual([])
+        expect(titles(ctx({ ...over, allowEditing: false }), "filter")).toEqual([])
+    })
+
+    it("Filter: after Edit, before View", () => {
+        const sections = panelItems(ctx({ query: "foo", filters: DEFAULT_SEARCH_FILTERS })).map(i => i.section)
+        expect(sections.lastIndexOf("edit")).toBeLessThan(sections.indexOf("filter"))
+        expect(sections.lastIndexOf("filter")).toBeLessThan(sections.indexOf("view"))
     })
 })
 

@@ -30,7 +30,9 @@ This is how you narrow a big topic to the part you care about, without rememberi
 
 ## Recency
 
-The chips above the results limit them by date: **All**, **7d**, **30d** and **1y**. You can also press <kbd>Alt</kbd>+<kbd>1</kbd> to <kbd>Alt</kbd>+<kbd>4</kbd>. After the `|`, the **Tasks** chip adds `is:task` to the query, or removes it when it is already there.
+The chips above the results limit them by date: **All**, **7d**, **30d** and **1y**. You can also press <kbd>Alt</kbd>+<kbd>1</kbd> to <kbd>Alt</kbd>+<kbd>4</kbd>. After the `|` come your filter pills. Clicking a pill adds its query to the search, or removes it when it is already there. **Tasks** (`is:task`) is there to start with.
+
+To make your own pill, type a query, open the action panel and choose **Save as Filter** in its **Filter** section, then name the pill and press <kbd>Enter</kbd>. If a pill with that name already exists, the editor says so and **Save** becomes **Replace**, which gives that pill the new query in its place. While a pill is active, the same section offers **Delete Filter** for it (for example **Delete Filter "Tasks"**), which removes the pill and leaves the query as it is. **Tasks** can be deleted like any other pill.
 
 In Tree mode, a recency chip prunes the tree to branches with recent activity.
 
