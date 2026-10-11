@@ -1,7 +1,7 @@
 // Per-view editor-mode state (EDITOR.md): the inline editor (Append draft / Alt-Edit /
 // prose), the Alt-held flag, drag state, and the save / reparent flows. Scoped like
-// SearchViewMolecule. The editor is shown by Quick Add (its own modal) and in place by the
-// Search modal and pane; requests change the draft or session through quick-add-flow.ts.
+// SearchViewMolecule. The editor is shown in place by the Search modal and pane; requests
+// change the draft or session through quick-add-flow.ts.
 import {atom, type Getter, type Setter} from "jotai"
 import {molecule} from "bunshi"
 import {Notice, type App, type TFile} from "obsidian"
@@ -32,7 +32,7 @@ import {
 } from "@mdtree/core"
 import {SearchViewMolecule, SearchViewScope} from "../react-context/state"
 import {GlobalAtoms} from "../react-context/global"
-import {applyEditorRequestAtom, leaveQuickAddAtom, type EditorRequest} from "../react-context/quick-add-flow"
+import {applyEditorRequestAtom, type EditorRequest} from "../react-context/quick-add-flow"
 import {renamedFileTarget, rowTargets, type RowTarget} from "../search/select-target"
 import {appendDraftAtom, settingsAtom} from "../react-context/settings"
 import type {TreeNode} from "../search/SearchViewFlatten"
@@ -65,6 +65,7 @@ import {appendTargetAt, classifyReparent, deleteTargetOf, isEditableRow, treePar
 import {
     chainEditorText,
     chainOutline,
+    chainPrevQuery,
     isEntryInput,
     parseChainEntry,
     planReparent,
@@ -267,23 +268,19 @@ export const EditorMolecule = molecule((mol, scope) => {
         await trashSessionAttachments(get(GlobalAtoms.appAtom), s.attachments)
     })
 
-    /** Shows `request` in this view's editor: the Search modal or pane switches to it; in Quick Add it replaces the shown session. */
+    /** Shows `request` in this view's editor: the Search modal or pane switches to it. */
     const showEditorAtom = atom(null, (_get, set, request: EditorRequest) => {
         set(applyEditorRequestAtom, request)
-        if (!scp.isQuickAdd) set(view.enterEditorAtom)
+        set(view.enterEditorAtom)
     })
 
-    /** Closes the editor: Quick Add closes its modal; a Search view returns to its search (`saved`: the written rows to select). */
+    /** Closes the editor, back to the view's search (`saved`: the written rows to select). */
     const closeEditorAtom = atom(null, (_get, set, exit: {kind: "saved"; targets: RowTarget[]} | {kind: "cancelled"}) => {
-        if (scp.isQuickAdd) set(leaveQuickAddAtom, {kind: exit.kind})
-        else set(view.leaveEditorAtom, {saved: exit.kind === "saved" ? exit.targets : null, focus: true})
+        set(view.leaveEditorAtom, {saved: exit.kind === "saved" ? exit.targets : null, focus: true})
     })
 
     /** Appends under `parentName`: the draft if it already targets it, else a fresh draft prefilled under it. */
     const openAppendAtom = atom(null, (_get, set, parentName: string) => set(showEditorAtom, {kind: "link", name: parentName}))
-
-    /** Shows the Append draft (a blank one if none); its roots go to today's daily note. */
-    const openBlankEditorAtom = atom(null, (_get, set) => set(showEditorAtom, {kind: "draft"}))
 
     const openEditAtom = atom(null, async (get, set, row: TreeNode) => {
         const app = get(GlobalAtoms.appAtom)
@@ -416,7 +413,7 @@ export const EditorMolecule = molecule((mol, scope) => {
             }
         }
         if (!step) return
-        set(view.chainAtom, {mode: "append", steps: [...steps, step]})
+        set(view.chainAtom, {...chain, mode: "append", steps: [...steps, step]})
         setViewQuery(set, "")
     })
 
@@ -461,13 +458,20 @@ export const EditorMolecule = molecule((mol, scope) => {
     })
 
     /** Alt+Enter in an append chain (or a list/file paste): opens the Outline editor on the chain's text, applying
-     *  `paste` once it mounts. Leaving the editor restores the query typed before the chain. */
+     *  `paste` once it mounts. Quick Add with nothing typed shows the Append draft instead. Leaving the editor restores
+     *  the query typed before the chain. */
     const openChainEditorAtom = atom(null, (get, set, paste: PasteData | null) => {
         const chain = get(view.chainAtom)
         if (chain?.mode !== "append") return
         const parsed = parseChainEntry(get(view.actualQueryAtom))
         if (parsed !== null && "error" in parsed) {
             new Notice(parsed.error)
+            return
+        }
+        if (chain.steps.length === 0 && parsed === null && paste === null) {
+            set(view.chainAtom, null)
+            setViewQuery(set, chainPrevQuery(chain))
+            set(showEditorAtom, {kind: "draft"})
             return
         }
         const o = chainOutline(chain.steps, parsed, dailyNameOf(get))
@@ -478,7 +482,7 @@ export const EditorMolecule = molecule((mol, scope) => {
         const {outline, caret} = chainEditorText(o)
         set(pendingPasteAtom, paste)
         set(view.chainAtom, null)
-        setViewQuery(set, chain.steps[0].prevQuery)
+        setViewQuery(set, chainPrevQuery(chain))
         set(showEditorAtom, {kind: "outline", parentName: o.parentName, underLine: o.underLine, outline, caret})
     })
 
@@ -495,11 +499,12 @@ export const EditorMolecule = molecule((mol, scope) => {
             return
         }
         const anchor = chain.steps[chain.steps.length - 1]
-        if (anchor.kind !== "row") return
+        if (anchor && anchor.kind !== "row") return
         const text = data.plain.replace(/\r\n?/g, "\n")
         set(view.chainAtom, null)
-        setViewQuery(set, chain.steps[0].prevQuery)
-        const a = anchor.anchor
+        setViewQuery(set, chainPrevQuery(chain))
+        // Quick Add before its first chip writes into today's daily note.
+        const a: ChainAnchor = anchor?.anchor ?? {kind: "today"}
         await set(openProseAtom,
             a.kind === "today" ? {kind: "note", noteName: null, text}
             : a.kind === "note" ? {kind: "note", noteName: a.name, text}
@@ -596,8 +601,6 @@ export const EditorMolecule = molecule((mol, scope) => {
             : s.prose?.kind === "new" ? [{path: s.prose.link.path, line: s.prose.link.line}, {key: `[[${s.prose.name.trim().toLowerCase()}]]`}]
             : s.editKind === "file" ? [renamedFileTarget(s.touchedPaths[s.touchedPaths.length - 1])]
             : [{path: s.sourcePath, line: s.line ?? 0}]
-        // Quick Add opens the Search modal after it closes; set before the refresh so its recompute re-finds the row.
-        if (scp.isQuickAdd) set(GlobalAtoms.pendingSelectAtom, {view: "modal", targets, flash: true})
         // A renamed path isn't reindexed by refreshPage (the index has no rename handler): rebuild it.
         if (s.editKind === "file") await index?.refresh()
         else await refreshPaths(app, index, s.touchedPaths)
@@ -787,7 +790,7 @@ export const EditorMolecule = molecule((mol, scope) => {
 
     return {
         editorStateAtom, altHeldAtom, dragIndexAtom, dropTargetAtom, ownPathAtom,
-        updateEditorAtom, cancelEditorAtom, closeEditorAtom, openAppendAtom, openBlankEditorAtom, openEditAtom, openRenameFileAtom,
+        updateEditorAtom, cancelEditorAtom, closeEditorAtom, openAppendAtom, openEditAtom, openRenameFileAtom,
         openAppendForSelectedAtom, openEditForSelectedAtom, saveEditorAtom,
         clearDragAtom, reparentAtom, editTaskAtom, deleteRowAtom,
         reparentChainAtom, openProseAtom,

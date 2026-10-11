@@ -46,7 +46,7 @@ Alt shortcuts match the physical key, so they work on macOS even though <kbd>⌥
 | --- | --- |
 | <kbd>Alt</kbd>+<kbd>A</kbd> | Append to the row's note |
 | <kbd>Alt</kbd>+<kbd>Enter</kbd> | Edit the row (Rename a heading or attachment) |
-| <kbd>Alt</kbd>+<kbd>N</kbd> | Open editor |
+| <kbd>Alt</kbd>+<kbd>N</kbd> | Quick Add: search to patch, or type to add to today |
 | <kbd>&gt;</kbd> | Add under the selected row (or today's note): it becomes a chip; typed text then becomes another chip |
 | <kbd>Enter</kbd> (with chips) | Write the chain; <kbd>Alt</kbd>+<kbd>Enter</kbd> continues in the editor |
 | <kbd>&lt;</kbd> | Move the selected page or line: search for its new parent |

@@ -29,6 +29,11 @@ describe("searchModalTitle", () => {
         expect(searchModalTitle(null, patch)).toBe("Patch Project X#Plan")
     })
 
+    it("names Quick Add until its first row chip", () => {
+        expect(searchModalTitle(null, { mode: "append", steps: [], quickAdd: { prevQuery: "" } })).toBe("Quick Add")
+        expect(searchModalTitle(null, { ...patch, quickAdd: { prevQuery: "" } })).toBe("Patch Project X#Plan")
+    })
+
     it("stays Search for reparent, Append and prose editors, and plain searching", () => {
         expect(searchModalTitle(null, null)).toBe("Search")
         expect(searchModalTitle(null, { mode: "reparent", child: { node: null as never, label: "x", parent: null }, prevQuery: "", confirm: null })).toBe("Search")

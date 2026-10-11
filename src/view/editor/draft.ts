@@ -88,12 +88,14 @@ export function editorTitle(s: EditorState | null): string {
 }
 
 /** The Search modal's title: what the modal is doing. An Alt-Edit session shown in it takes the editor's title (Edit /
- *  Rename), an append chain (`>`) is `Patch <anchor chip>`, anything else `Search`. */
+ *  Rename), an append chain (`>`) is `Patch <anchor chip>`, Quick Add before its first row chip `Quick Add`, anything
+ *  else `Search`. */
 export function searchModalTitle(session: EditorState | null, chain: ChainState | null): string {
     if (session?.mode === "edit") return editorTitle(session)
     if (chain?.mode === "append") {
         const anchor = chain.steps.filter(s => s.kind === "row").pop()
         if (anchor) return `Patch ${anchor.label}`
+        if (chain.quickAdd) return "Quick Add"
     }
     return "Search"
 }

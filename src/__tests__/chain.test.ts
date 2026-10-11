@@ -3,6 +3,8 @@ import { buildGraphFromScanner, getKey, type ParsedNode, type ResultNode, type V
 import {
     chainEditorText,
     chainOutline,
+    chainPrevQuery,
+    chainReplacesSearch,
     chainResults,
     isEntryInput,
     parseChainEntry,
@@ -200,5 +202,24 @@ describe("chainEditorText", () => {
         const o = chainOutline([row({ kind: "note", name: "P" })], null, "2026-09-30")
         if ("error" in o) throw new Error(o.error)
         expect(chainEditorText(o)).toEqual({ outline: "- [[P]]\n    - ", caret: 14 })
+    })
+})
+
+describe("Quick Add (chip-less append chain)", () => {
+    const quickAdd = (steps: ChainStep[] = []) => ({ mode: "append" as const, steps, quickAdd: { prevQuery: "before" } })
+
+    it("runs the view's search until a chip or entry input, then the chain's own results", () => {
+        expect(chainReplacesSearch(quickAdd(), "alpha")).toBe(false)
+        expect(chainReplacesSearch(quickAdd(), "- new item")).toBe(true)
+        expect(chainReplacesSearch(quickAdd([row({ kind: "note", name: "P" })]), "alpha")).toBe(true)
+    })
+
+    it("writes typed text into today's daily note, with no parent", () => {
+        expect(chainOutline([], parsed("- call Bob"), "2026-09-30")).toEqual({ lines: [{ depth: 0, marker: "- ", text: "call Bob" }], nextDepth: 1 })
+    })
+
+    it("restores the query typed before Quick Add, not the first chip's", () => {
+        expect(chainPrevQuery(quickAdd([{ ...row({ kind: "note", name: "P" }), prevQuery: "chip" }]))).toBe("before")
+        expect(chainPrevQuery({ mode: "append", steps: [{ ...row({ kind: "note", name: "P" }), prevQuery: "chip" }] })).toBe("chip")
     })
 })

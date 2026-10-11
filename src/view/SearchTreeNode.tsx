@@ -23,7 +23,7 @@ type SearchTreeNodePropsFlatten = {
     editable?: boolean;
     appendDot?: AppendTarget;
     editHint?: boolean;
-    /** Quick Add's link list: a click picks the row instead of selecting/opening it (its links included), and the
+    /** The editor's link list: a click picks the row instead of selecting/opening it (its links included), and the
      *  row never takes focus from the editor. */
     onPick?: (node: TreeNode) => void;
 };

@@ -19,7 +19,7 @@ export type ShortcutId =
     | "next" | "previous" | "open" | "reveal" | "actions"
     | "toggleView" | "recency" | "expand" | "collapse" | "collapseAll" | "refresh"
     | "copy" | "insertAfter" | "moveTo" | "archive" | "consolidate"
-    | "append" | "edit" | "newEditor"
+    | "append" | "edit" | "quickAdd"
 
 export type Shortcut = {
     id: ShortcutId
@@ -61,7 +61,7 @@ export const SHORTCUTS: Shortcut[] = [
 
     {id: "append", group: "Editor", keys: [alt("KeyA", "A")], description: "Append to the row's note", needs: "editing"},
     {id: "edit", group: "Editor", keys: [key(ENTER, "Enter", {macLabel: "↵", alt: true})], description: "Edit the row (Rename a heading or attachment)", needs: "editing"},
-    {id: "newEditor", group: "Editor", keys: [alt("KeyN", "N")], description: "Open editor", needs: "editing"},
+    {id: "quickAdd", group: "Editor", keys: [alt("KeyN", "N")], description: "Quick Add: search to patch, or type to add to today", needs: "editing"},
 ]
 
 /** Keys inside the inline editor's text fields (handled by InlineEditor; listed for help only). */

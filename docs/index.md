@@ -37,6 +37,6 @@ You can browse the [example vault sources on GitHub](https://github.com/catacgc/
 - [Building the tree](building-the-tree.md): how your notes become a tree, what gets indexed, and archiving.
 - [Searching](searching.md): the Search modal and pane, hierarchical search, recency, the timeline and actions.
 - [Query language](query-language.md): every operator, filter and shortcut.
-- [Editor](editor.md): Quick Add, inline editing and Quick Link.
+- [Editor](editor.md): Quick Add, adding from Search, inline editing and Quick Link.
 - [Panes & integrations](panes-and-integrations.md): File context, Consolidate notes, the `tree-context` code block, settings, Raycast and the CLI.
 - [Shortcuts](shortcuts.md): every keyboard shortcut.

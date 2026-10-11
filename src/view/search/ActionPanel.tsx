@@ -25,12 +25,12 @@ import {nodeLabel} from "./timeline-utils";
 const ICONS: Record<PanelIcon, LucideIcon> = {
     link: ExternalLink, reveal: FileSearch, copy: Copy, insert: CornerDownRight, moveToFolder: FolderInput,
     archive: Archive, consolidate: Combine, done: SquareCheck, schedule: CalendarArrowUp, append: CirclePlus, edit: Pencil,
-    moveUnder: ArrowRightLeft, openEditor: SquarePen, tree: ListTree, timeline: CalendarClock, expand: ChevronsUpDown,
+    moveUnder: ArrowRightLeft, quickAdd: SquarePen, tree: ListTree, timeline: CalendarClock, expand: ChevronsUpDown,
     collapse: ChevronsDownUp, refresh: RefreshCw, patch: ChevronRight, rename: TextCursorInput, delete: Trash2,
 }
 
 /** Panel items that open the inline editor, which takes focus; after any other item focus returns to the search. */
-const OPENS_EDITOR = new Set<ShortcutId>(["append", "edit", "newEditor"])
+const OPENS_EDITOR: Partial<Record<ShortcutId, true>> = {append: true, edit: true}
 
 /** Keycaps for a key (hidden on mobile, which has no keyboard shortcuts). */
 export const Keycaps = ({k}: {k?: KeySpec}) => {
@@ -123,7 +123,7 @@ const PanelBody = ({page, dockRef}: {page: ActionPanelPage; dockRef: React.RefOb
                 return
             }
             // Actions that open the inline editor leave focus to it; everything else returns to the search.
-            close(!(item.run.kind === "renameFile" || item.run.kind === "shortcut" && OPENS_EDITOR.has(item.run.id)))
+            close(!(item.run.kind === "renameFile" || item.run.kind === "shortcut" && OPENS_EDITOR[item.run.id]))
             if (item.run.kind === "action") void executeAction(item.run.action)
             else if (item.run.kind === "task") { if (selectedRow) void editTask(selectedRow.node, item.run.change) }
             else if (item.run.kind === "renameFile") openRenameFile(item.run.path)

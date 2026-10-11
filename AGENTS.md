@@ -177,9 +177,9 @@ Observed in prior runs; re-check command IDs with `app.commands.commands` if som
 | Search pane | `tree-search:parse-tree` | `.workspace-leaf-content[data-type="tree-search"]` (view type `tree-search`) |
 | Search modal | `tree-search:search-modal` | `.modal`, input `.modal input[type=search]` |
 | Quick Link | `tree-search:quick-link-modal` | `.modal` |
-| Quick Add | `tree-search:quick-add-modal` | `.modal` (title "Quick Add"); another modal (e.g. Search) may already be open underneath, so scope selectors to the last `.modal-container` |
+| Quick Add | `tree-search:quick-add-modal` (or `tree-search:open-editor`) | the Search modal in chip-less patch mode: `.modal`, title "Quick Add", placeholder "Search to patch, or type to add to today" |
 
-- Tree/Timeline toggle: button with `aria-label` `"Show timeline"` (tree mode) or `"Show tree"` (timeline mode). Shown only in the Search pane, Search modal and Quick Add; Quick Link has none.
+- Tree/Timeline toggle: button with `aria-label` `"Show timeline"` (tree mode) or `"Show tree"` (timeline mode). Shown only in the Search pane and Search modal; Quick Link has none.
 - Timeline rows are `.ts-timeline-row`, and they also carry `.tree-node`, so count `.ts-timeline-row` to tell modes apart rather than `.tree-node`. Recency chips are `.ts-timeline-chip` (active chip has `.is-active`); they show in both Tree and Timeline mode (views with the toggle). In Tree mode a window prunes via `pruneToRecency` (`packages/core/src/search/recency.ts`); the window is view-local and not persisted.
-- Per-view Tree/Timeline modes persist in `data.json` under `searchViewModes`, keyed by view name (`"modal"`, `"Search"`, `"quickAdd"`).
+- Per-view Tree/Timeline modes persist in `data.json` under `searchViewModes`, keyed by view name (`"modal"`, `"Search"`).
 - The browser harness's `tab.press` rejects `Meta+k`/`Meta+K`; open the action panel by clicking the footer's "Actions" item instead.

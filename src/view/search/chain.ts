@@ -56,11 +56,24 @@ export type ChainStep =
     | {kind: "row"; anchor: ChainAnchor; label: string; prevQuery: string}
     | {kind: "entry"; entry: ChainEntry; label: string; prevQuery: string}
 
-/** steps[0] is a row step; row steps never follow entry steps. */
-export type AppendChain = {mode: "append"; steps: ChainStep[]}
+/** Row steps never follow entry steps. `quickAdd`: the chain started chip-less (Quick Add), so `steps` may be empty and
+ *  leaving it restores `prevQuery`; without it, steps[0] is a row step. */
+export type AppendChain = {mode: "append"; steps: ChainStep[]; quickAdd?: {prevQuery: string}}
 /** confirm: the trimmed query the "create [[q]]" prompt is armed for. */
 export type ReparentChain = {mode: "reparent"; child: RowRef; prevQuery: string; confirm: string | null}
 export type ChainState = AppendChain | ReparentChain
+
+/** The query to restore when the chain is left: the one typed before Quick Add, its first chip or the reparent. */
+export function chainPrevQuery(chain: ChainState): string {
+    if (chain.mode === "reparent") return chain.prevQuery
+    return chain.quickAdd?.prevQuery ?? chain.steps[0]?.prevQuery ?? ""
+}
+
+/** Whether the chain shows its own results (`chainResults`) instead of the view's search: always, except Quick Add
+ *  before its first chip while the input is a search rather than an entry. */
+export function chainReplacesSearch(chain: ChainState, query: string): boolean {
+    return chain.mode === "reparent" || chain.steps.length > 0 || isEntryInput(query)
+}
 
 /** What an append chain writes: Outline-editor lines plus where they go. */
 export type ChainOutline = {parentName?: string; underLine?: UnderLine; lines: OutlineLine[]; nextDepth: number}

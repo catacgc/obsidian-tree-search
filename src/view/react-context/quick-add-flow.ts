@@ -1,9 +1,7 @@
-// Editor requests and Quick Add, the standalone host of the shared inline editor. Every
-// editor request (the commands, a Search view's `>` / ⊕ / Alt+A / Alt-Edit) is applied to
-// the Append draft or a transient Alt-Edit / prose session by applyEditorRequestAtom; the
-// Search modal and pane then show the editor in place (SearchViewMolecule.enterEditorAtom),
-// while the Quick Add command opens it in its own modal. A Quick Add save opens the Search
-// modal on the written row; a close just closes.
+// Editor requests. Every editor entry point (a Search view's `>` chain, ⊕, Alt+A, Alt-Edit,
+// Quick Add's Alt+Enter) is applied to the Append draft or a transient Alt-Edit / prose
+// session by applyEditorRequestAtom; the Search modal and pane then show the editor in place
+// (SearchViewMolecule.enterEditorAtom).
 import {atom} from "jotai"
 import {GlobalAtoms} from "./global"
 import {appendDraftAtom} from "./settings"
@@ -24,9 +22,6 @@ export type EditorRequest =
     | {kind: "outline"; parentName?: string; underLine?: UnderLine; outline: string; caret: number}
     /** A transient Alt-Edit or prose session over the draft. */
     | {kind: "session"; state: EditorState}
-
-/** Why Quick Add closed: an editor save or a user close (Escape, ✕, Cancel/Discard). */
-export type QuickAddExit = {kind: "saved"} | {kind: "cancelled"}
 
 /** Applies `request` to the Append draft or the transient session; the single place requests change them. */
 export const applyEditorRequestAtom = atom(null, (get, set, request: EditorRequest) => {
@@ -60,33 +55,4 @@ export const applyEditorRequestAtom = atom(null, (get, set, request: EditorReque
     } else {
         set(appendDraftAtom, draft ? {...draft, sourcePath: today} : newAppendState(today))
     }
-})
-
-/** Opens Quick Add on `request`; the Search modal, if it is the current modal, closes. */
-export const openQuickAddAtom = atom(null, (get, set, request: EditorRequest) => {
-    const modals = get(GlobalAtoms.modalsAtom)
-    if (!modals) return
-    set(GlobalAtoms.quickAddExitAtom, null)
-    set(applyEditorRequestAtom, request)
-    set(GlobalAtoms.editorHostAtom, "quickAdd")
-    if (get(GlobalAtoms.currentModalAtom) === modals.search) modals.search.close()
-    modals.quickAdd.open()
-})
-
-/** Closes Quick Add, recording why for `quickAddClosedAtom`. */
-export const leaveQuickAddAtom = atom(null, (get, set, exit: QuickAddExit) => {
-    set(GlobalAtoms.quickAddExitAtom, exit)
-    get(GlobalAtoms.modalsAtom)?.quickAdd.close()
-})
-
-/** Quick Add's `onClose`: frees the editor; after a save, opens the Search modal (which selects the written row). */
-export const quickAddClosedAtom = atom(null, (get, set) => {
-    const exit = get(GlobalAtoms.quickAddExitAtom)
-    set(GlobalAtoms.quickAddExitAtom, null)
-    if (get(GlobalAtoms.editorHostAtom) === "quickAdd") set(GlobalAtoms.editorHostAtom, null)
-    const modals = get(GlobalAtoms.modalsAtom)
-    if (!modals || exit?.kind !== "saved") return
-    set(GlobalAtoms.selectQueryAtom, {view: "modal"})
-    // Obsidian is still closing Quick Add; open Search once it has finished.
-    window.setTimeout(() => modals.search.open(), 0)
 })

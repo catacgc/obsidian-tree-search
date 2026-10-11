@@ -7,6 +7,7 @@ import {ScopeProvider, useMolecule} from "bunshi/react";
 import {SearchViewMolecule, SearchViewScope} from "./react-context/state";
 import {GlobalAtoms} from "./react-context/global";
 import {SEARCH_ICON} from "./icons";
+import {chainReplacesSearch} from "./search/chain";
 
 type SearchPageProps = {
     sectionName: string
@@ -18,7 +19,7 @@ type SearchPageProps = {
     children?: React.ReactNode
 }
 const SearchPage = (props: SearchPageProps) => {
-    return <ScopeProvider scope={SearchViewScope} value={{showSearch: props.showSearch || false, isQuickLink: false, isQuickAdd: false, name: props.sectionName, isModal: false, allowTimeline: props.allowTimeline ?? false, allowEditing: props.allowEditing ?? false}}>
+    return <ScopeProvider scope={SearchViewScope} value={{showSearch: props.showSearch || false, isQuickLink: false, name: props.sectionName, isModal: false, allowTimeline: props.allowTimeline ?? false, allowEditing: props.allowEditing ?? false}}>
         <_SearchPage {...props}/>
     </ScopeProvider>
 }
@@ -43,7 +44,7 @@ const _SearchPage = (props: SearchPageProps) => {
     const version = useAtomValue(GlobalAtoms.graphVersionAtom)
 
     useEffect(() => {
-        if (chain) {
+        if (chain && chainReplacesSearch(chain, actualQuery)) {
             refreshChainResults()
             return
         }

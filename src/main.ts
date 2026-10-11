@@ -12,7 +12,6 @@ import {createStore} from 'jotai';
 import {appendDraftAtom, getPluginData, getSettings, searchViewModesAtom, updateSettings} from './view/react-context/settings';
 import './view/styles.css';
 import {GlobalAtoms} from "./view/react-context/global";
-import {openQuickAddAtom} from "./view/react-context/quick-add-flow";
 import {resetDefaultInjector} from "bunshi";
 import {RaycastServer} from "./view/raycast/raycast-server";
 import {HOVER_SOURCE_ID} from "./view/hover-preview";
@@ -26,7 +25,7 @@ export default class TreeSearchPlugin extends Plugin {
     private server: RaycastServer | null = null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private refreshInterval: any = null;
-    // Quick Add's draft changes on every keystroke; persist it once typing pauses.
+    // The Append draft changes on every keystroke; persist it once typing pauses.
     private saveDraft = debounce(() => { void this.saveSettings() }, 500, true)
 
     async onunload() {
@@ -90,8 +89,14 @@ export default class TreeSearchPlugin extends Plugin {
 
         const searchModal = new SearchModal(this.globalStore);
 
-        const quickAddModal = new SearchModal(this.globalStore, "quickAdd");
-        this.globalStore.set(GlobalAtoms.modalsAtom, {search: searchModal, quickAdd: quickAddModal});
+        // Quick Add / Open editor: the Search modal in chip-less patch mode (its SearchBar starts it). With the
+        // modal already showing its editor, the editor stays.
+        const quickAdd = () => {
+            const open = this.globalStore.get(GlobalAtoms.currentModalAtom) === searchModal
+            if (open && this.globalStore.get(GlobalAtoms.editorHostAtom) === "modal") return
+            this.globalStore.set(GlobalAtoms.quickAddRequestAtom, {view: "modal"});
+            if (!open) searchModal.open();
+        };
 
         this.addCommand({
             id: "quick-link-modal",
@@ -112,17 +117,13 @@ export default class TreeSearchPlugin extends Plugin {
         this.addCommand({
             id: "quick-add-modal",
             name: "Quick Add",
-            callback: () => {
-                this.globalStore.set(openQuickAddAtom, {kind: "draft"});
-            },
+            callback: quickAdd,
         });
 
         this.addCommand({
             id: "open-editor",
             name: "Open editor",
-            callback: () => {
-                this.globalStore.set(openQuickAddAtom, {kind: "draft"});
-            },
+            callback: quickAdd,
         });
 
         this.addCommand({

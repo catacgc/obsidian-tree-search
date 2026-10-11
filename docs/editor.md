@@ -10,7 +10,7 @@ Tree Search is not only for finding things. You can write into your vault straig
 
 Select a note row and press <kbd>Alt</kbd>+<kbd>A</kbd>, or click the ⊕ on the row. The Search modal or pane switches to the editor, with a `- [[Note]]` bullet ready for you. When you save, the bullets are written into today's daily note, so the new lines show up under that note in the tree, and you are back at your search with the new line selected. <kbd>Esc</kbd> also takes you back to the search.
 
-You can also open the editor in its own window with the **Tree Search: Quick Add** command.
+The **Tree Search: Quick Add** command (also **Open editor**, or <kbd>Alt</kbd>+<kbd>N</kbd> in a search) opens Search in Quick Add mode, titled **Quick Add**. Type to search: <kbd>Enter</kbd> on a note, heading or line (**Patch** and its name in the footer) picks it to add under, as <kbd>&gt;</kbd> does (see [Adding from Search](#adding-from-search)). When what you type matches nothing, <kbd>Enter</kbd> (**Add**) writes it into today's daily note, and the box clears for the next one. <kbd>Alt</kbd>+<kbd>Enter</kbd> with nothing typed opens your draft in the editor; <kbd>Esc</kbd> goes back to a normal search.
 
 ![Quick Add appending to Project Apollo](assets/screenshots/quick-add-append.webp)
 *Appending "Confirmed the launch date" under `[[Project Apollo]]`.*

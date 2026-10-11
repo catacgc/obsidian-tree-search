@@ -46,7 +46,7 @@ describe("panelItems", () => {
     it("lists only the View section when no row is selected", () => {
         const items = panelItems(ctx({ rowActions: [], selectedPos: -1 }))
         expect(new Set(items.map(i => i.section))).toEqual(new Set(["view"]))
-        expect(items.map(i => i.title)).toEqual(["Open editor", "Show timeline", "Expand one level", "Collapse one level", "Collapse all", "Rebuild index"])
+        expect(items.map(i => i.title)).toEqual(["Quick Add", "Show timeline", "Expand one level", "Collapse one level", "Collapse all", "Rebuild index"])
     })
 
     it("maps row actions to their shortcut keys and drops Insert after when Append exists", () => {
@@ -60,7 +60,7 @@ describe("panelItems", () => {
         const c = ctx({ allowEditing: false, allowTimeline: false })
         expect(titles(c, "row")).toContain("Insert After")
         expect(titles(c, "edit")).toEqual([])
-        expect(titles(c, "view")).not.toContain("Open editor")
+        expect(titles(c, "view")).not.toContain("Quick Add")
     })
 
     it("replaces the folder-picker Move To with Move to… for movable rows, in every view", () => {
@@ -131,7 +131,7 @@ describe("panelItems", () => {
         const tl = rowsOf(row(text("loose", "Project X.md", 7), 0, { timeline: { breadcrumb: [page("Project X", "Project X.md")], pinned: false, ageDays: 0 } }))
         const c = ctx({ rows: tl, selectedPos: 0, timelineActive: true })
         expect(titles(c, "edit")).toEqual(["Append to [[Project X]]", "Patch", "Edit line", "Delete"])
-        expect(titles(c, "view")).toEqual(["Open editor", "Show tree", "Rebuild index"])
+        expect(titles(c, "view")).toEqual(["Quick Add", "Show tree", "Rebuild index"])
     })
 })
 

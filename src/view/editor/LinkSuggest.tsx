@@ -34,7 +34,7 @@ export function useLinkSuggest(text: string, caret: number, active: boolean): Li
     }
 }
 
-/** The `[[` autocomplete as Search results: Quick Add's link-target tree (SearchModalMolecule, query = the open
+/** The `[[` autocomplete as Search results: the editor's link-target tree (SearchModalMolecule, query = the open
  *  `[[query`), or the default list (quickAddDefaultQuery: `[[P]]` for the parent's tree, or the daily outline) when
  *  none is open, drawn with SearchTreeNode. While a `[[query` is open, a New note row offering `[[newName]]` sits
  *  above the matches. */

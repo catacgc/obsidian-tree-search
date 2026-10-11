@@ -38,6 +38,7 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
         resetSuggestionsAtom, repositionSuggestionsAtom, focusSearchInputAtom,
         allowTimeline, timelineActiveAtom, toggleViewModeAtom, scopeName, allowEditing,
         chainAtom, chainWriteAtom, chainPatchRowAtom, popChainAtom, cancelChainAtom, startReparentAtom, clearChainAtom,
+        startQuickAddAtom,
         selectedNodeAtom, renderableTreeNodesAtom, toggleRowAtom,
     } = useMolecule(SearchViewMolecule)
     const {pushChainAtom, commitChainAtom, openChainEditorAtom, pasteIntoChainAtom, reparentChainAtom} = useMolecule(EditorMolecule)
@@ -54,6 +55,7 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
     const popChain = useSetAtom(popChainAtom)
     const startReparent = useSetAtom(startReparentAtom)
     const clearChain = useSetAtom(clearChainAtom)
+    const startQuickAdd = useSetAtom(startQuickAddAtom)
     const reparentChain = useSetAtom(reparentChainAtom)
     const selectedNode = useAtomValue(selectedNodeAtom)
     const rows = useAtomValue(renderableTreeNodesAtom)
@@ -106,6 +108,14 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
             inputRef.current?.select()
         }, 0)
     }, [selectQuery])
+
+    // Quick Add / Open editor commands: start chip-less patch mode in this view.
+    const [quickAddRequest, setQuickAddRequest] = useAtom(GlobalAtoms.quickAddRequestAtom)
+    useEffect(() => {
+        if (quickAddRequest?.view !== scopeName.name) return
+        setQuickAddRequest(null)
+        startQuickAdd()
+    }, [quickAddRequest])
 
     // During a chain (`>` append, `<` Move to), Escape leaves it (clears the chips, restores the query) instead of
     // closing the modal, and Alt+Enter opens an append chain in the editor (Obsidian's hotkeys would take it before

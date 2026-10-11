@@ -1,9 +1,9 @@
 import { describe, it, expect } from "bun:test"
 import { createStore } from "jotai"
-import type { App, Modal } from "obsidian"
+import type { App } from "obsidian"
 import { GlobalAtoms } from "../view/react-context/global"
 import { appendDraftAtom } from "../view/react-context/settings"
-import { openQuickAddAtom } from "../view/react-context/quick-add-flow"
+import { applyEditorRequestAtom } from "../view/react-context/quick-add-flow"
 import { dailyConfigOf, newAppendState } from "../view/editor/draft"
 import { dailyNotePath } from "../editing/vault-edits"
 import type { EditorState, UnderLine } from "../view/editor/EditorMolecule"
@@ -11,17 +11,14 @@ import type { EditorState, UnderLine } from "../view/editor/EditorMolecule"
 function setup(draft: EditorState | null) {
     const trashed: string[] = []
     const store = createStore()
-    // Only open/close are touched; a full obsidian Modal can't be built outside the app.
-    const modal = { open() {}, close() {} } as unknown as Modal
-    store.set(GlobalAtoms.modalsAtom, { search: modal, quickAdd: modal })
     store.set(GlobalAtoms.appAtom, {
         vault: { getFileByPath: (p: string) => ({ path: p }) },
         fileManager: { trashFile: async (f: { path: string }) => { trashed.push(f.path) } },
     } as unknown as App)
     store.set(appendDraftAtom, draft)
     // trashSessionAttachments calls trashFile before its first await, so `trashed` is filled synchronously.
-    const appendTo = (name: string) => store.set(openQuickAddAtom, { kind: "link", name })
-    const appendUnder = (target: UnderLine) => store.set(openQuickAddAtom, { kind: "line", target })
+    const appendTo = (name: string) => store.set(applyEditorRequestAtom, { kind: "link", name })
+    const appendUnder = (target: UnderLine) => store.set(applyEditorRequestAtom, { kind: "line", target })
     return { store, trashed, appendTo, appendUnder }
 }
 
@@ -100,7 +97,7 @@ describe("Append under a picked line", () => {
 describe("A chain opened in the editor", () => {
     it("replaces the draft, trashing its pasted attachments, with the chain's outline and caret", () => {
         const { store, trashed } = setup(draftUnder("P"))
-        store.set(openQuickAddAtom, { kind: "outline", parentName: "P", outline: "- [[P]]\n    - [[N]]\n        - ", caret: 27 })
+        store.set(applyEditorRequestAtom, { kind: "outline", parentName: "P", outline: "- [[P]]\n    - [[N]]\n        - ", caret: 27 })
         expect(store.get(appendDraftAtom)).toMatchObject({ mode: "append", parentName: "P", outline: "- [[P]]\n    - [[N]]\n        - ", caret: 27, attachments: [] })
         expect(trashed).toEqual(["P image.png"])
     })

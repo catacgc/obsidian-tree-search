@@ -4,28 +4,23 @@ import {SearchModalMolecule, SearchViewMolecule, SearchViewScope} from "../react
 import {SearchViewFlatten} from "./SearchViewFlatten";
 import {ScopeProvider, useMolecule} from "bunshi/react";
 import {KeyComboWrapper} from "./KeyComboWrapper";
-import {QuickAddView} from "../editor/QuickAddView";
 
-export type SearchModalKind = "search" | "insertLink" | "quickAdd"
+export type SearchModalKind = "search" | "insertLink"
 
 /** onTitle: sets the hosting modal's title (the Search modal follows searchModalTitleAtom). */
 export const SearchModalContainer = ({ kind, onTitle }: { kind: SearchModalKind; onTitle?: (title: string) => void }) => {
 
     return <ScopeProvider scope={SearchViewScope} value={{
-        name: kind === "quickAdd" ? "quickAdd" : "modal",
+        name: "modal",
         isQuickLink: kind === "insertLink",
-        isQuickAdd: kind === "quickAdd",
-        // Quick Add keeps showSearch: its link list selects row 0 like a search result list.
         showSearch: true,
         isModal: true,
         allowTimeline: kind === "search",
         allowEditing: kind === "search",
     }}>
-        {kind === "quickAdd"
-            ? <QuickAddView/>
-            : <KeyComboWrapper>
-                <_SearchModalContainer onTitle={onTitle}/>
-            </KeyComboWrapper>}
+        <KeyComboWrapper>
+            <_SearchModalContainer onTitle={onTitle}/>
+        </KeyComboWrapper>
     </ScopeProvider>
 }
 

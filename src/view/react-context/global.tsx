@@ -4,7 +4,6 @@ import {getDefaultStore, atom} from "jotai";
 import type {IndexedTree} from "../../indexing/indexed-tree";
 import type {EditorState} from "../editor/EditorMolecule";
 import type {RowTarget} from "../search/select-target";
-import type {QuickAddExit} from "./quick-add-flow";
 
 const appAtom = atom<App>(null as any as App)
 const graphAtom = atom<NotesGraph>(new NotesGraph())
@@ -28,12 +27,10 @@ export const GlobalAtoms = {
     indexAtom: atom<IndexedTree | null>(null),
     /** Query the Search modal opens with. */
     lastSearchAtom: atom<{query: string}>({query: ""}),
-    /** The Search and Quick Add modals, set once by main.ts. */
-    modalsAtom: atom<{search: Modal; quickAdd: Modal} | null>(null),
-    /** Scope name of the view showing the editor ("modal", "Search" or "quickAdd"); null when none. */
+    /** Scope name of the view showing the editor ("modal" or "Search"); null when none. */
     editorHostAtom: atom<string | null>(null),
-    /** Why Quick Add is closing; null when it was dismissed (Escape, ✕, backdrop). */
-    quickAddExitAtom: atom<QuickAddExit | null>(null),
+    /** Search view (SearchViewScope name) that starts Quick Add (chip-less patch mode) next; a fresh object per request. */
+    quickAddRequestAtom: atom<{view: string} | null>(null),
     /** Row the view named `view` (its SearchViewScope name) selects on its next result recompute. */
     pendingSelectAtom: atom<{view: string; targets: RowTarget[]; flash: boolean} | null>(null),
     /** Search view (SearchViewScope name) that focuses its search input and selects the query next; a fresh object per request. */

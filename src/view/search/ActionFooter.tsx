@@ -32,13 +32,14 @@ export const ActionFooter = () => {
     const dockRef = useRef<HTMLDivElement>(null)
 
     // Enter runs the row's plain-Enter action. While reparenting (`<`) it moves the chain's row under the selected row;
-    // in an append chain (`>`, the modal's Patch mode) it patches the pending write in, or with none adds the selected
-    // row as the next chip (`Patch <row>`).
+    // in an append chain (`>`, the modal's Patch mode) it patches the pending write in ("Add" into today's daily note
+    // while Quick Add has no row chip), or with none adds the selected row as the next chip (`Patch <row>`).
     const enterAction = rowActions.find(a => a.shortcut?.key === "enter" && a.shortcut.modifiers.length === 0)
     const usable = selected && !selected.archiveRow ? selected : null
+    const writeTitle = chain?.mode === "append" && chain.steps.some(s => s.kind === "row") ? "Patch" : "Add"
     const main: {title: string; run: () => void} | null =
         chain?.mode === "reparent" ? usable ? {title: "Move under", run: () => void reparentChain(usable.node)} : null
-        : chain?.mode === "append" && chainWrite !== null && !("error" in chainWrite) ? {title: "Patch", run: () => void commitChain()}
+        : chain?.mode === "append" && chainWrite !== null && !("error" in chainWrite) ? {title: writeTitle, run: () => void commitChain()}
         : chainPatchRow ? {title: `Patch ${rowLabel(chainPatchRow.node)}`, run: () => void pushChain()}
         : enterAction ? {title: enterAction.title, run: () => void execute(enterAction)} : null
     const title = selected ? truncateMiddle(nodeLabel(selected.node), 60) : ""

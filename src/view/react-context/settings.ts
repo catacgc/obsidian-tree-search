@@ -27,7 +27,7 @@ export type SearchViewModes = Record<string, SearchViewMode>
 // place, so replacing settingsAtom on toggle would orphan its edits.
 export const searchViewModesAtom = atom<SearchViewModes>({})
 
-// Quick Add's Append draft; kept until saved or discarded, persisted in data.json.
+// The editor's Append draft; kept until saved or discarded, persisted in data.json.
 export const appendDraftAtom = atom<EditorState | null>(null)
 
 // Shape of data.json.

@@ -4,7 +4,7 @@ import {atom, useAtomValue, type Getter, type Setter} from 'jotai'
 import {findTargetRow, revealRow, rowTargets, type RowTarget} from '../search/select-target'
 import {toggleTaskFilter} from '../search/task-filter'
 import {buildTimelineRows} from '../search/timeline-utils'
-import {chainOutline, chainResults, isEntryInput, isMovable, isPatchable, parseChainEntry, rowLabel, type ChainOutline, type ChainState, type RowRef} from '../search/chain'
+import {chainOutline, chainPrevQuery, chainReplacesSearch, chainResults, isEntryInput, isMovable, isPatchable, parseChainEntry, rowLabel, type ChainOutline, type ChainState, type RowRef} from '../search/chain'
 import {basenameOf, dailyConfigOf, searchModalTitle} from '../editor/draft'
 import {dailyNotePath} from '../../editing/vault-edits'
 import {dragInfo, INLINE_LINK_REFUSAL, treeParentPos} from '../editor/row-editing'
@@ -54,7 +54,6 @@ export const GlobalAppScope = createScope<{
 export const SearchViewScope = createScope({
     name: "default",
     isQuickLink: false,
-    isQuickAdd: false,
     showSearch: true,
     isModal: true,
     allowTimeline: false,
@@ -133,10 +132,10 @@ export const GlobalAppMolecule = molecule((_, scope) => {
     }
 })
 
-/** Quick Add's results list without a parent and no `[[` open: the outline of today's daily note. */
+/** The editor's link list without a parent and no `[[` open: the outline of today's daily note. */
 export const DAILY_OUTLINE_QUERY = ":daily :page"
 
-/** Quick Add's results list while no `[[` is open: the full tree of the outline's note nearest the caret (caretNote)
+/** The editor's link list while no `[[` is open: the full tree of the outline's note nearest the caret (caretNote)
  *  as `[[P]]`; else, for an Append under a picked line, the outline of that line's note (`underLinePath`); else
  *  today's daily outline. A name with `[` or `]` can't be written as a link, so it counts as none. */
 export const quickAddDefaultQuery = (parentName: string | undefined, underLinePath?: string): string =>
@@ -153,9 +152,10 @@ export const SearchModalMolecule = molecule((mol, scope) => {
     const searchResultsComputeAtom = withAtomEffect(searchResultsAtom, (get, set) => {
         get(GlobalAtoms.graphVersionAtom)  // re-run on mutable graph updates from refreshPage
         const searchQuery = get(searchMol.actualQueryAtom)
-        // A chain (`>` append, `<` reparent) replaces the search with its own results.
+        // A chain (`>` append, `<` reparent) replaces the search with its own results; Quick Add before its first chip
+        // still searches.
         const chain = get(searchMol.chainAtom)
-        if (chain) {
+        if (chain && chainReplacesSearch(chain, searchQuery)) {
             set(searchMol.refreshChainResultsAtom)
             return
         }
@@ -189,9 +189,8 @@ export const SearchViewMolecule = molecule((mol, scope) => {
 
     const { lastSearchAtom } = mol(GlobalAppMolecule)
 
-    // Quick Add's list is the editor's `[[` autocomplete (InlineEditor sets its query), never Search's query.
     const searchQueryAtom = atomWithDefault<SearchQuery>(get =>
-        scp.isModal && !scp.isQuickAdd ? get(lastSearchAtom) : {query: ""})
+        scp.isModal ? get(lastSearchAtom) : {query: ""})
 
     const actualQueryAtom = atom<string>(get => get(searchQueryAtom).query)
     const selectedLineValueAtom = atom(-1)
@@ -259,7 +258,8 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         if (chain?.mode === "reparent") return `Move ${chain.child.label} under…`
         if (chain?.mode === "append") {
             const last = chain.steps[chain.steps.length - 1]
-            if (last.kind === "entry") return `Add under ${last.label} — Enter adds, Alt+Enter opens the editor`
+            if (last?.kind === "entry") return `Add under ${last.label} — Enter adds, Alt+Enter opens the editor`
+            if (!last) return "Search to patch, or type to add to today"
             // The operators only: the chip and the modal's Patch title already name the anchor.
             return `- item · [[note]] · |alias · #heading · (k:: v)`
         }
@@ -677,13 +677,20 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     }
 
     /** Backspace in an empty input: drops the last chip (an append chain's last step, or the reparent), restoring the
-     *  query typed before it. */
+     *  query typed before it. Quick Add's last chip leaves it chip-less; with no chip there is nothing to drop. */
     const popChainAtom = atom(null, (get, set) => {
         const chain = get(chainAtom)
         if (!chain) return
+        if (chain.mode === "append" && chain.quickAdd) {
+            const last = chain.steps[chain.steps.length - 1]
+            if (!last) return
+            set(chainAtom, {...chain, steps: chain.steps.slice(0, -1)})
+            setQuery(set, last.prevQuery)
+            return
+        }
         if (chain.mode === "reparent" || chain.steps.length === 1) {
             set(chainAtom, null)
-            setQuery(set, chain.mode === "reparent" ? chain.prevQuery : chain.steps[0].prevQuery)
+            setQuery(set, chainPrevQuery(chain))
             return
         }
         const last = chain.steps[chain.steps.length - 1]
@@ -691,7 +698,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         setQuery(set, last.prevQuery)
     })
 
-    /** Escape: leaves the chain, restoring the query typed before its first chip. */
+    /** Escape: leaves the chain, restoring the query typed before it. */
     const cancelChainAtom = atom(null, (get, set) => {
         const chain = get(chainAtom)
         if (chain?.mode !== "append") {
@@ -699,7 +706,18 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             return
         }
         set(chainAtom, null)
-        setQuery(set, chain.steps[0].prevQuery)
+        setQuery(set, chainPrevQuery(chain))
+    })
+
+    /** Quick Add (the commands, Alt+N): chip-less patch mode. The input searches; Enter on a page, header or line
+     *  makes it the anchor chip, and text that matches nothing is added to today's daily note. */
+    const startQuickAddAtom = atom(null, (get, set) => {
+        const chain = get(chainAtom)
+        const prevQuery = chain ? chainPrevQuery(chain) : get(actualQueryAtom)
+        set(chainAtom, {mode: "append", steps: [], quickAdd: {prevQuery}})
+        setQuery(set, "")
+        set(searchVisibleAtom, true)
+        set(focusSearchInputAtom, get(focusSearchInputAtom) + 1)
     })
 
     /** Move to (`<`, Alt+M, action panel): the selected row becomes the one to move; the query then searches its new
@@ -804,6 +822,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             allowEditing: scp.allowEditing,
             flashLineAtom,
             chainAtom, chainWriteAtom, chainPatchRowAtom, refreshChainResultsAtom, popChainAtom, cancelChainAtom, startReparentAtom, clearChainAtom,
+            startQuickAddAtom,
             editorOpenAtom, enterEditorAtom, leaveEditorAtom, searchModalTitleAtom,
     }
 })
