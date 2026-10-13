@@ -3,6 +3,7 @@ import { buildGraphFromScanner, getKey, type ParsedNode, type ResultNode, type V
 import {
     chainEditorText,
     chainOutline,
+    chainPrefill,
     chainPrevQuery,
     chainReplacesSearch,
     chainResults,
@@ -267,5 +268,46 @@ describe("Quick Add (chip-less append chain)", () => {
     it("restores the query typed before Quick Add, not the first chip's", () => {
         expect(chainPrevQuery(quickAdd([{ ...row({ kind: "note", name: "P" }), prevQuery: "chip" }]))).toBe("before")
         expect(chainPrevQuery({ mode: "append", steps: [{ ...row({ kind: "note", name: "P" }), prevQuery: "chip" }] })).toBe("chip")
+    })
+})
+
+describe("chainPrefill", () => {
+    const p = (q: string) => chainPrefill(q, ".", "archive")
+
+    it("turns is:task into an open task box, tags as typed, filter-ref parentheses included", () => {
+        expect(p("is:task #home")).toBe("- [ ] #home ")
+        expect(p("(is:task #home)")).toBe("- [ ] #home ")
+    })
+
+    it("keeps words and quoted text as typed", () => {
+        expect(p("Apollo launch")).toBe("- Apollo launch ")
+        expect(p('"Exact Phrase"')).toBe("- Exact Phrase ")
+    })
+
+    it("writes [[Note]] as a link and is:completed as a done box", () => {
+        expect(p("[[Project X]] is:completed")).toBe("- [x] [[Project X]] ")
+    })
+
+    it("adds an emoji for has:emoji and the archive tag for is:archived", () => {
+        expect(p("has:emoji")).toBe("- 🪴 ")
+        expect(p("is:archived")).toBe("- #archive ")
+    })
+
+    it("ends with an open [[ for has:link unless a link is already there", () => {
+        expect(p("is:task has:link")).toBe("- [ ] [[")
+        expect(p("[[P]] has:link")).toBe("- [[P]] ")
+    })
+
+    it("takes an OR group's first alternative and drops negations, in:, outline: and other is: values", () => {
+        expect(p("#home | #work")).toBe("- #home ")
+        expect(p("-foo in:7d outline:x is:page")).toBe("- ")
+    })
+
+    it("carries over only the last stage", () => {
+        expect(p("work.is:task #home")).toBe("- [ ] #home ")
+    })
+
+    it("is empty for a blank query", () => {
+        expect(p("  ")).toBe("")
     })
 })

@@ -129,7 +129,7 @@ function tokenize(input: string, separator: string): Token[] {
     }
     // `outline:"name with spaces"`: the quoted name belongs to the field, and
     // keeps its quotes so matchField can tell an exact name from a fragment.
-    if (value === "outline:" && input[j] === '"') {
+    if (value.toLowerCase() === "outline:" && input[j] === '"') {
       const close = input.indexOf('"', j + 1)
       value += `"${input.slice(j + 1, close === -1 ? input.length : close)}"`
       j = close === -1 ? input.length : close + 1
@@ -155,9 +155,9 @@ function tokenize(input: string, separator: string): Token[] {
 // so a partially-typed query never crashes live search.
 
 function matchField(word: string): { field: QueryModifierField; value: string; exact?: true } | null {
-  const m = /^(is|has|in|outline):(.+)$/.exec(word)
+  const m = /^(is|has|in|outline):(.+)$/i.exec(word)
   if (!m) return null
-  const field = m[1] as QueryModifierField
+  const field = m[1].toLowerCase() as QueryModifierField
   const typedValue = m[2]
   // `in:` values are open-ended durations, not an enum — keep the raw string
   // and validate it at match time via parseDuration. `outline:` names a note:
@@ -167,7 +167,7 @@ function matchField(word: string): { field: QueryModifierField; value: string; e
     return typedValue.startsWith('"') ? { field, value: typedValue.slice(1, -1), exact: true } : { field, value: typedValue }
   }
   const values = field === "is" ? IS_VALUES : HAS_VALUES
-  const resolved = resolveUniquePrefix(values, typedValue)
+  const resolved = resolveUniquePrefix(values, typedValue.toLowerCase())
   return { field, value: resolved ?? typedValue }
 }
 
@@ -249,8 +249,9 @@ function parseTokens(tokens: Token[]): QueryExpr[] {
   return parseStages()
 }
 
-export function parseQuery(query: string, separator = "."): QueryExpr[] {
-  const tokens = tokenize(query.toLowerCase().trim(), separator)
+/** Parses `query` into stages. Lowercased unless `keepCase` (field names and `is:`/`has:` values resolve either way). */
+export function parseQuery(query: string, separator = ".", keepCase = false): QueryExpr[] {
+  const tokens = tokenize(keepCase ? query.trim() : query.toLowerCase().trim(), separator)
   return parseTokens(tokens)
 }
 

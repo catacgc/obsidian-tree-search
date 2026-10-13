@@ -62,7 +62,7 @@ const PanelBody = ({page, dockRef}: {page: ActionPanelPage; dockRef: React.RefOb
         openActionPanelAtom, closeActionPanelAtom, chainAtom, searchVisibleAtom, allowEditing, allowTimeline, startDrawerMoveAtom,
     } = useMolecule(SearchViewMolecule)
     const {selectedTreeNodeActionsAtom, executeActionAtom} = useMolecule(ActionsMolecule)
-    const {ownPathAtom, editTaskAtom, pushChainAtom, openRenameFileAtom, openSaveFilterAtom, deleteRowAtom, archiveDrawerAtom} = useMolecule(EditorMolecule)
+    const {ownPathAtom, editTaskAtom, pushChainAtom, openRenameFileAtom, openSaveFilterAtom, openRenameFilterAtom, deleteRowAtom, archiveDrawerAtom} = useMolecule(EditorMolecule)
     const app = useAtomValue(GlobalAtoms.appAtom)
     const rows = useAtomValue(renderableTreeNodesAtom)
     const selectedLine = useAtomValue(selectedLineAtom)
@@ -81,6 +81,7 @@ const PanelBody = ({page, dockRef}: {page: ActionPanelPage; dockRef: React.RefOb
     const openRenameFile = useSetAtom(openRenameFileAtom)
     const deleteRow = useSetAtom(deleteRowAtom)
     const openSaveFilter = useSetAtom(openSaveFilterAtom)
+    const openRenameFilter = useSetAtom(openRenameFilterAtom)
     const [drawer, setDrawer] = useAtom(GlobalAtoms.cutDrawerAtom)
     const cutKeys = useAtomValue(GlobalAtoms.cutKeysAtom)
     const startDrawerMove = useSetAtom(startDrawerMoveAtom)
@@ -125,11 +126,12 @@ const PanelBody = ({page, dockRef}: {page: ActionPanelPage; dockRef: React.RefOb
                 return
             }
             // Actions that open the inline editor leave focus to it; everything else returns to the search.
-            close(!(item.run.kind === "renameFile" || item.run.kind === "saveFilter" || item.run.kind === "shortcut" && OPENS_EDITOR[item.run.id]))
+            close(!(item.run.kind === "renameFile" || item.run.kind === "saveFilter" || item.run.kind === "renameFilter" || item.run.kind === "shortcut" && OPENS_EDITOR[item.run.id]))
             if (item.run.kind === "action") void executeAction(item.run.action)
             else if (item.run.kind === "task") { if (selectedRow) void editTask(selectedRow.node, item.run.change) }
             else if (item.run.kind === "renameFile") openRenameFile(item.run.path)
             else if (item.run.kind === "saveFilter") openSaveFilter(actualQuery.trim())
+            else if (item.run.kind === "renameFilter") { const name = item.run.name; const f = filters.find(f => f.name === name); if (f) openRenameFilter(f) }
             else if (item.run.kind === "deleteFilter") { const name = item.run.name; setFilters(filters.filter(f => f.name !== name)) }
             else if (item.run.kind === "drawer") {
                 if (item.run.op === "move") startDrawerMove()

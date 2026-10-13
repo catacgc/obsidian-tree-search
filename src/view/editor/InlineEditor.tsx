@@ -149,8 +149,8 @@ export function InlineEditor({state}: { state: EditorState }) {
     const hintDeps = [app, state.outline, state.contents, state.contentOrder, state.attachments, state.mode, state.editKind, state.parentName, state.prose, state.proseConfirmed, filters]
     const hints = useMemo(() => editorHintsFor(app, state, filters), hintDeps)
     const blocked = useMemo(() => isSaveBlocked(app, state, filters), hintDeps)
-    /** Save as Filter under an existing filter's name: Save replaces that filter. */
-    const replacing = state.editKind === "filter" && filterIndexNamed(state.outline, filters) >= 0
+    /** Save as Filter under an existing filter's name: Save replaces that filter (a Rename Filter never does). */
+    const replacing = state.editKind === "filter" && state.originalLine === undefined && filterIndexNamed(state.outline, filters) >= 0
 
     // Where new notes created by this editor go (next to today's daily note, or the edited file).
     const contentSourcePath = (name: string) =>

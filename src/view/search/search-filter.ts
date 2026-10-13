@@ -146,15 +146,17 @@ export function filterIndexNamed(name: string, filters: readonly SearchFilter[])
     return filters.findIndex(f => normalizeFilterName(f.name).toLowerCase() === lower)
 }
 
-/** Editor hints for a new filter's name: blank → blocking "Name the filter"; characters other than letters,
+/** Editor hints for a filter's name: blank → blocking "Name the filter"; characters other than letters,
  *  digits, `-` and `_` → blocking; a name equal (case-insensitive, trimmed) to an existing filter's →
- *  non-blocking `"<existing name>" already exists` (Save becomes Replace); else []. */
-export function filterNameHints(name: string, filters: readonly SearchFilter[]): EditorHint[] {
+ *  non-blocking `"<existing name>" already exists` (Save becomes Replace); else []. Renaming `renaming`: its own
+ *  name is free, and another filter's name blocks (a rename never replaces a filter). */
+export function filterNameHints(name: string, filters: readonly SearchFilter[], renaming?: string): EditorHint[] {
     const trimmed = normalizeFilterName(name)
     if (trimmed === "") return [{text: "Name the filter", blocking: true}]
     if (!FILTER_NAME_RE.test(trimmed)) return [{text: 'Use letters, digits, "-" or "_"', blocking: true}]
     const i = filterIndexNamed(name, filters)
-    if (i >= 0) return [{text: `"${filters[i].name}" already exists`, blocking: false}]
+    if (i >= 0 && renaming !== undefined && i === filterIndexNamed(renaming, filters)) return []
+    if (i >= 0) return [{text: `"${filters[i].name}" already exists`, blocking: renaming !== undefined}]
     return []
 }
 
@@ -163,4 +165,25 @@ export function saveFilter(filters: readonly SearchFilter[], name: string, query
     const saved = {name: normalizeFilterName(name), query}
     const i = filterIndexNamed(name, filters)
     return i >= 0 ? filters.map((f, j) => j === i ? saved : f) : [...filters, saved]
+}
+
+/** `query` with every `:from` / `-:from` reference (case-insensitive) naming `to` instead. */
+export function renameFilterRefs(query: string, from: string, to: string): string {
+    const lower = from.toLowerCase()
+    let out = ""
+    let last = 0
+    for (const ref of scanFilterRefs(query)) {
+        if (ref.name.toLowerCase() !== lower) continue
+        out += query.slice(last, ref.end - ref.name.length) + to
+        last = ref.end
+    }
+    return out + query.slice(last)
+}
+
+/** `filters` with the filter named `from` renamed to `to` in place (query kept), and every filter's references to
+ *  it renamed (renameFilterRefs). */
+export function renameFilter(filters: readonly SearchFilter[], from: string, to: string): SearchFilter[] {
+    const i = filterIndexNamed(from, filters)
+    const name = normalizeFilterName(to)
+    return filters.map((f, j) => ({name: j === i ? name : f.name, query: renameFilterRefs(f.query, from, name)}))
 }

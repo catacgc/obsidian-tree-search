@@ -135,6 +135,12 @@ describe("scanMarkdown", () => {
       const { lists } = scan(md)
       expect(lists[2].parent).toBeUndefined()
     })
+
+    it("counts a tab as 4 columns, so tab- and space-indented lines nest by their visual depth", () => {
+      const md = "- [[A]]\n    - [[B]]\n        - [ ] spaces\n\t\t\t- [ ] tabs\n\t\t- [[C]]\n"
+      const { lists } = scan(md)
+      expect(lists.map(l => l.parent)).toEqual([undefined, 0, 1, 2, 1])
+    })
   })
 
   describe("section tracking", () => {

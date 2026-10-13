@@ -31,12 +31,12 @@ describe("appendPickFor", () => {
         expect(appendPickFor(folder("Work"), "", DAILY)).toEqual({ kind: "refuse" })
     })
 
-    it("without a row: a closed [[name]] is the target, a blank query today's draft, anything else nothing", () => {
-        expect(appendPickFor(null, "[[test", DAILY)).toEqual({ kind: "none" })
+    it("without a row: a closed [[name]] is the target, else today's draft", () => {
+        expect(appendPickFor(null, "[[test", DAILY)).toEqual({ kind: "draft" })
         expect(appendPickFor(null, "[[test]]", DAILY)).toEqual({ kind: "link", name: "test" })
         expect(appendPickFor(null, " [[Project X|PX]] ", DAILY)).toEqual({ kind: "link", name: "Project X" })
         expect(appendPickFor(null, "", DAILY)).toEqual({ kind: "draft" })
-        expect(appendPickFor(null, "foo", DAILY)).toEqual({ kind: "none" })
+        expect(appendPickFor(null, "foo", DAILY)).toEqual({ kind: "draft" })
     })
 })
 

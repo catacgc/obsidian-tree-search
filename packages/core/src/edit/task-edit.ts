@@ -3,9 +3,9 @@
 // or null when the line is not a (suitable) task.
 
 import { ageDaysFromText } from "../graph/boost.ts"
-import { LIST_ITEM_RE, isProseText } from "../parser/list-scanner.ts"
+import { LIST_ITEM_RE, indentWidth, isProseText } from "../parser/list-scanner.ts"
 import { splitLines } from "../search/organise-sections.ts"
-import { StaleLineError, indentWidth, linkOnlyTarget } from "./outline-edit.ts"
+import { StaleLineError, linkOnlyTarget } from "./outline-edit.ts"
 
 const TASK_LINE_RE = /^(\s*(?:[-*+]|\d+\.)\s+)\[([ xX])\](?=\s|$)(.*)$/
 const COMPLETION_RE = /\[completion::[^\]]*\]/

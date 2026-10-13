@@ -11,7 +11,7 @@ import {EditorMolecule} from "../editor/EditorMolecule";
 
 export const ActionsMolecule = molecule((mol, scope) => {
     const scp = scope(SearchViewScope)
-    const {selectedNodeAtom, hoveredLineAtom, selectedLineAtom} = mol(SearchViewMolecule)
+    const {selectedNodeAtom, enterRowAtom, selectEnterRowAtom, hoveredLineAtom, selectedLineAtom} = mol(SearchViewMolecule)
     const { appAtom } = mol(GlobalAppMolecule)
     const { openAppendForSelectedAtom } = mol(EditorMolecule)
 
@@ -34,10 +34,10 @@ export const ActionsMolecule = molecule((mol, scope) => {
     })
 
     /**
-     * Open the selected node from the current view in the editor
+     * Open the selected node (else the first row: enterRowAtom) from the current view in the editor
      */
     const highlightSelectedItemAtom = atom(null, async (get, set) => {
-
+        set(selectEnterRowAtom)
         const actions = get(selectedTreeNodeActionsAtom)
         if (actions.length == 0) return
 
@@ -63,7 +63,9 @@ export const ActionsMolecule = molecule((mol, scope) => {
         if (action) await set(executeActionAtom, action)
     })
 
+    /** Enter: the selected row's default action; with nothing selected, the first row's (enterRowAtom). */
     const handleDefaultActionAtom = atom(null, async (get, set) => {
+        set(selectEnterRowAtom)
         const actions = get(selectedTreeNodeActionsAtom)
         if (actions.length == 0) return
 
@@ -80,6 +82,14 @@ export const ActionsMolecule = molecule((mol, scope) => {
 
         if (!node || !app) return []
 
+        return getTreeNodeActions(app, node, scp.isQuickLink ? "insertLink" : "default")
+    })
+
+    /** The actions of the row Enter acts on (enterRowAtom): the footer describes Enter with them. */
+    const enterRowActionsAtom = atom((get) => {
+        const node = get(enterRowAtom)
+        const app = get(appAtom)
+        if (!node || !app) return []
         return getTreeNodeActions(app, node, scp.isQuickLink ? "insertLink" : "default")
     })
 
@@ -119,6 +129,7 @@ export const ActionsMolecule = molecule((mol, scope) => {
         runRaycastActionAtom,
         handleDefaultActionAtom,
         selectedTreeNodeActionsAtom,
+        enterRowActionsAtom,
         executeActionAtom,
         selectHoveredLineAtom
     }

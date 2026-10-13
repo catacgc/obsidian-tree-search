@@ -59,7 +59,7 @@ Where it goes:
 
 - **Under a note or heading:** into today's daily note, under a link to it.
 - **Under a line:** as that line's last children, in its own note.
-- **With nothing selected:** into today's daily note. A search that is just a closed link such as `[[New idea]]` adds under that note, even when it doesn't exist yet.
+- **With nothing selected:** into today's daily note. The search box is pre-filled with an item that matches the search, so `is:task #home` gives `- [ ] #home ` (words, tags and `[[links]]` as typed; `is:completed` gives `- [x] `, `has:link` a trailing `[[`). A search that is just a closed link such as `[[New idea]]` adds under that note, even when it doesn't exist yet.
 
 Each new line gets a `[created:: date]` (or `[scheduled:: date]` for a task) so it is indexed; a bullet that is only a link stays as it is. For example, `Note > [[New Node]] > |new-alias > #header > [ ] task` creates *New Node* with that alias and heading, and adds the task under `[[New Node#header]]`. An alias, heading or property alone (`Note > (is:: project)`) only changes the note.
 

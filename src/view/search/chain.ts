@@ -22,6 +22,7 @@ import {
     type NotesGraph,
     type OutlineLine,
     type ParsedNode,
+    type QueryExpr,
     type ResultNode,
     type SearchOptions,
 } from "@mdtree/core"
@@ -234,6 +235,42 @@ export function parseChainEntry(text: string): ChainEntry | null | {error: strin
     }
     rest = rest.trim()
     return rest === "" ? null : {kind: "item", marker, text: rest}
+}
+
+/** The entry `>` pre-fills when it anchors today with no row selected: an item built from the search text `query`
+ *  (filter references expanded) so the written line matches it. Its last stage only; words, quoted text and tags as
+ *  typed; `[[Note]]` as a link; `is:task`/`is:subtask` → `- [ ] `, `is:completed` → `- [x] ` (first wins), `is:archived`
+ *  → `#<archiveTag>`, `has:emoji` → 🪴, `has:link`/`has:page` → a trailing open `[[` (none if a link is already there);
+ *  an OR group by its first alternative. Negations, `in:`, `outline:` and other `is:` values add nothing.
+ *  "" for a blank query. */
+export function chainPrefill(query: string, separator: string, archiveTag: string): string {
+    if (query.trim() === "") return ""
+    const stages = parseQuery(query, separator, true)
+    const parts: string[] = []
+    let box: "- [ ] " | "- [x] " | null = null
+    let openLink = false
+    const walk = (e: QueryExpr): void => {
+        switch (e.type) {
+            case "contains":
+            case "equals": parts.push(e.value); return
+            case "and": e.exprs.forEach(walk); return
+            case "or": walk(e.exprs[0]); return
+            case "not":
+            case "empty": return
+            case "modifier":
+                if (e.field === "tree") parts.push(`[[${e.value}]]`)
+                else if (e.field === "is" && (e.value === "task" || e.value === "subtask")) box ??= "- [ ] "
+                else if (e.field === "is" && e.value === "completed") box ??= "- [x] "
+                else if (e.field === "is" && e.value === "archived") parts.push(`#${archiveTag}`)
+                else if (e.field === "has" && e.value === "emoji") parts.push("🪴")
+                else if (e.field === "has" && (e.value === "link" || e.value === "page")) openLink = true
+                return
+        }
+    }
+    walk(stages[stages.length - 1])
+    const marker = box ?? "- "
+    if (openLink && !parts.some(p => p.startsWith("[["))) return marker + [...parts, "[["].join(" ")
+    return marker + parts.map(p => p + " ").join("")
 }
 
 type WorkLine = {depth: number; marker: OutlineLine["marker"]; text: string; link: LinkBullet | null}

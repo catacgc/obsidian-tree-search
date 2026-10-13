@@ -32,6 +32,7 @@ export type PanelRun =
     | {kind: "renameFile"; path: string}
     | {kind: "delete"}
     | {kind: "saveFilter"}
+    | {kind: "renameFilter"; name: string}
     | {kind: "deleteFilter"; name: string}
     | {kind: "drawer"; op: "move" | "archive" | "clear"}
 
@@ -199,7 +200,9 @@ export function panelItems(ctx: PanelContext): PanelItem[] {
             items.push({id: "saveFilter", section: "filter", title: "Save as Filter", icon: "saveFilter", run: {kind: "saveFilter"}})
         }
         for (const f of ctx.filters) {
-            if (filterActive(ctx.query, f)) items.push({id: `deleteFilter:${f.name}`, section: "filter", title: `Delete Filter "${f.name}"`, icon: "deleteFilter", run: {kind: "deleteFilter", name: f.name}})
+            if (!filterActive(ctx.query, f)) continue
+            items.push({id: `renameFilter:${f.name}`, section: "filter", title: `Rename Filter "${f.name}"`, icon: "rename", run: {kind: "renameFilter", name: f.name}})
+            items.push({id: `deleteFilter:${f.name}`, section: "filter", title: `Delete Filter "${f.name}"`, icon: "deleteFilter", run: {kind: "deleteFilter", name: f.name}})
         }
     }
 

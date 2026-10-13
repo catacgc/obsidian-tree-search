@@ -34,6 +34,17 @@ export function commentLineClose(trimmed: string): "-->" | "%%" | null | undefin
   return undefined
 }
 
+/** Leading-whitespace width, each tab counted as 4. */
+export function indentWidth(line: string): number {
+  let w = 0
+  for (const ch of line) {
+    if (ch === "\t") w += 4
+    else if (/\s/.test(ch)) w += 1
+    else break
+  }
+  return w
+}
+
 /**
  * Scan raw markdown content and produce:
  *  - list: DvList[] (flat, with .parent line refs; .children populated in post-pass)
@@ -141,7 +152,8 @@ export function scanMarkdown(
     const listMatch = line.match(LIST_ITEM_RE)
     if (!listMatch) continue
 
-    const indent = listMatch[1].length
+    // Nesting by visual width (a tab = 4 columns), as Obsidian renders it; `col` stays the character offset.
+    const indent = indentWidth(listMatch[1])
     let text = listMatch[2].trim()
 
     // task detection
@@ -178,7 +190,7 @@ export function scanMarkdown(
       rawText,
       line: lineNum,
       position: {
-        start: { line: lineNum, col: indent },
+        start: { line: lineNum, col: listMatch[1].length },
         end: { line: lineNum, col: line.length },
       },
       parent: parentLineNum,

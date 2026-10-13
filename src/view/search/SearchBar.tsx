@@ -40,7 +40,7 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
         allowTimeline, timelineActiveAtom, toggleViewModeAtom, scopeName, allowEditing,
         chainAtom, chainWriteAtom, chainPatchRowAtom, popChainAtom, cancelChainAtom, startReparentAtom, clearChainAtom,
         startQuickAddAtom,
-        selectedNodeAtom, renderableTreeNodesAtom, toggleRowAtom,
+        selectedNodeAtom, enterRowAtom, selectEnterRowAtom, renderableTreeNodesAtom, toggleRowAtom,
     } = useMolecule(SearchViewMolecule)
     const {pushChainAtom, commitChainAtom, openChainEditorAtom, pasteIntoChainAtom, reparentChainAtom} = useMolecule(EditorMolecule)
 
@@ -59,6 +59,8 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
     const startQuickAdd = useSetAtom(startQuickAddAtom)
     const reparentChain = useSetAtom(reparentChainAtom)
     const selectedNode = useAtomValue(selectedNodeAtom)
+    const enterRow = useAtomValue(enterRowAtom)
+    const selectEnterRow = useSetAtom(selectEnterRowAtom)
     const rows = useAtomValue(renderableTreeNodesAtom)
     const toggleRow = useSetAtom(toggleRowAtom)
 
@@ -215,15 +217,16 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
             popChain()
         } else if (ev.key === "Enter" && chain?.mode === "reparent" && !ev.altKey && !ev.shiftKey) {
             const name = q.trim()
-            if (selectedRow) void reparentChain(selectedRow.node)
+            if (enterRow && !enterRow.archiveRow) void reparentChain(enterRow.node)
             else if (rows.length === 0 && chain.children.some(c => canMoveUnderNewPage(c.node)) && name.length >= 3 && !INVALID_NAME_RE.test(name)) {
                 if (chain.confirm === name) void reparentChain({nodeType: "newPage", name})
                 else setChain({...chain, confirm: name})
             }
         } else if (ev.key === "Enter" && chain?.mode === "append" && !ev.altKey && !ev.shiftKey) {
-            // Nothing to write: Enter adds the selected row as the next chip (as `>` does), else opens it (KeyComboWrapper).
+            // Nothing to write: Enter adds the selected (else first) row as the next chip (as `>` does), else opens it
+            // (KeyComboWrapper).
             if (chainWrite !== null) void commitChain()
-            else if (chainPatchRow) void pushChain()
+            else if (chainPatchRow) { selectEnterRow(); void pushChain() }
             else return false
         } else if (ev.key === "Enter" && chain?.mode === "append" && ev.altKey) {
             void openChainEditor(null)

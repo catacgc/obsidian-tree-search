@@ -1,5 +1,5 @@
 import type { ParsedNode } from "../graph/types.ts"
-import { HEADER_RE, LIST_ITEM_RE, LIST_MARKER_RE, commentLineClose } from "../parser/list-scanner.ts"
+import { HEADER_RE, LIST_ITEM_RE, LIST_MARKER_RE, commentLineClose, indentWidth } from "../parser/list-scanner.ts"
 import { frontmatterEnd, splitLines } from "../search/organise-sections.ts"
 
 // Pure, content-in/content-out edits for editor mode. Every function keeps
@@ -23,22 +23,7 @@ const CHECKBOX_RE = /^\[([ xX])\]\s+/
 const HEADING_TEXT_RE = /^#{1,6}\s+\S/
 const LINK_ONLY_RE = /^\[\[([^\]|]+)(\|[^\]]*)?\]\]$/
 
-/** Leading-whitespace width, each tab counted as 4. */
-export function indentWidth(line: string): number {
-  let w = 0
-  for (const ch of line) {
-    if (ch === "\t") w += 4
-    else if (/\s/.test(ch)) w += 1
-    else break
-  }
-  return w
-}
-
-/**
- * A file's indent unit: a tab when any of its list lines is tab-indented, else 4 spaces.
- * `scanMarkdown` compares raw whitespace lengths, so a 4-space child under tab-indented
- * siblings would nest under the wrong bullet.
- */
+/** A file's indent unit: a tab when any of its list lines is tab-indented, else 4 spaces, so new lines match the file. */
 function indentUnitOf(lines: string[]): string {
   return lines.some(l => /^\t+(?:[-*+]|\d+\.)\s/.test(l)) ? "\t" : INDENT
 }

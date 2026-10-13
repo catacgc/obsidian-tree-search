@@ -35,10 +35,10 @@ import {SearchViewMolecule, SearchViewScope} from "../react-context/state"
 import {GlobalAtoms} from "../react-context/global"
 import {applyEditorRequestAtom, type EditorRequest} from "../react-context/quick-add-flow"
 import {renamedFileTarget, rowTargets, type RowTarget} from "../search/select-target"
-import {appendDraftAtom, searchFiltersAtom, settingsAtom, type SearchFilter} from "../react-context/settings"
+import {appendDraftAtom, searchFiltersAtom, separatorAtom, settingsAtom, type SearchFilter} from "../react-context/settings"
 import type {TreeNode} from "../search/SearchViewFlatten"
-import {filterNameHints, saveFilter} from "../search/search-filter"
-import {basenameOf, dailyConfigOf, emptySession, fileRenameState, proseNameFrom, saveFilterState} from "./draft"
+import {filterNameHints, normalizeFilterName, renameFilter, renameFilterRefs, saveFilter} from "../search/search-filter"
+import {basenameOf, dailyConfigOf, emptySession, fileRenameState, proseNameFrom, renameFilterState, saveFilterState} from "./draft"
 import type {PasteData} from "./textarea-ops"
 import {
     appendToDailyNote,
@@ -68,6 +68,7 @@ import {appendTargetAt, classifyReparent, deleteTargetOf, isEditableRow, treePar
 import {
     chainEditorText,
     chainOutline,
+    chainPrefill,
     chainPrevQuery,
     isEntryInput,
     parseChainEntry,
@@ -103,13 +104,13 @@ export type EditorState = {
     /** Append: today's daily note path; Edit: the row's file (Rename of a file: that file). */
     sourcePath: string
     line?: number
-    /** Edit: the line as read from the file; Rename of a file: its current name. */
+    /** Edit: the line as read from the file; Rename of a file: its current name; Rename Filter: the filter's name. */
     originalLine?: string
     linePrefix?: string
     /** Edit: a list line or a heading (Rename); "file": Rename of an attachment, the outline holds its name without extension;
-     *  "filter": Save as Filter, the outline holds the new filter's name. */
+     *  "filter": Save as Filter (or, with `originalLine`, Rename Filter), the outline holds the filter's name. */
     editKind?: "list" | "heading" | "file" | "filter"
-    /** Save as Filter: the query the filter saves. */
+    /** Save as Filter: the query the filter saves (Rename Filter: the filter's query, kept). */
     filterQuery?: string
     /** Alt-Edit of a nested line (TextNode.nested): no default schedule. */
     nested?: boolean
@@ -147,7 +148,7 @@ export function makeOwnPath(graph: NotesGraph): OwnPath {
 
 /** Footer hints for the editor's current buffers; blocking hints disable Save. */
 export function editorHintsFor(app: App, s: EditorState, filters: readonly SearchFilter[]): EditorHint[] {
-    if (s.editKind === "filter") return filterNameHints(s.outline, filters)
+    if (s.editKind === "filter") return filterNameHints(s.outline, filters, s.originalLine)
     const exists = (name: string) => !!app.metadataCache.getFirstLinkpathDest(name, "")
     if (s.editKind === "file") {
         const name = s.originalLine ?? ""
@@ -355,6 +356,8 @@ export const EditorMolecule = molecule((mol, scope) => {
 
     /** Save as Filter for `query`: the editor asks for the filter's name. */
     const openSaveFilterAtom = atom(null, (_get, set, query: string) => set(showEditorAtom, {kind: "session", state: saveFilterState(query)}))
+    /** Rename Filter: the editor asks for the filter's new name. */
+    const openRenameFilterAtom = atom(null, (_get, set, filter: SearchFilter) => set(showEditorAtom, {kind: "session", state: renameFilterState(filter)}))
 
     const selectedPos = (get: Getter): {rows: TreeNode[]; pos: number} => {
         const rows = get(view.renderableTreeNodesAtom)
@@ -384,8 +387,6 @@ export const EditorMolecule = molecule((mol, scope) => {
     const anchorStepFor = async (get: Getter, pick: AppendPick, label: string, prevQuery: string): Promise<ChainStep | null> => {
         const row = (anchor: ChainAnchor, l = label): ChainStep => ({kind: "row", anchor, label: l, prevQuery})
         switch (pick.kind) {
-            case "none":
-                return null
             case "refuse":
                 new Notice("Can't add under this row")
                 return null
@@ -412,9 +413,10 @@ export const EditorMolecule = molecule((mol, scope) => {
         }
     }
 
-    /** `>` in the search input: the selected row (or a closed `[[name]]` query, or today) becomes the chain's anchor
-     *  chip; once the chain has entries, or the input is one (`[[note]]`, `|alias`, `#heading`, `(key:: value)`,
-     *  `- item`), the typed text becomes an entry chip. Nothing is written until Enter. */
+    /** `>` in the search input: the selected row becomes the chain's anchor chip; with no row selected, a closed
+     *  `[[name]]` query or today does, and today pre-fills the input from the search (`chainPrefill`). Once the chain
+     *  has entries, or the input is one (`[[note]]`, `|alias`, `#heading`, `(key:: value)`, `- item`), the typed text
+     *  becomes an entry chip. Nothing is written until Enter. */
     const pushChainAtom = atom(null, async (get, set) => {
         const chain = get(view.chainAtom)
         if (chain?.mode === "reparent") return
@@ -425,11 +427,13 @@ export const EditorMolecule = molecule((mol, scope) => {
         const steps = chain?.steps ?? []
         const hasEntries = steps.some(s => s.kind === "entry")
         let step: ChainStep | null
+        let prefill = ""
         if (row && !hasEntries && (chain === null || !isEntryInput(q))) {
             step = await anchorStepFor(get, appendPickFor(row, "", dailyName), rowLabel(row), q)
         } else if (chain === null) {
             const pick = appendPickFor(null, q, dailyName)
             step = await anchorStepFor(get, pick, pick.kind === "link" ? pick.name : "", q)
+            if (step?.kind === "row" && step.anchor.kind === "today") prefill = chainPrefill(get(view.searchTextAtom), get(separatorAtom), get(settingsAtom).archiveTag)
         } else {
             const parsed = parseChainEntry(q)
             if (parsed === null) return
@@ -446,7 +450,8 @@ export const EditorMolecule = molecule((mol, scope) => {
         }
         if (!step) return
         set(view.chainAtom, {...chain, mode: "append", steps: [...steps, step]})
-        setViewQuery(set, "")
+        setViewQuery(set, prefill)
+        if (prefill !== "") set(view.focusSearchInputAtom, get(view.focusSearchInputAtom) + 1)
     })
 
     let committing = false
@@ -550,12 +555,22 @@ export const EditorMolecule = molecule((mol, scope) => {
         const app = get(GlobalAtoms.appAtom)
         const index = get(GlobalAtoms.indexAtom)
         if (isSaveBlocked(app, start, get(searchFiltersAtom))) return
-        // Save as Filter: adds the named pill, or replaces the one with that name; back to the search with its query
-        // and selection (nothing written to flash).
+        // Save as Filter: adds the named pill, or replaces the one with that name. Rename Filter: renames the pill and
+        // every `:Name` reference to it, in the filters and in the query this view returns to. Both go back to the
+        // search with its selection (nothing written to flash).
         if (start.editKind === "filter") {
-            set(searchFiltersAtom, saveFilter(get(searchFiltersAtom), start.outline, start.filterQuery ?? ""))
+            const from = start.originalLine
+            const to = normalizeFilterName(start.outline)
+            set(searchFiltersAtom, from !== undefined
+                ? renameFilter(get(searchFiltersAtom), from, to)
+                : saveFilter(get(searchFiltersAtom), start.outline, start.filterQuery ?? ""))
             set(editorStateAtom, null)
             set(closeEditorAtom, {kind: "cancelled"})
+            if (from !== undefined) {
+                const q = get(view.actualQueryAtom)
+                const renamed = renameFilterRefs(q, from, to)
+                if (renamed !== q) setViewQuery(set, renamed)
+            }
             return
         }
         // Prose that rewrites the note's outline or frontmatter needs a second Save.
@@ -963,7 +978,7 @@ export const EditorMolecule = molecule((mol, scope) => {
 
     return {
         editorStateAtom, altHeldAtom, dragIndexAtom, dropTargetAtom, ownPathAtom,
-        updateEditorAtom, cancelEditorAtom, closeEditorAtom, openAppendAtom, openEditAtom, openRenameFileAtom, openSaveFilterAtom,
+        updateEditorAtom, cancelEditorAtom, closeEditorAtom, openAppendAtom, openEditAtom, openRenameFileAtom, openSaveFilterAtom, openRenameFilterAtom,
         openAppendForSelectedAtom, openEditForSelectedAtom, saveEditorAtom,
         clearDragAtom, reparentAtom, editTaskAtom, deleteRowAtom,
         reparentChainAtom, archiveDrawerAtom, openProseAtom,

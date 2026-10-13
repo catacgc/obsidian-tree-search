@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test"
 import { parseQuery } from "@mdtree/core"
-import { expandFilterRefs, filterActive, filterNameHints, filterSuggestionsAt, hasFilter, saveFilter, scanFilterRefs, toggleFilterPill } from "../view/search/search-filter"
+import { expandFilterRefs, filterActive, filterNameHints, filterSuggestionsAt, hasFilter, renameFilter, renameFilterRefs, saveFilter, scanFilterRefs, toggleFilterPill } from "../view/search/search-filter"
 import { DEFAULT_SEARCH_FILTERS } from "../view/react-context/settings"
 
 const F = [{ name: "Tasks", query: "is:task" }, { name: "Work", query: "is:task -home" }, { name: "Home", query: "is:task home" }]
@@ -109,6 +109,11 @@ describe("filterNameHints", () => {
     it("blocks a name that can't be one query word", () => {
         expect(filterNameHints("Recent tasks", F)).toEqual([{ text: 'Use letters, digits, "-" or "_"', blocking: true }])
     })
+
+    it("renaming: the filter's own name is free, another filter's name blocks", () => {
+        expect(filterNameHints("TASKS", F, "Tasks")).toEqual([])
+        expect(filterNameHints("work", F, "Tasks")).toEqual([{ text: '"Work" already exists', blocking: true }])
+    })
 })
 
 describe("saveFilter", () => {
@@ -120,5 +125,19 @@ describe("saveFilter", () => {
 
     it("replaces the filter with the same name in place, ignoring case", () => {
         expect(saveFilter(filters, "tasks", "is:task in:30d")).toEqual([{ name: "tasks", query: "is:task in:30d" }, filters[1]])
+    })
+})
+
+describe("renameFilterRefs", () => {
+    it("renames :Name and -:Name references in any case, leaving quoted text, links and other names alone", () => {
+        expect(renameFilterRefs(':tasks foo -:Tasks ":tasks" [[a :tasks]] :Tasks2', "Tasks", "Todo"))
+            .toBe(':Todo foo -:Todo ":tasks" [[a :tasks]] :Tasks2')
+    })
+})
+
+describe("renameFilter", () => {
+    it("renames in place, keeps the query, and renames references in other filters", () => {
+        const filters = [{ name: "Tasks", query: "is:task" }, { name: "Work", query: ":tasks #work" }]
+        expect(renameFilter(filters, "tasks", " Todo ")).toEqual([{ name: "Todo", query: "is:task" }, { name: "Work", query: ":Todo #work" }])
     })
 })

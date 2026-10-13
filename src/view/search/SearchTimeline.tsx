@@ -58,7 +58,7 @@ export const RecencyFilterBar = () => {
             role="button"
             tabIndex={0}
             className={`ts-timeline-chip ${recencyWindow === w ? "is-active" : ""}`}
-            title={w === "all" ? "Any date" : `in:${w}`}
+            aria-label={w === "all" ? "Any date" : `in:${w}`}
             onClick={() => setRecencyWindow(w)}
             onKeyDown={chipKeys(() => setRecencyWindow(w))}
         >{w === "all" ? "All" : w}</div>)}
@@ -68,7 +68,7 @@ export const RecencyFilterBar = () => {
                  filterActive(query, f) && "is-active",
                  candidates.has(f.name) && "is-candidate",
                  focusedName === f.name && "is-candidate-selected"].filter(Boolean).join(" ")}
-             title={`:${f.name} — ${f.query}`} onClick={() => toggle(f)} onKeyDown={chipKeys(() => toggle(f))}>{f.name}</div>)}
+             aria-label={`:${f.name} — ${f.query}`} onClick={() => toggle(f)} onKeyDown={chipKeys(() => toggle(f))}>{f.name}</div>)}
     </div>
 }
 

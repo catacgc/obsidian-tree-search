@@ -1,5 +1,5 @@
 import {TreeNode} from '../search/SearchViewFlatten'
-import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, linkTargetTree, type QueryExpr, partitionArchived, extractArchiveReveal, suggestAt, dateSuggestAt, type Suggestion, parseDuration, flattenIndex, defaultVisibility, blockFooters, pruneToRecency} from '@mdtree/core'
+import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, linkTargetTree, type QueryExpr, partitionArchived, extractArchiveReveal, suggestAt, dateSuggestAt, type Suggestion, parseDuration, flattenIndex, defaultVisibility, blockFooters, pruneToRecency, openLinkAt} from '@mdtree/core'
 import {atom, useAtomValue, type Getter, type Setter} from 'jotai'
 import {findTargetRow, revealRow, rowTargets, type RowTarget} from '../search/select-target'
 import {expandFilterRefs, filterSuggestionsAt, toggleFilterPill} from '../search/search-filter'
@@ -305,13 +305,23 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         return get(treeNodesAtom)[sel] ?? null
     })
 
-    /** In an append chain with nothing to write (the input searches under the chips), the selected row Enter adds as
-     *  the next chip, as `>` does; null otherwise. */
+    /** The row plain Enter acts on: the selected row, else (nothing selected) the first result row; null when there is
+     *  none. Only Enter falls back to the first row; `>`, `<`, → , Alt+keys and the action panel need a selection. */
+    const enterRowAtom = atom<TreeNode | null>(get =>
+        get(selectedNodeAtom) ?? (get(selectedLineAtom) === -1 ? get(renderableTreeNodesAtom).find(r => !r.archiveRow) ?? null : null))
+    /** Selects enterRowAtom's row when nothing is selected, so the selected-row actions Enter runs see it. */
+    const selectEnterRowAtom = atom(null, (get, set) => {
+        const row = get(enterRowAtom)
+        if (row && get(selectedLineAtom) !== row.index) set(selectedLineAtom, row.index)
+    })
+
+    /** In an append chain with nothing to write (the input searches under the chips), the row Enter adds as the next
+     *  chip, as `>` does (the selected row, else the first: enterRowAtom); null otherwise. */
     const chainPatchRowAtom = atom<TreeNode | null>(get => {
         const chain = get(chainAtom)
         if (chain?.mode !== "append" || get(chainWriteAtom) !== null) return null
         if (chain.steps.some(s => s.kind === "entry") || isEntryInput(get(actualQueryAtom))) return null
-        const sel = get(selectedNodeAtom)
+        const sel = get(enterRowAtom)
         return sel && !sel.archiveRow && isPatchable(sel.node) ? sel : null
     })
 
@@ -327,7 +337,12 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     // without re-running the search.
     const lastResultsAtom = atom<{ results: ResultNode[]; archivedCount: number }>({ results: [], archivedCount: 0 })
 
-    /** Installs recomputed `nodes`, selecting the pending/anchored row if present, else the first row. */
+    /** Whether results select their first row on their own: everywhere but the Search pane and modal (editor mode),
+     *  and there too while the editor shows its link list or the query has an open `[[frag` (link completion). */
+    const autoSelectsFirst = (get: Getter) => !scp.allowEditing || get(editorOpenAtom) || openLinkAt(get(actualQueryAtom)) !== null
+
+    /** Installs recomputed `nodes`, selecting the pending/anchored row if present, else the first row where
+     *  `autoSelectsFirst`, else none. */
     const settleSelection = (get: Getter, set: Setter, nodes: TreeNode[]) => {
         const query = get(actualQueryAtom)
         const pending = get(GlobalAtoms.pendingSelectAtom)
@@ -355,7 +370,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         } else {
             set(treeNodesAtom, nodes)
             set(pagesAtom, 1)
-            set(selectedLineValueAtom, get(searchVisibleAtom) ? 0 : -1)
+            set(selectedLineValueAtom, get(searchVisibleAtom) && autoSelectsFirst(get) ? 0 : -1)
         }
         set(hoveredLineAtom, -1)
     }
@@ -446,9 +461,10 @@ export const SearchViewMolecule = molecule((mol, scope) => {
 
     const arrowUpAtom = atom(null, (get, set) => {
         const line = get(selectedLineAtom)
+        if (line === -1) return
         const nodes = get(treeNodesAtom)
         const prevVisible = nodes.slice(0, line).reverse().find(node => node.visible)
-        set(selectedLineAtom, prevVisible?.index ?? 0)
+        set(selectedLineAtom, prevVisible?.index ?? (autoSelectsFirst(get) ? 0 : -1))
     })
 
     const updateHoveredLineAtom = atom(null, (get, set, index: number) => {
@@ -842,7 +858,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             decExpandAtom,
             incExpandAtom,
             resetCollapseAtom,
-            selectedNodeAtom,
+            selectedNodeAtom, enterRowAtom, selectEnterRowAtom,
             searchPlaceholderAtom,
             setDefaultExpandLevelAtom,
             expandNodeAtom, selectedLineAtom, updateHoveredLineAtom, hoveredLineAtom,

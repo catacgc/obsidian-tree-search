@@ -153,6 +153,18 @@ describe("parseQuery / tokenizer", () => {
       exprs: [{ type: "empty" }, { type: "contains", value: "foo" }],
     })
   })
+
+  it("keeps the typed case with keepCase, resolving field names and is:/has: values either way", () => {
+    expect(parseQuery("Apollo IS:Task [[Project X]]", ".", true)[0]).toEqual({
+      type: "and",
+      exprs: [
+        { type: "contains", value: "Apollo" },
+        { type: "modifier", field: "is", value: "task" },
+        { type: "modifier", field: "tree", value: "Project X", exact: true },
+      ],
+    })
+    expect(parseQuery("Apollo", ".")[0]).toEqual({ type: "contains", value: "apollo" })
+  })
 })
 
 describe("matchQuery", () => {

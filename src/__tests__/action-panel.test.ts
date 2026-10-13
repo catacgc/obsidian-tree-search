@@ -160,19 +160,20 @@ describe("panelItems", () => {
         expect(titles(c, "view")).toEqual(["Quick Add", "Show tree", "Rebuild index"])
     })
 
-    it("Filter: Save as Filter for a new query, Delete Filter for each active pill", () => {
+    it("Filter: Save as Filter for a new query, Rename and Delete Filter for each active pill", () => {
         const c = ctx({ query: "foo is:task", filters: DEFAULT_SEARCH_FILTERS })
-        expect(titles(c, "filter")).toEqual(["Save as Filter", 'Delete Filter "Tasks"'])
+        expect(titles(c, "filter")).toEqual(["Save as Filter", 'Rename Filter "Tasks"', 'Delete Filter "Tasks"'])
+        expect(panelItems(c).find(i => i.id === "renameFilter:Tasks")?.run).toEqual({ kind: "renameFilter", name: "Tasks" })
         expect(panelItems(c).find(i => i.id === "deleteFilter:Tasks")?.run).toEqual({ kind: "deleteFilter", name: "Tasks" })
     })
 
     it("Filter: no Save when the query is a saved filter's, ignoring whitespace", () => {
-        expect(titles(ctx({ query: " is:task ", filters: DEFAULT_SEARCH_FILTERS }), "filter")).toEqual(['Delete Filter "Tasks"'])
+        expect(titles(ctx({ query: " is:task ", filters: DEFAULT_SEARCH_FILTERS }), "filter")).toEqual(['Rename Filter "Tasks"', 'Delete Filter "Tasks"'])
     })
 
     it("Filter: a :Name reference counts as the active pill and as the saved query", () => {
-        expect(titles(ctx({ query: ":tasks foo", filters: DEFAULT_SEARCH_FILTERS }), "filter")).toEqual(["Save as Filter", 'Delete Filter "Tasks"'])
-        expect(titles(ctx({ query: " :Tasks ", filters: DEFAULT_SEARCH_FILTERS }), "filter")).toEqual(['Delete Filter "Tasks"'])
+        expect(titles(ctx({ query: ":tasks foo", filters: DEFAULT_SEARCH_FILTERS }), "filter")).toEqual(["Save as Filter", 'Rename Filter "Tasks"', 'Delete Filter "Tasks"'])
+        expect(titles(ctx({ query: " :Tasks ", filters: DEFAULT_SEARCH_FILTERS }), "filter")).toEqual(['Rename Filter "Tasks"', 'Delete Filter "Tasks"'])
     })
 
     it("Filter: nothing for a blank query", () => {

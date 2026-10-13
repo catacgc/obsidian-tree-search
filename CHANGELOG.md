@@ -2,11 +2,16 @@
 
 ## Unreleased
 
+- **No default selection:** in the Search modal and pane, results no longer select their first row; press <kbd>↓</kbd> or click a row. <kbd>Enter</kbd> with nothing selected still acts on the first row (the footer names it). <kbd>&gt;</kbd>, <kbd>&lt;</kbd>, <kbd>Alt</kbd> keys and the action panel need a selected row; <kbd>↑</kbd> on the first row clears the selection. Quick Link and `[[` link completion still select the first row.
+- **Patch from a search:** <kbd>&gt;</kbd> with nothing selected patches today's daily note and pre-fills the box with an item matching the search: `is:task #home` (or a saved filter such as `:Tasks`) gives `- [ ] #home `, ready to finish and add with <kbd>Enter</kbd>.
+- **Fix:** the date chips (All, 7d, 30d, 1y) and filter pills show their tooltip on hover (`in:7d`, `:Tasks — is:task`).
+- **Rename Filter:** while a filter pill is active, the action panel's **Filter** section offers **Rename Filter** for it (for example **Rename Filter "Tasks"**). The pill keeps its query and place, and every `:Name` reference to it, in other pills and in the search box, follows the new name.
 - The action panel's **Move to…** is now **Move under…**, matching the footer and <kbd>&lt;</kbd>. The separate Tree-only **Move under…** list of notes in the results is gone: the search finds every note, on every platform.
 - **Cut drawer:** in the Search modal and pane, <kbd>⌘</kbd>+<kbd>X</kbd> (<kbd>Ctrl</kbd>+<kbd>X</kbd>) cuts the selected row into a drawer above the footer; press it again to take the row out. The drawer, shared by the modal and the pane, moves every cut row under a new parent at once (**Move under…**), archives them (**Archive**) or empties (**Clear**). The action panel has the same actions.
 - **Unschedule:** the action panel's Task section has **Unschedule** for an open task with a scheduled date, its own or one of its open subtasks'. It removes the dates (`[scheduled:: …]`, `(scheduled:: …)` or `⏳ …`) from the task and from the open tasks nested under it.
 - **Task dates:** a task row shows a date only when the task has a scheduled or due date, its own or an open subtask's. Unscheduled tasks no longer show their creation date or their note's date.
 - **Tree context:** a top-level line or heading in the Tree now shows its place in its note (the enclosing heading, parent line or note) below it, as the Timeline does.
+- **Fix:** in a note that mixes tab and space indentation, a bullet now nests under the bullet it appears under in Obsidian (a tab counts as 4 spaces). The parse cache is rebuilt once after updating.
 
 ## 0.15.0
 

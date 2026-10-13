@@ -47,6 +47,11 @@ export function saveFilterState(query: string): EditorState {
     return {...emptySession(), mode: "edit", editKind: "filter", sourcePath: "", filterQuery: query, outline: "", caret: 0}
 }
 
+/** A Rename Filter session for `filter`: the outline holds its name, caret at the end. */
+export function renameFilterState(filter: {name: string; query: string}): EditorState {
+    return {...emptySession(), mode: "edit", editKind: "filter", sourcePath: "", originalLine: filter.name, filterQuery: filter.query, outline: filter.name, caret: filter.name.length}
+}
+
 const INVALID_NAME_CHARS = new RegExp(INVALID_NAME_RE.source, "g")
 
 /** A new note's name from pasted prose: its first non-blank line without heading/bullet/checkbox markers or
@@ -87,7 +92,7 @@ export function editorTitle(s: EditorState | null): string {
     if (s.prose?.kind === "new") return `New note from ${basenameOf(s.prose.link.path)}:${s.prose.link.line + 1}`
     if (s.mode === "append" && s.underLine) return `Add under "${s.underLine.label}"`
     if (s.mode !== "edit") return `Add to ${basenameOf(s.sourcePath)}`
-    if (s.editKind === "filter") return `Save Filter "${s.filterQuery}"`
+    if (s.editKind === "filter") return s.originalLine !== undefined ? `Rename Filter "${s.originalLine}"` : `Save Filter "${s.filterQuery}"`
     if (s.editKind === "file") return `Rename ${s.originalLine}`
     if (s.editKind === "heading") return `Rename ${basenameOf(s.sourcePath)}#${(s.originalLine ?? "").replace(/^#+\s*/, "").trim()}`
     return `Edit ${basenameOf(s.sourcePath)}:${(s.line ?? 0) + 1}`
