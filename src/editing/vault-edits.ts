@@ -35,7 +35,7 @@ import type {DailyNoteConfig} from "../indexing/indexed-tree"
 
 export type EditorAttachment = SessionAttachment & { path: string }
 
-/** The plans drag-to-reparent / Move under produce (`classifyReparent`). */
+/** The plans drag-to-reparent produces (`classifyReparent`). */
 export type DragReparentPlan =
     | { kind: "frontmatter"; childPath: string; oldName: string; newName: string; relation: string }
     /** A line's subtree moves to the end of `[[newName]]`'s outline. `stampDate`: the source note's date, added as
@@ -263,18 +263,18 @@ export async function trashVaultFile(app: App, path: string): Promise<void> {
     await app.fileManager.trashFile(file)
 }
 
-export type TaskChange = { kind: "done"; done: boolean } | { kind: "schedule"; when: RescheduleKind }
+export type TaskChange = { kind: "done"; done: boolean } | { kind: "schedule"; when: RescheduleKind } | { kind: "unschedule" }
 
-/** Completes/reopens or reschedules a task row's line (Tasks plugin Dataview fields); completing also completes the
- *  open tasks nested under it. Throws StaleLineError, writing nothing, when the line at the row's location no longer
- *  is that task (open, for a reschedule). */
+/** Completes/reopens, reschedules or unschedules a task row's line (Tasks plugin Dataview fields); completing and
+ *  unscheduling also apply to the open tasks nested under it. Throws StaleLineError, writing nothing, when the line at
+ *  the row's location no longer is that task (open, for a reschedule or an unschedule). */
 export async function editTaskLine(app: App, node: TextNode, change: TaskChange, now: Date = new Date()): Promise<TFile[]> {
     const {path, position: {start: {line}}} = node.location
     const current = await readLine(app, path, line)
     if (current === null || !lineHasIdentity(current, node)) throw new StaleLineError()
-    const edit: TaskLineEdit = change.kind === "done"
-        ? {kind: "done", done: change.done, today: localIsoDate(now)}
-        : {kind: "schedule", date: rescheduleDate(change.when, now)}
+    const edit: TaskLineEdit = change.kind === "done" ? {kind: "done", done: change.done, today: localIsoDate(now)}
+        : change.kind === "schedule" ? {kind: "schedule", date: rescheduleDate(change.when, now)}
+        : {kind: "unschedule"}
     const file = app.vault.getFileByPath(path)
     if (!file) throw new StaleLineError()
     await app.vault.process(file, c => applyTaskEdit(c, line, current, edit))

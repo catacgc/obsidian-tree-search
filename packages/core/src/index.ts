@@ -59,7 +59,7 @@ export {
 } from "./search/flatten.ts"
 export { buildTimeline, fileParent, outlineContext, type TimelineItem, type BlockLine } from "./search/timeline.ts"
 export { pruneToRecency } from "./search/recency.ts"
-export { formatRelativeDate, textSourceDate } from "./search/relative-date.ts"
+export { isUnscheduledTask, rowDate, textSourceDate } from "./search/relative-date.ts"
 export { reverseMarkdownParsing } from "./search/copy.ts"
 export { isArchived, partitionArchived } from "./search/archive.ts"
 export {
@@ -107,6 +107,8 @@ export {
 export {
   setTaskDone,
   scheduleTask,
+  unscheduleTask,
+  hasScheduledDate,
   scheduleUnscheduledTasks,
   applyTaskEdit,
   rescheduleDate,

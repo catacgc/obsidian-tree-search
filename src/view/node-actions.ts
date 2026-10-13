@@ -1,6 +1,6 @@
 import { reverseMarkdownParsing } from "./copy";
 import { TreeNode } from "./search/SearchViewFlatten";
-import { ObsidianLinkToken, ParsedTextToken, isArchived, Location, isUndated, formatRelativeDate, textSourceDate } from "@mdtree/core";
+import { ObsidianLinkToken, ParsedTextToken, isArchived, Location, isUndated, rowDate, textSourceDate } from "@mdtree/core";
 import {App} from "obsidian";
 import {resolveThumbnail, stripDateAnnotations, timelineCrumbs, type FileUrl} from "./search/timeline-utils";
 
@@ -132,7 +132,7 @@ export function createRaycastResponse(app: App, results: TreeNode[]): VaultResul
         vault,
         results: results.map((result, index) => {
             const actions = getTreeNodeActions(app, result)
-            const date = formatRelativeDate(result.node.ageDays, textSourceDate(result.node))
+            const date = rowDate(result.node, result.node.ageDays)
             return {
                 title: renderTitle(result, [], app) + (date ? ` (${date.label})` : ""),
                 level: result.indent,
@@ -159,7 +159,7 @@ export function createRaycastTimelineResponse(app: App, rows: TreeNode[], fileUr
                 nodeType: row.node.nodeType,
                 actions: getTreeNodeActions(app, row),
                 timeline: {
-                    date: formatRelativeDate(ageDays, sourceDate) ?? undefined,
+                    date: rowDate(row.node, ageDays) ?? undefined,
                     ageDays,
                     fromFile: isUndated(row.node.ageDays),
                     breadcrumb: timelineCrumbs(row),

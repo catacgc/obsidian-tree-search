@@ -35,6 +35,25 @@ describe("outline parent context", () => {
         expect(row.outlineParent).toBeUndefined()
     })
 
+    it("Tree: a top-level line gets its outline parent as subtitle", () => {
+        const row = treeRows("analysis").find(r => isLine(r.node.searchKey))!
+        expect(row.indent).toBe(0)
+        expect(row.outlineParent && getKey(row.outlineParent)).toBe("[[uae]]")
+    })
+
+    it("Tree: a top-level heading gets its enclosing heading as subtitle, not its own note", () => {
+        const g = new NotesGraph()
+        indexSinglePage(parseVaultFile("# Plans\n## Budget review\n# Budget notes\n", "Work.md", MTIME), g, DEFAULT_SETTINGS)
+        const rows: TreeNode[] = flattenIndex(searchIndex(g, "budget", "."), 10, parseQuery("budget", "."))
+        tagOutlineParents(g, rows)
+        const subtitle = (header: string) => {
+            const row = rows.find(r => r.node.nodeType === "header" && r.node.header === header && r.indent === 0)!
+            return row.outlineParent && getKey(row.outlineParent)
+        }
+        expect(subtitle("Budget review")).toBe("work#plans")
+        expect(subtitle("Budget notes")).toBeUndefined()
+    })
+
     it("Timeline: the breadcrumb is the outline parent, not the linked note", () => {
         const g = graph()
         const q = "rares vlasceanu"

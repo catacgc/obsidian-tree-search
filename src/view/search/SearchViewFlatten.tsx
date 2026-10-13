@@ -31,7 +31,7 @@ export type TreeNode = {
     timeline?: { breadcrumb: ParsedNode[]; pinned: boolean; ageDays: number; block?: BlockLine[] }
     /** Timeline block row showing all its lines, not only the previews ("+N more" or → in the search input). */
     blockOpen?: boolean
-    /** Tree row shown under one of its inline parents (a note its line links): its outline parent, shown as a subtitle. */
+    /** Tree row: its outline parent, shown as a subtitle, when it is top-level or shown under one of its inline parents (a note its line links). */
     outlineParent?: ParsedNode
 }
 

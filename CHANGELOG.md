@@ -4,6 +4,9 @@
 
 - The action panel's **Move to…** is now **Move under…**, matching the footer and <kbd>&lt;</kbd>. The separate Tree-only **Move under…** list of notes in the results is gone: the search finds every note, on every platform.
 - **Cut drawer:** in the Search modal and pane, <kbd>⌘</kbd>+<kbd>X</kbd> (<kbd>Ctrl</kbd>+<kbd>X</kbd>) cuts the selected row into a drawer above the footer; press it again to take the row out. The drawer, shared by the modal and the pane, moves every cut row under a new parent at once (**Move under…**), archives them (**Archive**) or empties (**Clear**). The action panel has the same actions.
+- **Unschedule:** the action panel's Task section has **Unschedule** for an open task with a scheduled date, its own or one of its open subtasks'. It removes the dates (`[scheduled:: …]`, `(scheduled:: …)` or `⏳ …`) from the task and from the open tasks nested under it.
+- **Task dates:** a task row shows a date only when the task has a scheduled or due date, its own or an open subtask's. Unscheduled tasks no longer show their creation date or their note's date.
+- **Tree context:** a top-level line or heading in the Tree now shows its place in its note (the enclosing heading, parent line or note) below it, as the Timeline does.
 
 ## 0.15.0
 

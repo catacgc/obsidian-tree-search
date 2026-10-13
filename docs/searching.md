@@ -51,8 +51,8 @@ A match on a nested line shows its whole outline block: the outermost line above
 
 Switch to the Timeline with the toggle above the results, or press <kbd>Alt</kbd>+<kbd>T</kbd>. The Timeline shows your results as a flat list, newest first, so future-dated items come first, furthest ahead at the top. Open tasks are the exception (see [Tasks](#tasks)). Items with an emoji are pinned to the top. A line takes its date from its daily note, a date in the line, or its note's `created`/`updated` frontmatter; lines with none of these use the date their file was created.
 
-![The timeline for is:text over the last 30 days](assets/screenshots/timeline.webp)
-*`is:text` in the Timeline with **30d**: dated rows, with emoji items pinned on top.*
+![The timeline for is:task](assets/screenshots/timeline.webp)
+*`is:task` in the Timeline: open tasks oldest first, so overdue ones lead and the ones scheduled ahead come last.*
 
 ## Actions
 
@@ -66,18 +66,20 @@ Select a row and press <kbd>Cmd/Ctrl</kbd>+<kbd>K</kbd>, or click **Actions**, t
 
 Note rows add note actions, such as moving the note to a folder or consolidating notes into it. The panel also lists view actions (open the editor, switch to the Timeline, expand or collapse), and you can type to filter them.
 
-For an open task, a **Task** section adds **Done**, **Today**, **Tomorrow**, **Weekend** (next Saturday) and **Next Week** (next Monday). See [Tasks](#tasks).
+For an open task, a **Task** section adds **Done**, **Today**, **Tomorrow**, **Weekend** (next Saturday) and **Next Week** (next Monday), plus **Unschedule** when the task or one of its open subtasks has a scheduled date. See [Tasks](#tasks).
 
 ![The Actions panel for a selected row](assets/screenshots/action-panel.webp)
 *The Actions panel for "Kickoff with Alice and Bob".*
 
 ## Tasks
 
-Task lines (`- [ ] …`) show their checkbox in Tree and Timeline rows. Click it to complete the task in its note: the line becomes `- [x] …` and gets `[completion:: <today>]`. Completing a task also completes the open tasks nested under it. Click a completed task's checkbox to reopen it; its completion date is removed, and its subtasks stay as they are. The panel's **Today**, **Tomorrow**, **Weekend** and **Next Week** set the task's `[scheduled:: <date>]`, replacing an existing scheduled date (`[scheduled:: …]`, `(scheduled:: …)` or `⏳ …`); its subtasks keep their own dates. These fields use the [Tasks](https://publish.obsidian.md/tasks/) plugin's Dataview format. Recurring tasks don't get a next occurrence. If the note changed since it was indexed, nothing is written and you see "This row's index is out of date".
+Task lines (`- [ ] …`) show their checkbox in Tree and Timeline rows. Click it to complete the task in its note: the line becomes `- [x] …` and gets `[completion:: <today>]`. Completing a task also completes the open tasks nested under it. Click a completed task's checkbox to reopen it; its completion date is removed, and its subtasks stay as they are. The panel's **Today**, **Tomorrow**, **Weekend** and **Next Week** set the task's `[scheduled:: <date>]`, replacing an existing scheduled date (`[scheduled:: …]`, `(scheduled:: …)` or `⏳ …`); its subtasks keep their own dates. **Unschedule** removes the scheduled dates, in any of those forms, from the task and from the open tasks nested under it, so a task dated by a subtask loses that date too; due dates and other dates stay. These fields use the [Tasks](https://publish.obsidian.md/tasks/) plugin's Dataview format. Recurring tasks don't get a next occurrence. If the note changed since it was indexed, nothing is written and you see "This row's index is out of date".
 
-When you add lines with the editor, Quick Add or a search chain, every open task without a scheduled date gets `[scheduled:: <today>]`. When you edit a single line, an open task without a scheduled date gets it too, unless it is nested under another line.
+When you add lines with the editor, Quick Add or a search chain, every open task without a scheduled date gets `[scheduled:: <today>]`. When you edit a single line, an open task without a scheduled date gets it too, unless it is nested under another line; so editing an unscheduled task in place schedules it for today again.
 
 A line with a scheduled or due date (`[scheduled:: …]`, `(due:: …)`, `⏳ …`, `📅 …`; the earliest when it has several) is dated by it, even when a `[created:: …]` comes first. Other lines use their first date. A task with open subtasks shows, and sorts by, the earliest date among its own date and its open subtasks' scheduled or due dates. A subtask's `[created:: …]` or other dates in its text never move the task's date. The note itself is not changed.
+
+A task row shows a date only when the task has a scheduled or due date, its own or an open subtask's. A task without one shows no date: neither its `[created:: …]` nor its note's date, though it still sorts by them.
 
 Open tasks sort oldest first, so overdue tasks come first and future ones last: in the Timeline, right after pinned items; in the Tree, before the other lines under the same parent. Undated open tasks come after the dated ones in the Tree. Completed tasks sort like any other line.
 

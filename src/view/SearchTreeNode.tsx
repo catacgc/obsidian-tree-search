@@ -1,5 +1,5 @@
 import {useEffect, useMemo, useRef} from "react";
-import {formatRelativeDate, isUndated, ParsedNode, textSourceDate, UNDATED_AGE} from "@mdtree/core";
+import {isUndated, ParsedNode, rowDate, textSourceDate, UNDATED_AGE} from "@mdtree/core";
 import {Platform} from "obsidian";
 import {Pencil} from "lucide-react";
 import {BaseNodeRender, highlightText} from "./NodeRenderer";
@@ -69,9 +69,9 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
     const indentLevel = props.node.indent + 1;
 
     const sourceDate = textSourceDate(props.node.node);
-    // Undated rows show their file's creation date, as in the Timeline.
+    // Undated rows show their file's creation date, as in the Timeline; unscheduled tasks show none (rowDate).
     const fromFile = isUndated(props.node.node.ageDays);
-    const date = formatRelativeDate(fromFile ? fileAgeDays(app, props.node.node) ?? UNDATED_AGE : props.node.node.ageDays, sourceDate);
+    const date = rowDate(props.node.node, fromFile ? fileAgeDays(app, props.node.node) ?? UNDATED_AGE : props.node.node.ageDays);
     // The date sits on the right; drop its in-text repeats from the rendered line.
     const shownNode = useMemo(() => sourceDate ? stripDateAnnotations(props.node.node, sourceDate) : props.node.node, [props.node.node, sourceDate]);
     const thumb = useMemo(() => app ? resolveThumbnail(app, props.node.node) : null, [app, props.node.node]);

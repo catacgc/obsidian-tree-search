@@ -1,5 +1,5 @@
 import type { ParsedNode } from "../graph/types.ts"
-import { isUndated, lineDate } from "../graph/boost.ts"
+import { deadlineDate, isUndated, lineDate } from "../graph/boost.ts"
 
 // The date a text row shows: the date inherited from its earliest open
 // subtask's scheduled/due date, else its own `lineDate`. Either one sets the indexer's age
@@ -7,6 +7,17 @@ import { isUndated, lineDate } from "../graph/boost.ts"
 export function textSourceDate(node: ParsedNode): string | null {
   if (node.nodeType !== "text") return null
   return node.inheritedDate ?? lineDate(node.searchKey)
+}
+
+/** A task with no scheduled/due date of its own nor one inherited from an open subtask. Its row shows no date: its
+ *  other dates (a `[created::]` stamp, its note's) are not when it is due. */
+export function isUnscheduledTask(node: ParsedNode): boolean {
+  return node.nodeType === "text" && node.isTask && node.inheritedDate === undefined && deadlineDate(node.searchKey) === null
+}
+
+/** The date a result row for `node`, aged `ageDays`, shows (formatRelativeDate); null for an unscheduled task. */
+export function rowDate(node: ParsedNode, ageDays: number, today: Date = new Date()): { label: string; absolute: string } | null {
+  return isUnscheduledTask(node) ? null : formatRelativeDate(ageDays, textSourceDate(node), today)
 }
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]

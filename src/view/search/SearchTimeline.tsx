@@ -1,7 +1,7 @@
 import React, {useEffect, useMemo, useRef, useState} from "react";
 import {useAtom, useAtomValue, useSetAtom} from "jotai";
 import {useMolecule} from "bunshi/react";
-import {formatRelativeDate, isUndated, textSourceDate, type BlockLine} from "@mdtree/core";
+import {isUndated, rowDate, textSourceDate, type BlockLine} from "@mdtree/core";
 import {Pencil} from "lucide-react";
 import {GlobalAppMolecule, SearchViewMolecule, RECENCY_WINDOWS} from "../react-context/state";
 import {ActionsMolecule} from "../react-context/actions";
@@ -126,7 +126,7 @@ export const TimelineRow = ({node, editable, appendDot, editHint}: TimelineRowPr
     }
 
     const sourceDate = textSourceDate(node.node)
-    const date = formatRelativeDate(node.timeline?.ageDays ?? node.node.ageDays, sourceDate)
+    const date = rowDate(node.node, node.timeline?.ageDays ?? node.node.ageDays)
     // Undated nodes are dated by their file's ctime (see buildTimelineRows).
     const fromFile = isUndated(node.node.ageDays)
     // The date sits on the right; drop its in-text repeats from the rendered line.
@@ -172,7 +172,7 @@ export const TimelineRow = ({node, editable, appendDot, editHint}: TimelineRowPr
  *  bubbles to the row (select / open the block root); the checkbox keeps the row selected. */
 const TimelineBlockLine = ({line, anchor, matchTerms}: {line: BlockLine; anchor: TreeNode["node"]; matchTerms: string[]}) => {
     const sourceDate = textSourceDate(line.node)
-    const date = sourceDate !== null ? formatRelativeDate(line.node.ageDays, sourceDate) : null
+    const date = sourceDate !== null ? rowDate(line.node, line.node.ageDays) : null
     const task = line.node.nodeType === "text" && line.node.isTask
     return <div className={`ts-block-line ${line.matched ? "" : "ts-node-dim"}`} style={{paddingLeft: `${(line.depth - 1) * 16}px`}}>
         {task ? <TaskCheckbox node={line.node} interactive anchor={anchor}/> : <span className="ts-list-bullet">-</span>}

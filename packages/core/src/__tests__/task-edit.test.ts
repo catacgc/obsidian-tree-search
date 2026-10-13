@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test"
-import { setTaskDone, scheduleTask, rescheduleDate, scheduleUnscheduledTasks, applyTaskEdit, addCreatedField, stampAppendedLine, stampMovedBlock, stampNewOutlineLines, pageDateIso } from "../edit/task-edit.ts"
+import { setTaskDone, scheduleTask, unscheduleTask, rescheduleDate, scheduleUnscheduledTasks, applyTaskEdit, addCreatedField, stampAppendedLine, stampMovedBlock, stampNewOutlineLines, pageDateIso } from "../edit/task-edit.ts"
 import { StaleLineError } from "../edit/outline-edit.ts"
 
 const TODAY = "2026-10-06"
@@ -47,6 +47,25 @@ describe("scheduleTask", () => {
   it("is null for a done task or a non-task line", () => {
     expect(scheduleTask("- [x] call Bob", "2026-10-07")).toBeNull()
     expect(scheduleTask("- call Bob", "2026-10-07")).toBeNull()
+  })
+})
+
+describe("unscheduleTask", () => {
+  it("removes the scheduled date in any form, keeping the rest of the line and its block id", () => {
+    expect(unscheduleTask("- [ ] a [scheduled:: 2026-10-01] b")).toBe("- [ ] a b")
+    expect(unscheduleTask("- [ ] a (scheduled:: 2026-10-01)")).toBe("- [ ] a")
+    expect(unscheduleTask("- [ ] a ⏳ 2026-10-01 ^abc")).toBe("- [ ] a ^abc")
+  })
+
+  it("removes every scheduled date and leaves other dates", () => {
+    expect(unscheduleTask("    - [ ] a [created:: 2026-09-01] [scheduled:: 2026-10-01] 📅 2026-10-20 ⏳ 2026-10-02"))
+      .toBe("    - [ ] a [created:: 2026-09-01] 📅 2026-10-20")
+  })
+
+  it("is null for an unscheduled task, a done task or a non-task line", () => {
+    expect(unscheduleTask("- [ ] call Bob")).toBeNull()
+    expect(unscheduleTask("- [x] call Bob [scheduled:: 2026-10-01]")).toBeNull()
+    expect(unscheduleTask("- call Bob [scheduled:: 2026-10-01]")).toBeNull()
   })
 })
 
@@ -184,6 +203,16 @@ describe("applyTaskEdit", () => {
     expect(applyTaskEdit(done, 0, "- [x] p [completion:: 2026-10-01]", { kind: "done", done: false, today: DAY })).toBe(
       "- [ ] p\n    - [x] sub [completion:: 2026-10-01]\n",
     )
+  })
+
+  it("unscheduling a task also unschedules its open nested tasks, even when it has no date of its own", () => {
+    const S = "- [ ] p [scheduled:: 2026-10-01]\n    - [ ] a ⏳ 2026-10-02\n    - [x] b [scheduled:: 2026-10-03]\n" +
+      "    - note\n        - [ ] deep (scheduled:: 2026-10-04) 📅 2026-10-20\n- [ ] sibling [scheduled:: 2026-10-05]\n"
+    const out = "- [ ] p\n    - [ ] a\n    - [x] b [scheduled:: 2026-10-03]\n    - note\n        - [ ] deep 📅 2026-10-20\n- [ ] sibling [scheduled:: 2026-10-05]\n"
+    expect(applyTaskEdit(S, 0, "- [ ] p [scheduled:: 2026-10-01]", { kind: "unschedule" })).toBe(out)
+    const bare = S.replace("- [ ] p [scheduled:: 2026-10-01]", "- [ ] p")
+    expect(applyTaskEdit(bare, 0, "- [ ] p", { kind: "unschedule" })).toBe(out)
+    expect(() => applyTaskEdit("- [x] p\n    - [ ] a ⏳ 2026-10-02\n", 0, "- [x] p", { kind: "unschedule" })).toThrow(StaleLineError)
   })
 
   it("throws StaleLineError for a changed line and keeps CRLF", () => {

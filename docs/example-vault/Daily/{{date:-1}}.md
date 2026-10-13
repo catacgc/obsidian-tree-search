@@ -1,4 +1,6 @@
 - [[Project Hermes]]
     - API v2 load test passed #backend
+    - [ ] Plan the v2 rollout with [[Bob]] [scheduled:: {{date:3}}]
 - [[Alice]]
     - Wants a design review #followup
+    - [ ] Send Alice the onboarding notes [scheduled:: {{date:1}}]

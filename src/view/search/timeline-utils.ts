@@ -1,5 +1,5 @@
 import type { App, TFile } from "obsidian"
-import { buildTimeline, fileParent, outlineContext, type NotesGraph, type ParsedNode, type QueryExpr, type ResultNode } from "@mdtree/core"
+import { buildTimeline, fileParent, isUnscheduledTask, outlineContext, type NotesGraph, type ParsedNode, type QueryExpr, type ResultNode } from "@mdtree/core"
 import type { TreeNode } from "./SearchViewFlatten"
 
 export const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif"]
@@ -7,9 +7,12 @@ export const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "svg", "bm
 // Drop the annotations that repeat the row's date from a text line's plain
 // text tokens: bare `date` occurrences and inline fields holding only that date
 // (`[scheduled:: date]`, `(due:: date)`). Other dates carry information and stay.
+// An unscheduled task shows no date (rowDate): its field (`[created:: date]`) still
+// goes, but a bare date stays in its text.
 export function stripDateAnnotations(node: ParsedNode, date: string): ParsedNode {
     if (node.nodeType !== "text") return node
-    const re = new RegExp(String.raw`\s*(?:[\[(][^\[\]()]*::\s*${date}\s*[\])]|${date})`, "g")
+    const field = String.raw`[\[(][^\[\]()]*::\s*${date}\s*[\])]`
+    const re = new RegExp(String.raw`\s*(?:${isUnscheduledTask(node) ? field : `${field}|${date}`})`, "g")
     return {
         ...node,
         parsedTokens: node.parsedTokens.map(t => t.tokenType === "text" ? { ...t, text: t.text.replace(re, "") } : t),
@@ -134,17 +137,24 @@ export function buildTimelineRows(app: App | null | undefined, graph: NotesGraph
     })
 }
 
-/** Sets `outlineParent` (outlineContext) on each Tree row shown under one of its inline parents. `rows`: pre-order, indent = depth. */
+/** Sets `outlineParent` on Tree rows: for a top-level row its in-note parent (fileParent; not a heading's own note,
+ *  which its label already names), for a row shown under one of its inline parents its outline parent
+ *  (outlineContext). `rows`: pre-order, indent = depth. */
 export function tagOutlineParents(graph: NotesGraph, rows: TreeNode[]): void {
     const path: ParsedNode[] = []
     for (const row of rows) {
         if (row.archiveRow) continue
         path.length = row.indent
         const parent = path[row.indent - 1]
-        const outline = parent ? outlineContext(graph, row.node, parent) : null
+        const outline = parent ? outlineContext(graph, row.node, parent) : rootContext(graph, row.node)
         if (outline) row.outlineParent = outline
         path.push(row.node)
     }
+}
+
+function rootContext(graph: NotesGraph, node: ParsedNode): ParsedNode | null {
+    const parent = fileParent(graph, node)
+    return parent && !(node.nodeType === "header" && parent.nodeType === "page") ? parent : null
 }
 
 // Breadcrumb segments shown under a timeline row: its matched ancestors, else

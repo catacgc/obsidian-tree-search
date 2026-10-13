@@ -73,9 +73,10 @@ async function lastModal(): Promise<ElementHandle<Element>> {
 
 // Waits for result rows inside the last element matching scopeSel.
 async function waitRows(scopeSel: string, rowSel = ".tree-node") {
+    // Interval polling: the default rAF polling never fires while the window is occluded.
     await page.waitForFunction(
         (s, r) => ([...document.querySelectorAll(s)].pop()?.querySelectorAll(r).length ?? 0) > 0,
-        { timeout: 15_000 }, scopeSel, rowSel);
+        { timeout: 15_000, polling: 100 }, scopeSel, rowSel);
     await Bun.sleep(400);
 }
 
@@ -142,6 +143,11 @@ async function element(sel: string): Promise<ElementHandle<Element>> {
 // ── Prepare the vault window ────────────────────────────────────────────────
 mkdirSync(OUT, { recursive: true });
 await page.bringToFront();
+// bringToFront only switches the CDP target. An occluded window (behind another vault's window) reports
+// `visibilityState: hidden`: rAF stops and nothing repaints, so raise the native window too.
+await ev(`(() => { const w = window.require("@electron/remote").getCurrentWindow(); w.show(); w.moveTop(); w.focus(); })()`);
+await Bun.sleep(500);
+if ((await ev<string>("document.visibilityState")) !== "visible") console.warn("warning: the docs vault window is still hidden; bring it to the front if shots time out");
 await page.setViewport({ width: 1280, height: 800, deviceScaleFactor: 2 });
 if ((await ev<number>("innerWidth")) !== 1280) console.warn("warning: viewport is not 1280px wide; element shots are unaffected");
 
@@ -214,9 +220,8 @@ const shots: [name: string, run: () => Promise<Target>][] = [
         return lastModal();
     }],
     ["timeline", async () => {
-        await searchModal("is:text");
+        await searchModal("is:task");
         await clickAria("Show timeline");
-        await chip("30d");
         await waitRows(".modal", ".ts-timeline-row");
         return lastModal();
     }],
@@ -257,6 +262,31 @@ const shots: [name: string, run: () => Promise<Target>][] = [
         await alt("Enter");
         await element(".modal .cm-content");
         await Bun.sleep(600);
+        return lastModal();
+    }],
+    ["patch-chain", async () => {
+        await searchModal("project apollo");
+        await selectRow(".modal", "Project Apollo (Apollo)");
+        // `>` makes the selected row the anchor chip; Enter on a result under it adds that as the next chip.
+        await page.keyboard.type(">");
+        await setQuery(SEARCH_INPUT, "ship");
+        await waitRows(".modal");
+        await selectRow(".modal", "Ship the public beta");
+        // The click may move focus off the search input, whose keydown handles the chain's Enter.
+        await ev(`[...document.querySelectorAll(${JSON.stringify(SEARCH_INPUT)})].pop().focus()`);
+        await page.keyboard.press("Enter");
+        await page.waitForFunction(() => document.querySelector(".modal .modal-title")?.textContent?.includes("Ship the public beta"), { timeout: 5_000, polling: 100 });
+        await setQuery(SEARCH_INPUT, "[ ] Order the launch t-shirts");
+        await Bun.sleep(600);
+        return lastModal();
+    }],
+    ["move-under", async () => {
+        await searchModal("budget");
+        await selectRow(".modal", "Budget approved");
+        // `<` makes the selected row the one to move; the query then searches for its new parent.
+        await page.keyboard.type("<");
+        await setQuery(SEARCH_INPUT, "hermes");
+        await waitRows(".modal");
         return lastModal();
     }],
     ["quick-link", async () => {
@@ -316,9 +346,8 @@ async function cleanup(name: string) {
     if (name === "settings") await ev(`app.setting.close()`);
     if (name === "timeline") {
         // Keep the persisted modal mode at tree.
-        await searchModal("is:text");
+        await searchModal("is:task");
         await clickAria("Show tree");
-        await chip("All");
         await escapeAll();
     }
     if (name === "recency-tree") {

@@ -39,6 +39,22 @@ export function scheduleTask(line: string, date: string): string | null {
   return `${prefix}[ ]${SCHEDULED_RE.test(rest) ? rest.replace(SCHEDULED_RE, `$1${date}`).trimEnd() : appendField(rest, `[scheduled:: ${date}]`)}`
 }
 
+/** True when `text` holds a scheduled date: `[scheduled:: d]`, `(scheduled:: d)` or `⏳ d`. */
+export function hasScheduledDate(text: string): boolean {
+  return SCHEDULED_RE.test(text)
+}
+
+const SCHEDULED_WITH_SPACE_RE = /[ \t]*(?:\[scheduled::\s*\d{4}-\d{2}-\d{2}\s*\]|\(scheduled::\s*\d{4}-\d{2}-\d{2}\s*\)|⏳\s*\d{4}-\d{2}-\d{2})/g
+
+/** Removes every scheduled date (`[scheduled:: d]`, `(scheduled:: d)`, `⏳ d`) from an open task line; null when the
+ *  line is not an open task or has none. */
+export function unscheduleTask(line: string): string | null {
+  const m = TASK_LINE_RE.exec(line)
+  if (!m || m[2] !== " " || !SCHEDULED_RE.test(m[3])) return null
+  const [, prefix, , rest] = m
+  return `${prefix}[ ]${rest.replace(SCHEDULED_WITH_SPACE_RE, "").trimEnd()}`
+}
+
 /** Each open, non-empty task line of `text` that has no scheduled date (`[scheduled:: d]`, `(scheduled:: d)`,
  *  `⏳ d`) and is not nested under a text line gets `[scheduled:: today]` (scheduleTask). A line counts as nested
  *  when the nearest list line above it with a smaller indent has non-empty text that is not a lone `[[link]]`. */
@@ -96,29 +112,37 @@ export function stampMovedBlock(block: string[], date: string): string[] {
   })
 }
 
-export type TaskLineEdit = { kind: "done"; done: boolean; today: string } | { kind: "schedule"; date: string }
+export type TaskLineEdit = { kind: "done"; done: boolean; today: string } | { kind: "schedule"; date: string } | { kind: "unschedule" }
 
-/** Applies `edit` to the task on line `line` of `content`. Completing (`done: true`) also completes every open task
- *  nested under it: the following lines indented deeper (blank lines skipped) up to the first non-blank line
- *  indented no deeper. Scheduling and reopening touch only that line (subtasks keep their own dates). Throws
- *  StaleLineError, changing nothing, when the line no longer equals `expectedLine` or is not a suitable task.
- *  Keeps the file's EOL. */
+/** Applies `edit` to the task on line `line` of `content`. Completing (`done: true`) and unscheduling also apply to
+ *  every open task nested under it: the following lines indented deeper (blank lines skipped) up to the first
+ *  non-blank line indented no deeper. Unscheduling an open task with no scheduled date of its own only clears its
+ *  subtasks. Scheduling and reopening touch only that line (subtasks keep their own dates). Throws StaleLineError,
+ *  changing nothing, when the line no longer equals `expectedLine` or is not a suitable task. Keeps the file's EOL. */
 export function applyTaskEdit(content: string, line: number, expectedLine: string, edit: TaskLineEdit): string {
   const { lines, eol } = splitLines(content)
   if (lines[line] !== expectedLine) throw new StaleLineError()
-  const head = edit.kind === "done" ? setTaskDone(expectedLine, edit.done, edit.today) : scheduleTask(expectedLine, edit.date)
+  const head = edit.kind === "done" ? setTaskDone(expectedLine, edit.done, edit.today)
+    : edit.kind === "schedule" ? scheduleTask(expectedLine, edit.date)
+    : isOpenTask(expectedLine) ? unscheduleTask(expectedLine) ?? expectedLine : null
   if (head === null) throw new StaleLineError()
   lines[line] = head
-  if (edit.kind === "done" && edit.done) {
+  const nested = edit.kind === "done" && edit.done ? (l: string) => setTaskDone(l, true, edit.today)
+    : edit.kind === "unschedule" ? unscheduleTask
+    : null
+  if (nested) {
     const indent = indentWidth(expectedLine)
     for (let i = line + 1; i < lines.length; i++) {
       if (!lines[i].trim()) continue
       if (indentWidth(lines[i]) <= indent) break
-      const m = TASK_LINE_RE.exec(lines[i])
-      if (m && m[2] === " ") lines[i] = setTaskDone(lines[i], true, edit.today) ?? lines[i]
+      if (isOpenTask(lines[i])) lines[i] = nested(lines[i]) ?? lines[i]
     }
   }
   return lines.join(eol)
+}
+
+function isOpenTask(line: string): boolean {
+  return TASK_LINE_RE.exec(line)?.[2] === " "
 }
 
 export type RescheduleKind = "today" | "tomorrow" | "weekend" | "nextWeek" | "later"

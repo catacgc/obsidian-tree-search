@@ -89,6 +89,16 @@ describe("panelItems", () => {
         expect(titles(ctx(), "task")).toEqual([])
     })
 
+    it("offers Unschedule for an open task with its own scheduled date or one from an open subtask", () => {
+        const task = (key: string, done = false, inheritedDate?: string) => ctx({ rows: rowsOf(row(page("Project X", "Project X.md"), 0),
+            row({ ...text(key, "Project X.md", 3), isTask: true, isCompleted: done, inheritedDate } as ParsedNode, 1)) })
+        expect(titles(task("call [scheduled:: 2026-10-14]"), "task")).toEqual(["Done", "Today", "Tomorrow", "Weekend", "Next Week", "Unschedule"])
+        expect(panelItems(task("call ⏳ 2026-10-14")).find(i => i.title === "Unschedule")?.run).toEqual({ kind: "task", change: { kind: "unschedule" } })
+        expect(titles(task("call", false, "2026-10-14"), "task")).toContain("Unschedule")
+        expect(titles(task("call 📅 2026-10-14"), "task")).not.toContain("Unschedule")
+        expect(titles(task("call [scheduled:: 2026-10-14]", true), "task")).toEqual([])
+    })
+
     it("Edit: Append to names the target page; Patch, Edit line and Delete only where they apply", () => {
         expect(titles(ctx(), "edit")).toEqual(["Append to [[Project X]]", "Patch", "Edit line", "Delete"])
         // A root page row: appendable, its own note renamed/trashed, not line-editable.

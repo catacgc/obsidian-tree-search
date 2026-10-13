@@ -1,6 +1,7 @@
 import { describe, it, expect } from "bun:test"
-import { formatRelativeDate } from "../search/relative-date.ts"
+import { formatRelativeDate, rowDate } from "../search/relative-date.ts"
 import { UNDATED_AGE } from "../graph/boost.ts"
+import type { ParsedNode } from "../graph/types.ts"
 
 const TODAY = new Date(2026, 9, 5, 15, 30) // 2026-10-05, local time
 const label = (ageDays: number, sourceDate: string | null = null) => formatRelativeDate(ageDays, sourceDate, TODAY)?.label
@@ -69,5 +70,28 @@ describe("formatRelativeDate", () => {
       expect(formatRelativeDate(-1, null, TODAY)).toEqual({ label: "Tomorrow", absolute: "2026-10-06" })
       expect(formatRelativeDate(-30, null, TODAY)).toEqual({ label: "Nov", absolute: "2026-11-04" })
     })
+  })
+})
+
+describe("rowDate", () => {
+  const line = (searchKey: string, isTask: boolean, extra: { isCompleted?: boolean; inheritedDate?: string } = {}) =>
+    ({ nodeType: "text", searchKey, isTask, isCompleted: false, ...extra }) as ParsedNode
+  const shown = (node: ParsedNode, ageDays = 3) => rowDate(node, ageDays, TODAY)?.label ?? null
+
+  it("shows no date on a task without a scheduled or due date: neither its created stamp nor its note's date", () => {
+    expect(shown(line("call Bob [created:: 2026-10-02]", true))).toBeNull()
+    expect(shown(line("call Bob", true))).toBeNull()
+    expect(shown(line("call Bob [created:: 2026-10-02]", true, { isCompleted: true }))).toBeNull()
+  })
+
+  it("shows a task's scheduled or due date, its own or one inherited from an open subtask", () => {
+    expect(shown(line("call Bob [created:: 2026-10-01] [scheduled:: 2026-10-06]", true), -1)).toBe("Tomorrow")
+    expect(shown(line("call Bob 📅 2026-10-02", true))).toBe("3d")
+    expect(shown(line("plan launch", true, { inheritedDate: "2026-10-06" }), -1)).toBe("Tomorrow")
+  })
+
+  it("keeps the date of a line that is not a task", () => {
+    expect(shown(line("met Bob [created:: 2026-10-02]", false))).toBe("3d")
+    expect(shown({ nodeType: "page", searchKey: "Bob" } as ParsedNode)).toBe("3d")
   })
 })

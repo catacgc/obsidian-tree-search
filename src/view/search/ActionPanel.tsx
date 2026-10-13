@@ -5,7 +5,7 @@ import {useAtom, useAtomValue, useSetAtom} from "jotai";
 import {useMolecule} from "bunshi/react";
 import {Platform, Scope} from "obsidian";
 import {
-    Archive, ArrowRightLeft, BookmarkPlus, BookmarkX, CalendarArrowUp, CalendarClock, ChevronLeft, ChevronRight, ChevronsDownUp,
+    Archive, ArrowRightLeft, BookmarkPlus, BookmarkX, CalendarArrowUp, CalendarClock, CalendarX, ChevronLeft, ChevronRight, ChevronsDownUp,
     ChevronsUpDown, CirclePlus, Combine, Copy, CornerDownRight, ExternalLink, FileSearch, ListTree, ListX, Pencil,
     RefreshCw, Scissors, SquareCheck, SquarePen, TextCursorInput, Trash2,
     type LucideIcon,
@@ -26,7 +26,7 @@ import {cutKeyOf} from "./cut-drawer";
 
 const ICONS: Record<PanelIcon, LucideIcon> = {
     link: ExternalLink, reveal: FileSearch, copy: Copy, insert: CornerDownRight,
-    archive: Archive, consolidate: Combine, done: SquareCheck, schedule: CalendarArrowUp, append: CirclePlus, edit: Pencil,
+    archive: Archive, consolidate: Combine, done: SquareCheck, schedule: CalendarArrowUp, unschedule: CalendarX, append: CirclePlus, edit: Pencil,
     moveUnder: ArrowRightLeft, cut: Scissors, quickAdd: SquarePen, tree: ListTree, timeline: CalendarClock, expand: ChevronsUpDown,
     collapse: ChevronsDownUp, refresh: RefreshCw, patch: ChevronRight, rename: TextCursorInput, delete: Trash2,
     saveFilter: BookmarkPlus, deleteFilter: BookmarkX, clearDrawer: ListX,

@@ -1,6 +1,7 @@
 // Items of the search views' action panel (footer "Actions", ⌘K, mobile long-press).
 // Pure: callers pass the selected row's actions and the view's flags.
 
+import {hasScheduledDate} from "@mdtree/core"
 import type {TreeNode} from "./SearchViewFlatten"
 import type {RaycastAction} from "../node-actions"
 import {raycastActionOf} from "../node-actions"
@@ -17,7 +18,7 @@ export type PanelSection = "row" | "task" | "edit" | "drawer" | "filter" | "view
 
 export type PanelIcon =
     | "link" | "reveal" | "copy" | "insert" | "archive" | "consolidate"
-    | "done" | "schedule"
+    | "done" | "schedule" | "unschedule"
     | "append" | "edit" | "moveUnder" | "cut" | "patch" | "rename" | "delete"
     | "clearDrawer"
     | "saveFilter" | "deleteFilter"
@@ -150,7 +151,7 @@ export function panelItems(ctx: PanelContext): PanelItem[] {
         items.push({id: "cut", section: "row", title: ctx.rowCut ? "Take out of drawer" : "Cut to drawer", icon: "cut", key: keyOf("cut"), run: {kind: "shortcut", id: "cut"}})
     }
 
-    // Open tasks: complete or reschedule the line (Tasks plugin fields), in every view like Archive.
+    // Open tasks: complete, reschedule or unschedule the line (Tasks plugin fields), in every view like Archive.
     if (row && row.node.nodeType === "text" && row.node.isTask && !row.node.isCompleted) {
         const task = (id: string, title: string, icon: PanelIcon, change: TaskChange) =>
             items.push({id: `task:${id}`, section: "task", title, icon, run: {kind: "task", change}})
@@ -159,6 +160,8 @@ export function panelItems(ctx: PanelContext): PanelItem[] {
         task("tomorrow", "Tomorrow", "schedule", {kind: "schedule", when: "tomorrow"})
         task("weekend", "Weekend", "schedule", {kind: "schedule", when: "weekend"})
         task("nextWeek", "Next Week", "schedule", {kind: "schedule", when: "nextWeek"})
+        // The line's own scheduled date, or one it shows from an open subtask (Unschedule clears those too).
+        if (hasScheduledDate(row.node.searchKey) || row.node.inheritedDate !== undefined) task("unschedule", "Unschedule", "unschedule", {kind: "unschedule"})
     }
 
     if (ctx.allowEditing && row) {
