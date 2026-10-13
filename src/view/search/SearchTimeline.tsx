@@ -15,6 +15,8 @@ import {useRowGestures} from "./row-gestures";
 import {TaskCheckbox} from "./TaskCheckbox";
 import {filterActive, isFilterSuggestion} from "./search-filter";
 import {searchFiltersAtom} from "../react-context/settings";
+import {GlobalAtoms} from "../react-context/global";
+import {cutKeyOf} from "./cut-drawer";
 
 /** Enter/Space handler for a div-button chip: runs `run`, keeping KeyComboWrapper's Enter (open selection) from
  *  also firing. */
@@ -95,6 +97,7 @@ export const TimelineRow = ({node, editable, appendDot, editHint}: TimelineRowPr
     const selectedLine = useAtomValue(selectedLineAtom)
     const flashing = useAtomValue(flashLineAtom) === node.index ? "ts-row-flash" : ""
     const matchTerms = useAtomValue(matchTermsAtom)
+    const cut = useAtomValue(GlobalAtoms.cutKeysAtom).has(cutKeyOf(node.node)) ? "ts-row-cut" : ""
     const app = useAtomValue(appAtom)
 
     const updateHovered = useSetAtom(updateHoveredLineAtom)
@@ -138,7 +141,7 @@ export const TimelineRow = ({node, editable, appendDot, editHint}: TimelineRowPr
 
     return <div className="tree-node" onMouseMove={handleMouseMove} onMouseOver={handleMouseOver} onClick={handleClick} {...editGestures}>
         <div ref={nodeRef}
-             className={`ts-timeline-row ${highlighted} ${flashing} ${node.archived ? "ts-node-archived" : ""}`}
+             className={`ts-timeline-row ${highlighted} ${flashing} ${node.archived ? "ts-node-archived" : ""} ${cut}`}
              title={node.node.location.path}>
             <TaskCheckbox node={node.node} interactive={true}/>
             <div className="ts-timeline-body">

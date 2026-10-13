@@ -32,6 +32,12 @@ describe("matchShortcut", () => {
         expect(idOf(ev("KeyC", { ctrl: true }), SHORTCUTS, false)).toBe("copy")
     })
 
+    it("cuts with ⌘X on macOS and Ctrl+X elsewhere; Alt+X stays Archive", () => {
+        expect(idOf(ev("KeyX", { meta: true }), SHORTCUTS, true)).toBe("cut")
+        expect(idOf(ev("KeyX", { ctrl: true }), SHORTCUTS, false)).toBe("cut")
+        expect(idOf(ev("KeyX", { alt: true }))).toBe("archive")
+    })
+
     it("reports which recency key was pressed", () => {
         expect(matchShortcut(ev("Digit3", { alt: true }), SHORTCUTS, true)).toMatchObject({ shortcut: { id: "recency" }, index: 2 })
     })
@@ -43,5 +49,6 @@ describe("isAvailable", () => {
         expect(idOf(ev("KeyA", { alt: true }), plain)).toBeNull()
         expect(idOf(ev("KeyT", { alt: true }), plain)).toBeNull()
         expect(idOf(ev("KeyI", { alt: true }), plain)).toBe("insertAfter")
+        expect(idOf(ev("KeyX", { meta: true }), plain)).toBeNull()
     })
 })

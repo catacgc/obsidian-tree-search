@@ -189,3 +189,10 @@
     text-decoration: line-through;
     text-decoration-color: var(--text-faint);
 }
+
+/* In the cut drawer (⌘X). */
+.ts-row-cut {
+    opacity: 0.6;
+    outline: 1px dashed var(--interactive-accent);
+    outline-offset: -1px;
+}

@@ -3,7 +3,7 @@ import type { ParsedNode, ParsedTextToken } from "@mdtree/core"
 import type { TreeNode } from "../view/search/SearchViewFlatten"
 import type { RaycastAction } from "../view/node-actions"
 import { deleteTargetOf, type OwnPath } from "../view/editor/row-editing"
-import { deleteConfirmText, filterPanelItems, moveUnderTargets, panelItems, type PanelContext } from "../view/search/action-panel"
+import { deleteConfirmText, filterPanelItems, panelItems, type PanelContext } from "../view/search/action-panel"
 import { DEFAULT_SEARCH_FILTERS } from "../view/react-context/settings"
 
 const loc = (path: string, line: number) => ({ path, position: { start: { line, ch: 0 }, end: { line, ch: 0 } } })
@@ -40,7 +40,7 @@ const ACTIONS: RaycastAction[] = [
 const ctx = (over: Partial<PanelContext> = {}): PanelContext => ({
     rowActions: ACTIONS, rows: tree, selectedPos: 1,
     allowEditing: true, allowTimeline: true, timelineActive: false, ownPath, chainMode: null, resolveLink: () => null,
-    query: "", filters: [], ...over,
+    query: "", filters: [], rowCut: false, drawerCount: 0, ...over,
 })
 const titles = (c: PanelContext, section?: string) => panelItems(c).filter(i => !section || i.section === section).map(i => i.title)
 
@@ -53,8 +53,8 @@ describe("panelItems", () => {
 
     it("maps row actions to their shortcut keys and drops Insert after when Append exists", () => {
         const row = panelItems(ctx()).filter(i => i.section === "row")
-        expect(row.map(i => i.title)).toEqual(["Browse example", "See in Obsidian", "Copy Node", "Archive", "Move to…"])
-        expect(row.map(i => i.key?.label)).toEqual(["Enter", "Enter", "C", "X", "M"])
+        expect(row.map(i => i.title)).toEqual(["Browse example", "See in Obsidian", "Copy Node", "Archive", "Move under…", "Cut to drawer"])
+        expect(row.map(i => i.key?.label)).toEqual(["Enter", "Enter", "C", "X", "M", "X"])
         expect(row[1].key?.shift).toBe(true)
     })
 
@@ -65,15 +65,15 @@ describe("panelItems", () => {
         expect(titles(c, "view")).not.toContain("Quick Add")
     })
 
-    it("replaces the folder-picker Move To with Move to… for movable rows, in every view", () => {
+    it("replaces the folder-picker Move To with Move under… for movable rows, in every view", () => {
         const withMove = [...ACTIONS, { type: "browse", url: tsUri("moveToFolder"), title: "Move To", icon: "" } as RaycastAction]
         for (const allowEditing of [true, false]) {
             const row = titles(ctx({ rowActions: withMove, selectedPos: 0, allowEditing }), "row")
             expect(row).not.toContain("Move To")
-            expect(row).toContain("Move to…")
+            expect(row).toContain("Move under…")
         }
         const headerRows = rowsOf(row({ ...base("P.md", 2), nodeType: "header", page: "P", header: "H", indent: 1 } as ParsedNode, 0))
-        expect(titles(ctx({ rows: headerRows, selectedPos: 0 }), "row")).not.toContain("Move to…")
+        expect(titles(ctx({ rows: headerRows, selectedPos: 0 }), "row")).not.toContain("Move under…")
     })
 
     it("offers a Task section, before Edit, for an open task row only, in every view", () => {
@@ -89,9 +89,9 @@ describe("panelItems", () => {
         expect(titles(ctx(), "task")).toEqual([])
     })
 
-    it("Edit: Append to names the target page; Patch, Edit line, Move under and Delete only where they apply", () => {
-        expect(titles(ctx(), "edit")).toEqual(["Append to [[Project X]]", "Patch", "Edit line", "Move under…", "Delete"])
-        // A root page row: appendable, its own note renamed/trashed, not line-editable, not draggable.
+    it("Edit: Append to names the target page; Patch, Edit line and Delete only where they apply", () => {
+        expect(titles(ctx(), "edit")).toEqual(["Append to [[Project X]]", "Patch", "Edit line", "Delete"])
+        // A root page row: appendable, its own note renamed/trashed, not line-editable.
         expect(titles(ctx({ selectedPos: 0 }), "edit")).toEqual(["Append to [[Project X]]", "Patch", "Rename [[Project X]]", "Delete"])
     })
 
@@ -117,6 +117,20 @@ describe("panelItems", () => {
         expect(titles(ctx({ chainMode: "append" }), "edit")).toContain("Patch")
     })
 
+    it("Cut: takes a cut row out of the drawer; hidden without editing and during a chain", () => {
+        expect(titles(ctx({ rowCut: true }), "row")).toContain("Take out of drawer")
+        expect(titles(ctx({ allowEditing: false }), "row")).not.toContain("Cut to drawer")
+        expect(titles(ctx({ chainMode: "append" }), "row")).not.toContain("Cut to drawer")
+    })
+
+    it("Drawer: bulk actions over the cut items, only with editing and no chain", () => {
+        expect(titles(ctx({ drawerCount: 2 }), "drawer")).toEqual(["Move 2 cut items under…", "Archive 2 cut items", "Clear drawer"])
+        expect(titles(ctx({ drawerCount: 1 }), "drawer")[0]).toBe("Move 1 cut item under…")
+        expect(titles(ctx({ drawerCount: 0 }), "drawer")).toEqual([])
+        expect(titles(ctx({ drawerCount: 2, allowEditing: false }), "drawer")).toEqual([])
+        expect(titles(ctx({ drawerCount: 2, chainMode: "reparent" }), "drawer")).toEqual([])
+    })
+
     it("names Edit Rename for a heading", () => {
         const h: ParsedNode = { ...base("Project X.md", 3), nodeType: "header", page: "Project X", header: "Plan", indent: 1 }
         const rows = rowsOf(row(page("Project X", "Project X.md"), 0), row(h, 1))
@@ -129,7 +143,7 @@ describe("panelItems", () => {
         expect(append(ctx())?.key?.label).toBe("A")
     })
 
-    it("Timeline: no Move under and no Tree-only view items", () => {
+    it("Timeline: no Tree-only view items", () => {
         const tl = rowsOf(row(text("loose", "Project X.md", 7), 0, { timeline: { breadcrumb: [page("Project X", "Project X.md")], pinned: false, ageDays: 0 } }))
         const c = ctx({ rows: tl, selectedPos: 0, timelineActive: true })
         expect(titles(c, "edit")).toEqual(["Append to [[Project X]]", "Patch", "Edit line", "Delete"])
@@ -175,14 +189,6 @@ describe("deleteConfirmText", () => {
         expect(confirm(0)).toEqual({ title: `Move "Project X.md" to trash?`, action: "Move to trash" })
         const h = rowsOf(row({ ...base("Project X.md", 3), nodeType: "header", page: "Project X", header: "Plan", indent: 1 } as ParsedNode, 0))
         expect(confirm(0, h)).toEqual({ title: `Delete heading "L" and its section?`, action: "Delete" })
-    })
-})
-
-describe("moveUnderTargets", () => {
-    it("offers the valid drop targets of a draggable row, nothing for a root row", () => {
-        expect(moveUnderTargets(tree, 1)).toEqual([2])
-        expect(moveUnderTargets(tree, 0)).toEqual([])
-        expect(moveUnderTargets(tree, -1)).toEqual([])
     })
 })
 

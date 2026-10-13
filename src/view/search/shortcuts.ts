@@ -18,7 +18,7 @@ export type KeySpec = {
 export type ShortcutId =
     | "next" | "previous" | "open" | "reveal" | "actions"
     | "toggleView" | "recency" | "expand" | "collapse" | "collapseAll" | "refresh"
-    | "copy" | "insertAfter" | "moveTo" | "archive" | "consolidate"
+    | "copy" | "insertAfter" | "moveUnder" | "cut" | "archive" | "consolidate"
     | "append" | "edit" | "quickAdd"
 
 export type Shortcut = {
@@ -55,7 +55,8 @@ export const SHORTCUTS: Shortcut[] = [
 
     {id: "copy", group: "Selected row", keys: [key("KeyC", "C", {ctrl: true})], description: "Copy as a link"},
     {id: "insertAfter", group: "Selected row", keys: [alt("KeyI", "I"), key("KeyI", "I", {ctrl: true})], description: "Insert after"},
-    {id: "moveTo", group: "Selected row", keys: [alt("KeyM", "M")], description: "Move to… (search for the new parent)"},
+    {id: "moveUnder", group: "Selected row", keys: [alt("KeyM", "M")], description: "Move under… (search for the new parent)"},
+    {id: "cut", group: "Selected row", keys: [key("KeyX", "X", {mod: true})], description: "Cut to the drawer (again: take it out)", needs: "editing"},
     {id: "archive", group: "Selected row", keys: [alt("KeyX", "X")], description: "Archive / unarchive"},
     {id: "consolidate", group: "Selected row", keys: [alt("KeyP", "P")], description: "Consolidate notes (pages)"},
 

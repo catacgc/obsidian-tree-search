@@ -11,6 +11,7 @@ import {
     editorHints,
     getKey,
     HEADER_RE,
+    isArchived,
     LIST_ITEM_RE,
     lineHasIdentity,
     localIsoDate,
@@ -61,6 +62,7 @@ import {
     type ReparentPlan,
     type TaskChange,
 } from "../../editing/vault-edits"
+import {archiveLine, archivePage} from "../../obsidian-utils"
 import type {DailyNoteConfig} from "../../indexing/indexed-tree"
 import {appendTargetAt, classifyReparent, deleteTargetOf, isEditableRow, treeParentPos, type OwnPath} from "./row-editing"
 import {
@@ -74,7 +76,9 @@ import {
     type ChainAnchor,
     type ChainStep,
     type NewPageTarget,
+    type RowRef,
 } from "../search/chain"
+import {bulkNotice, currentNode, cutCarriers, cutKeyOf, removeCut, type CutFailure} from "../search/cut-drawer"
 import {appendPickFor, type AppendPick} from "./append-target"
 
 /** What a prose session writes: a whole existing note (`original` null: a note Save creates), or a new note whose
@@ -181,6 +185,26 @@ export function withTrailingLink(line: string, name: string): string {
 
 const isRowLine = (head: string | null, node: ParsedNode): head is string =>
     head !== null && LIST_ITEM_RE.test(head) && lineHasIdentity(head, node)
+
+/** `node` re-read before a write: a text row whose line still holds it stays as it is (so a duplicate line elsewhere
+ *  keeps its own row), else it is looked up again by its key (currentNode). Null when it is gone. */
+async function liveNode(app: App, graph: NotesGraph, node: ParsedNode): Promise<ParsedNode | null> {
+    if (node.nodeType !== "text") return node
+    const {path, position} = node.location
+    if (isRowLine(await readLine(app, path, position.start.line), node)) return node
+    return currentNode(graph, node)
+}
+
+/** The files of `refs`' text rows, read once each; missing files are skipped. */
+async function readCutContents(app: App, refs: readonly RowRef[]): Promise<Map<string, string>> {
+    const contents = new Map<string, string>()
+    for (const {node} of refs) {
+        if (node.nodeType !== "text" || contents.has(node.location.path)) continue
+        const file = app.vault.getFileByPath(node.location.path)
+        if (file) contents.set(node.location.path, await app.vault.read(file))
+    }
+    return contents
+}
 
 /** Save is disabled by any blocking hint, or by an Append outline that adds nothing. */
 export function isSaveBlocked(app: App, s: EditorState, filters: readonly SearchFilter[]): boolean {
@@ -694,52 +718,185 @@ export const EditorMolecule = molecule((mol, scope) => {
         }})
     })
 
-    /** Enter in reparent mode: moves the chain's row under `target` (a result row, or a typed new page name). */
+    /** Enter in reparent mode: moves the chain's rows (one row, or the cut drawer's) under `target` (a result row, or a
+     *  typed new page name), one after the other in drawer order; a row inside another moved row goes with it. Moved
+     *  rows leave the drawer; when none moved the chain stays open for another target. */
     const reparentChainAtom = atom(null, async (get, set, target: ParsedNode | NewPageTarget) => {
         const chain = get(view.chainAtom)
         if (chain?.mode !== "reparent") return
         const app = get(GlobalAtoms.appAtom)
         const index = get(GlobalAtoms.indexAtom)
         const cfg = dailyConfigOf(index)
-        const child = chain.child
-        const source = child.node.location.path
-        try {
-            const planned = planReparent(child, target, {ownPath: get(ownPathAtom), relation: get(settingsAtom).parentRelation, cfg})
-            if ("error" in planned) {
-                new Notice(planned.error)
-                return
-            }
-            let plan: ReparentPlan = planned
-            if (plan.kind === "to-daily" || plan.kind === "under-line") {
-                const head = await readLine(app, plan.sourcePath, plan.line)
-                if (!isRowLine(head, child.node)) {
-                    await markOutOfDate(app, index, source)
-                    return
-                }
-                const destPath = plan.kind === "to-daily" ? dailyNotePath(cfg) : plan.targetPath
-                const stampDate = destPath !== plan.sourcePath ? index?.lineDateOf(plan.sourcePath) ?? null : null
-                if (plan.kind === "under-line") {
-                    const targetHead = await readLine(app, plan.targetPath, plan.targetLine)
-                    if (target.nodeType !== "text" || !isRowLine(targetHead, target)) {
-                        await markOutOfDate(app, index, plan.targetPath)
-                        return
+        const relation = get(settingsAtom).parentRelation
+        const graph = () => get(GlobalAtoms.graphAtom)
+        const failures: CutFailure[] = []
+        const reasons = new Map<string, string>()
+        const fail = (ref: RowRef, reason: string) => {
+            failures.push({label: ref.label, reason})
+            reasons.set(cutKeyOf(ref.node), reason)
+        }
+        // The last move's reindex runs before the next row is re-read, and for the last row after the view updates.
+        let pendingRefresh: (() => Promise<void>) | null = null
+        const settle = async () => {
+            const refresh = pendingRefresh
+            pendingRefresh = null
+            await refresh?.()
+        }
+
+        /** Moves one row under `to`; the failure reason, or null. */
+        const moveOne = async (child: RowRef, to: ParsedNode | NewPageTarget): Promise<string | null> => {
+            const source = child.node.location.path
+            try {
+                const planned = planReparent(child, to, {ownPath: get(ownPathAtom), relation, cfg})
+                if ("error" in planned) return planned.error
+                let plan: ReparentPlan = planned
+                if (plan.kind === "to-daily" || plan.kind === "under-line") {
+                    const head = await readLine(app, plan.sourcePath, plan.line)
+                    if (!isRowLine(head, child.node)) {
+                        await refreshPaths(app, index, [source])
+                        return OUT_OF_DATE
                     }
-                    plan = {...plan, head, targetHead, stampDate}
-                } else {
-                    plan = {...plan, head, stampDate}
+                    const destPath = plan.kind === "to-daily" ? dailyNotePath(cfg) : plan.targetPath
+                    const stampDate = destPath !== plan.sourcePath ? index?.lineDateOf(plan.sourcePath) ?? null : null
+                    if (plan.kind === "under-line") {
+                        const targetHead = await readLine(app, plan.targetPath, plan.targetLine)
+                        if (to.nodeType !== "text" || !isRowLine(targetHead, to)) {
+                            await refreshPaths(app, index, [plan.targetPath])
+                            return OUT_OF_DATE
+                        }
+                        plan = {...plan, head, targetHead, stampDate}
+                    } else {
+                        plan = {...plan, head, stampDate}
+                    }
                 }
+                const touched = await reparent(app, plan)
+                // Renamed paths aren't reindexed by refreshPage (the index has no rename handler): rebuild it.
+                pendingRefresh = plan.kind === "to-folder"
+                    ? async () => { await index?.refresh() }
+                    : () => refreshPaths(app, index, touched.map(f => f.path))
+                return null
+            } catch (err) {
+                if (err instanceof StaleLineError) {
+                    await refreshPaths(app, index, [source])
+                    return OUT_OF_DATE
+                }
+                return err instanceof Error ? err.message : String(err)
             }
-            const touched = await reparent(app, plan)
+        }
+
+        const refs: RowRef[] = []
+        for (const c of chain.children) {
+            const node = await liveNode(app, graph(), c.node)
+            if (node) refs.push({...c, node})
+            else fail(c, OUT_OF_DATE)
+        }
+        const carriers = cutCarriers(refs, await readCutContents(app, refs),
+            n => n.nodeType === "folder" ? n.path : get(ownPathAtom)(n))
+        const moved: RowRef[] = []
+        let to = target
+        for (const ref of refs) {
+            if (carriers.has(cutKeyOf(ref.node))) continue
+            await settle()
+            // Earlier moves may have shifted this row's line or the target's.
+            const node = await liveNode(app, graph(), ref.node)
+            const toNode = to.nodeType === "text" ? await liveNode(app, graph(), to) : to
+            if (!node || !toNode) {
+                fail(ref, OUT_OF_DATE)
+                continue
+            }
+            to = toNode
+            const child = {...ref, node}
+            const reason = await moveOne(child, to)
+            if (reason === null) moved.push(child)
+            else fail(ref, reason)
+        }
+        // A carried row moved with its carrier, or stayed with it.
+        const movedKeys = new Set(moved.map(r => cutKeyOf(r.node)))
+        for (const ref of refs) {
+            const carrier = carriers.get(cutKeyOf(ref.node))
+            if (carrier === undefined) continue
+            if (movedKeys.has(carrier)) moved.push(ref)
+            else fail(ref, reasons.get(carrier) ?? OUT_OF_DATE)
+        }
+        if (moved.length > 0) {
             set(view.chainAtom, null)
             setViewQuery(set, chain.prevQuery)
-            set(GlobalAtoms.pendingSelectAtom, {view: scp.name, targets: [{key: getKey(child.node)}], flash: true})
-            // Renamed paths aren't reindexed by refreshPage (the index has no rename handler): rebuild it.
-            if (plan.kind === "to-folder") await index?.refresh()
-            else await refreshPaths(app, index, touched.map(f => f.path))
-        } catch (err) {
-            if (err instanceof StaleLineError) await markOutOfDate(app, index, source)
-            else new Notice(err instanceof Error ? err.message : String(err))
+            set(GlobalAtoms.pendingSelectAtom, {view: scp.name, targets: moved.map(c => ({key: getKey(c.node)})), flash: true})
+            set(GlobalAtoms.cutDrawerAtom, removeCut(get(GlobalAtoms.cutDrawerAtom), moved))
         }
+        const msg = bulkNotice("Moved", moved.length, chain.children.length, failures)
+        if (msg) new Notice(msg)
+        await settle()
+    })
+
+    /** The drawer's Archive: archives every cut line and page in drawer order; a line inside another cut line goes
+     *  with it. Archived items leave the drawer; folders and attachments can't be archived and stay. */
+    const archiveDrawerAtom = atom(null, async (get, set) => {
+        const items = get(GlobalAtoms.cutDrawerAtom)
+        if (items.length === 0) return
+        const app = get(GlobalAtoms.appAtom)
+        const index = get(GlobalAtoms.indexAtom)
+        const failures: CutFailure[] = []
+        const reasons = new Map<string, string>()
+        const fail = (ref: RowRef, reason: string) => {
+            failures.push({label: ref.label, reason})
+            reasons.set(cutKeyOf(ref.node), reason)
+        }
+        const refs: RowRef[] = []
+        for (const c of items) {
+            const node = await liveNode(app, get(GlobalAtoms.graphAtom), c.node)
+            if (node) refs.push({...c, node})
+            else fail(c, OUT_OF_DATE)
+        }
+        // Only lines carry here: a folder isn't archived, so it can't cover what's inside it.
+        const carriers = cutCarriers(refs.filter(r => r.node.nodeType === "text"), await readCutContents(app, refs), () => null)
+        const archived: RowRef[] = []
+        const touched: string[] = []
+        for (const ref of refs) {
+            const node = ref.node
+            if (carriers.has(cutKeyOf(node))) continue
+            try {
+                if (node.nodeType === "text") {
+                    // Archiving appends to a line, so other lines keep their place.
+                    const path = node.location.path
+                    if (!isRowLine(await readLine(app, path, node.location.position.start.line), node)) {
+                        await refreshPaths(app, index, [path])
+                        fail(ref, OUT_OF_DATE)
+                        continue
+                    }
+                    if (!isArchived(node)) {
+                        await archiveLine(app, node.location)
+                        touched.push(path)
+                    }
+                } else if (node.nodeType === "page") {
+                    const path = get(ownPathAtom)(node)
+                    if (path === null) {
+                        fail(ref, `[[${node.page}]] has no note to archive`)
+                        continue
+                    }
+                    await archivePage(app, path, get(settingsAtom).archiveTag)
+                    touched.push(path)
+                } else {
+                    fail(ref, "Folders and attachments can't be archived")
+                    continue
+                }
+                archived.push(ref)
+            } catch (err) {
+                fail(ref, err instanceof Error ? err.message : String(err))
+            }
+        }
+        const archivedKeys = new Set(archived.map(r => cutKeyOf(r.node)))
+        for (const ref of refs) {
+            const carrier = carriers.get(cutKeyOf(ref.node))
+            if (carrier === undefined) continue
+            if (archivedKeys.has(carrier)) archived.push(ref)
+            else fail(ref, reasons.get(carrier) ?? OUT_OF_DATE)
+        }
+        // Reindexed here: the shared modify debounce can drop reindexes of several files.
+        await refreshPaths(app, index, touched)
+        set(GlobalAtoms.cutDrawerAtom, removeCut(get(GlobalAtoms.cutDrawerAtom), archived))
+        const msg = bulkNotice("Archived", archived.length, items.length, failures)
+        if (msg) new Notice(msg)
     })
 
     /** Checkbox / Task panel action on a task row: rewrites its line, then reindexes, keeping `anchor` (the row
@@ -809,7 +966,7 @@ export const EditorMolecule = molecule((mol, scope) => {
         updateEditorAtom, cancelEditorAtom, closeEditorAtom, openAppendAtom, openEditAtom, openRenameFileAtom, openSaveFilterAtom,
         openAppendForSelectedAtom, openEditForSelectedAtom, saveEditorAtom,
         clearDragAtom, reparentAtom, editTaskAtom, deleteRowAtom,
-        reparentChainAtom, openProseAtom,
+        reparentChainAtom, archiveDrawerAtom, openProseAtom,
         pendingPasteAtom, pushChainAtom, commitChainAtom, openChainEditorAtom, pasteIntoChainAtom,
     }
 })

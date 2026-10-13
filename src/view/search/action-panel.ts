@@ -6,32 +6,33 @@ import type {RaycastAction} from "../node-actions"
 import {raycastActionOf} from "../node-actions"
 import {SHORTCUTS, type KeySpec, type ShortcutId} from "./shortcuts"
 import {
-    appendTargetAt, deleteTargetOf, dragInfo, isEditableRow, isLinkLineRow, isValidDropTarget, type DeleteTarget, type OwnPath,
+    appendTargetAt, deleteTargetOf, isEditableRow, isLinkLineRow, type DeleteTarget, type OwnPath,
 } from "../editor/row-editing"
 import {isMovable, isPatchable} from "./chain"
 import type {TaskChange} from "../../editing/vault-edits"
 import type {SearchFilter} from "../react-context/settings"
 import {filterActive, sameFilterQuery} from "./search-filter"
 
-export type PanelSection = "row" | "task" | "edit" | "filter" | "view"
+export type PanelSection = "row" | "task" | "edit" | "drawer" | "filter" | "view"
 
 export type PanelIcon =
-    | "link" | "reveal" | "copy" | "insert" | "moveToFolder" | "archive" | "consolidate"
+    | "link" | "reveal" | "copy" | "insert" | "archive" | "consolidate"
     | "done" | "schedule"
-    | "append" | "edit" | "moveUnder" | "patch" | "rename" | "delete"
+    | "append" | "edit" | "moveUnder" | "cut" | "patch" | "rename" | "delete"
+    | "clearDrawer"
     | "saveFilter" | "deleteFilter"
     | "quickAdd" | "tree" | "timeline" | "expand" | "collapse" | "refresh"
 
 export type PanelRun =
     | {kind: "shortcut"; id: ShortcutId}
     | {kind: "action"; action: RaycastAction}
-    | {kind: "moveUnder"}
     | {kind: "task"; change: TaskChange}
     | {kind: "patch"}
     | {kind: "renameFile"; path: string}
     | {kind: "delete"}
     | {kind: "saveFilter"}
     | {kind: "deleteFilter"; name: string}
+    | {kind: "drawer"; op: "move" | "archive" | "clear"}
 
 export type PanelItem = {
     id: string
@@ -60,6 +61,10 @@ export type PanelContext = {
     query: string
     /** The filter pills (searchFiltersAtom). */
     filters: readonly SearchFilter[]
+    /** The selected row is in the cut drawer. */
+    rowCut: boolean
+    /** Items in the cut drawer. */
+    drawerCount: number
 }
 
 /** The vault path of the file `linkpath` resolves to from `sourcePath`, or null. */
@@ -106,7 +111,7 @@ export function deleteConfirmText(target: DeleteTarget, label: string): {title: 
     }
 }
 
-export const SECTION_TITLES: Record<Exclude<PanelSection, "row">, string> = {task: "Task", edit: "Edit", filter: "Filter", view: "View"}
+export const SECTION_TITLES: Record<Exclude<PanelSection, "row">, string> = {task: "Task", edit: "Edit", drawer: "Drawer", filter: "Filter", view: "View"}
 
 const keyOf = (id: ShortcutId): KeySpec | undefined => SHORTCUTS.find(s => s.id === id)?.keys[0]
 
@@ -124,29 +129,25 @@ function rowActionShortcut(action: RaycastAction): {id?: ShortcutId; icon: Panel
     return {icon: "link"}
 }
 
-/** Rows the selected row can be moved under: the same rule as a drop (Tree mode only). */
-export function moveUnderTargets(rows: TreeNode[], pos: number): number[] {
-    if (pos < 0 || !dragInfo(rows, pos).draggable) return []
-    const targets: number[] = []
-    for (let t = 0; t < rows.length; t++) if (isValidDropTarget(rows, pos, t)) targets.push(t)
-    return targets
-}
-
 export function panelItems(ctx: PanelContext): PanelItem[] {
     const items: PanelItem[] = []
     const row = ctx.selectedPos >= 0 ? ctx.rows[ctx.selectedPos] : undefined
 
     ctx.rowActions.forEach((action, i) => {
-        // Move To (folder picker) is replaced by Move to… below. With editor mode, Insert after opens Append, which
+        // Move To (folder picker) is replaced by Move under… below. With editor mode, Insert after opens Append, which
         // the Edit section already offers.
         if (raycastActionOf(action) === "moveToFolder") return
         if (ctx.allowEditing && raycastActionOf(action) === "insert") return
         const {id, icon} = rowActionShortcut(action)
         items.push({id: `row:${i}`, section: "row", title: action.title, icon, key: id && keyOf(id), run: {kind: "action", action}})
     })
-    // Move to…: the `<` flow (search for the new parent), for every row it can move.
+    // Move under…: the `<` flow (search for the new parent), for every row it can move.
     if (row && !row.archiveRow && isMovable(row.node)) {
-        items.push({id: "moveTo", section: "row", title: "Move to…", icon: "moveToFolder", key: keyOf("moveTo"), run: {kind: "shortcut", id: "moveTo"}})
+        items.push({id: "moveUnder", section: "row", title: "Move under…", icon: "moveUnder", key: keyOf("moveUnder"), run: {kind: "shortcut", id: "moveUnder"}})
+    }
+    // Cut (⌘X): into the cut drawer, or out of it; not over a chain.
+    if (ctx.allowEditing && row && !row.archiveRow && isMovable(row.node) && ctx.chainMode === null) {
+        items.push({id: "cut", section: "row", title: ctx.rowCut ? "Take out of drawer" : "Cut to drawer", icon: "cut", key: keyOf("cut"), run: {kind: "shortcut", id: "cut"}})
     }
 
     // Open tasks: complete or reschedule the line (Tasks plugin fields), in every view like Archive.
@@ -175,12 +176,18 @@ export function panelItems(ctx: PanelContext): PanelItem[] {
         for (const t of renameTargets(row, ctx.ownPath, ctx.resolveLink, ctx.timelineActive)) {
             items.push({id: `rename:${t.path}`, section: "edit", title: t.title, icon: "rename", run: {kind: "renameFile", path: t.path}})
         }
-        if (!ctx.timelineActive && moveUnderTargets(ctx.rows, ctx.selectedPos).length > 0) {
-            items.push({id: "moveUnder", section: "edit", title: "Move under…", icon: "moveUnder", run: {kind: "moveUnder"}})
-        }
         if (deleteTargetOf(row, ctx.ownPath, ctx.timelineActive)) {
             items.push({id: "delete", section: "edit", title: "Delete", icon: "delete", run: {kind: "delete"}})
         }
+    }
+
+    // The cut drawer's bulk actions.
+    if (ctx.allowEditing && ctx.drawerCount > 0 && ctx.chainMode === null) {
+        const n = ctx.drawerCount
+        const cut = `${n} cut item${n === 1 ? "" : "s"}`
+        items.push({id: "drawer:move", section: "drawer", title: `Move ${cut} under…`, icon: "moveUnder", run: {kind: "drawer", op: "move"}})
+        items.push({id: "drawer:archive", section: "drawer", title: `Archive ${cut}`, icon: "archive", run: {kind: "drawer", op: "archive"}})
+        items.push({id: "drawer:clear", section: "drawer", title: "Clear drawer", icon: "clearDrawer", run: {kind: "drawer", op: "clear"}})
     }
 
     // Filter pills (Search modal and pane, which show the filter bar and the editor); not over a chain's sub-search.

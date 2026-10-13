@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- The action panel's **Move to…** is now **Move under…**, matching the footer and <kbd>&lt;</kbd>. The separate Tree-only **Move under…** list of notes in the results is gone: the search finds every note, on every platform.
+- **Cut drawer:** in the Search modal and pane, <kbd>⌘</kbd>+<kbd>X</kbd> (<kbd>Ctrl</kbd>+<kbd>X</kbd>) cuts the selected row into a drawer above the footer; press it again to take the row out. The drawer, shared by the modal and the pane, moves every cut row under a new parent at once (**Move under…**), archives them (**Archive**) or empties (**Clear**). The action panel has the same actions.
+
 ## 0.15.0
 
 The first release since 0.11.0. Full documentation, with screenshots, is at https://catacgc.github.io/obsidian-tree-search/.

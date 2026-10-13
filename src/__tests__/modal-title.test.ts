@@ -36,7 +36,7 @@ describe("searchModalTitle", () => {
 
     it("stays Search for reparent, Append and prose editors, and plain searching", () => {
         expect(searchModalTitle(null, null)).toBe("Search")
-        expect(searchModalTitle(null, { mode: "reparent", child: { node: null as never, label: "x", parent: null }, prevQuery: "", confirm: null })).toBe("Search")
+        expect(searchModalTitle(null, { mode: "reparent", children: [{ node: null as never, label: "x", parent: null }], prevQuery: "", confirm: null })).toBe("Search")
         expect(searchModalTitle(session({ mode: "append" }), null)).toBe("Search")
         expect(searchModalTitle(session({ mode: "prose", prose: { kind: "note", path: "P.md", original: "" } }), null)).toBe("Search")
     })

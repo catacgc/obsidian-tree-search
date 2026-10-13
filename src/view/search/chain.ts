@@ -2,7 +2,8 @@
 // - append (`>`): the chips are an anchor row (or today) and typed entries (`[[note]]`, `|alias`, `#heading`,
 //   `(key:: value)`, `- item`). The chain builds Outline-editor text (`chainOutline`); Enter writes it through the
 //   editor's own append Save, Alt+Enter opens the editor on it.
-// - reparent (`<`, Move to): one chip, the moved row; the planning below decides where it goes.
+// - reparent (`<`, Move under): one chip, the moved rows (one row, or the cut drawer's); the planning below decides
+//   where each goes.
 // No obsidian value imports; the atoms in state.tsx / EditorMolecule.ts run the plans.
 import {
     advancedSearch,
@@ -60,7 +61,7 @@ export type ChainStep =
  *  leaving it restores `prevQuery`; without it, steps[0] is a row step. */
 export type AppendChain = {mode: "append"; steps: ChainStep[]; quickAdd?: {prevQuery: string}}
 /** confirm: the trimmed query the "create [[q]]" prompt is armed for. */
-export type ReparentChain = {mode: "reparent"; child: RowRef; prevQuery: string; confirm: string | null}
+export type ReparentChain = {mode: "reparent"; children: RowRef[]; prevQuery: string; confirm: string | null}
 export type ChainState = AppendChain | ReparentChain
 
 /** The query to restore when the chain is left: the one typed before Quick Add, its first chip or the reparent. */
@@ -80,7 +81,7 @@ export type ChainOutline = {parentName?: string; underLine?: UnderLine; lines: O
 
 export type NewPageTarget = {nodeType: "newPage"; name: string}
 
-/** Rows Move to (`<`) can move: pages and lines (to a new parent), folders and attachments (to a folder). */
+/** Rows Move under (`<`) can move: pages and lines (to a new parent), folders and attachments (to a folder). */
 export function isMovable(node: ParsedNode): boolean {
     return node.nodeType === "page" || node.nodeType === "text" || node.nodeType === "folder"
         || node.nodeType === "attachment" || node.nodeType === "folderNote"
@@ -94,6 +95,11 @@ export function isPatchable(node: ParsedNode): boolean {
 /** True when the moved row can go under a new `[[typed name]]` (pages and lines; folders and attachments need a folder). */
 export function canMoveUnderNewPage(node: ParsedNode): boolean {
     return node.nodeType === "page" || node.nodeType === "text"
+}
+
+/** The reparent chip's label: the moved row's, or a count for several. */
+export function reparentLabel(children: readonly RowRef[]): string {
+    return children.length === 1 ? children[0].label : `${children.length} items`
 }
 
 /** How `<` moves `child` under `target` (behavior spec R1–R6, plus folders and attachments into a folder). Line plans
@@ -157,15 +163,17 @@ export function chainResults(graph: NotesGraph, chain: ChainState, query: string
     if (chain.mode === "append") return appendChainResults(graph, chain, query, searchText, separator, dailyName)
     const q = searchText.trim()
     if (q.length < 3) return []
-    const key = getKey(chain.child.node)
-    const folders = () => pruneResultTree(searchIndex(graph, `${q} is:folder`, separator, options), n => n.nodeType === "folder" && getKey(n) !== key)
-    if (chain.child.node.nodeType === "folder" || chain.child.node.nodeType === "attachment") return folders()
-    if (chain.child.node.nodeType === "page") {
-        const pages = pruneResultTree(linkTargetTree(graph, q, separator), n => n.nodeType === "page" && getKey(n) !== key)
+    const keys = new Set(chain.children.map(c => getKey(c.node)))
+    const kinds = new Set(chain.children.map(c => c.node.nodeType))
+    const folders = () => pruneResultTree(searchIndex(graph, `${q} is:folder`, separator, options), n => n.nodeType === "folder" && !keys.has(getKey(n)))
+    if (!kinds.has("text") && !kinds.has("page")) return folders()
+    if (!kinds.has("text")) {
+        const pages = pruneResultTree(linkTargetTree(graph, q, separator), n => n.nodeType === "page" && !keys.has(getKey(n)))
         return [...pages, ...folders()]
     }
-    return pruneResultTree(partitionArchived(searchIndex(graph, q, separator, options), false).visible,
-        n => (n.nodeType === "page" || n.nodeType === "header" || n.nodeType === "text") && getKey(n) !== key)
+    const lines = pruneResultTree(partitionArchived(searchIndex(graph, q, separator, options), false).visible,
+        n => (n.nodeType === "page" || n.nodeType === "header" || n.nodeType === "text") && !keys.has(getKey(n)))
+    return kinds.has("page") || kinds.has("folder") || kinds.has("attachment") ? [...lines, ...folders()] : lines
 }
 
 function appendChainResults(graph: NotesGraph, chain: AppendChain, query: string, searchText: string, separator: string, dailyName: string): ResultNode[] {

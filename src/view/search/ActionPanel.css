@@ -82,6 +82,76 @@
 	flex-shrink: 0;
 }
 
+/* Cut drawer (⌘X, CutDrawer.tsx), above the footer. */
+.ts-cut-drawer {
+	border-top: 1px solid var(--background-modifier-border);
+	background: var(--ts-surface);
+	padding: 4px 8px;
+	font-size: var(--font-ui-small);
+}
+
+.ts-cut-drawer-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.ts-cut-drawer-title {
+	flex: 1;
+	color: var(--text-muted);
+}
+
+.ts-cut-drawer-action {
+	padding: 2px 8px;
+	border-radius: var(--radius-s);
+	cursor: pointer;
+	color: var(--text-muted);
+}
+
+.ts-cut-drawer-action:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.ts-cut-drawer.is-phone .ts-cut-drawer-action {
+	padding: 8px 12px;
+}
+
+.ts-cut-drawer-list {
+	max-height: 7.5em;
+	overflow-y: auto;
+	margin-top: 4px;
+}
+
+.ts-cut-drawer-item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.ts-cut-drawer-label {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.ts-cut-drawer-path {
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller);
+}
+
+.ts-cut-drawer-remove {
+	cursor: pointer;
+	color: var(--text-faint);
+	padding: 0 4px;
+}
+
+.ts-cut-drawer-remove:hover {
+	color: var(--text-error);
+}
+
 .ts-keycaps {
 	display: inline-flex;
 	gap: 2px;

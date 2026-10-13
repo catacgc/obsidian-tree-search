@@ -9,6 +9,10 @@ import {useShortcutHandlers} from "./shortcut-handlers";
 
 const ACTIONS_ONLY = SHORTCUTS.filter(s => s.id === "actions")
 
+/** A text field with selected text: ⌘X there is the native cut, not the drawer's. */
+const hasTextSelection = (t: EventTarget) =>
+    (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) && t.selectionStart !== t.selectionEnd
+
 // Dispatches the search view's keyboard shortcuts (./shortcuts.ts) for keys that bubble up
 // from the search input, the results list and the action panel's filter. While the view
 // shows the inline editor, none of them fire: the editor owns every key.
@@ -41,6 +45,7 @@ export const KeyComboWrapper = ({children}: { children: React.ReactNode }) => {
         if (editorOpen) return
         const hit = matchShortcut(event, available, Platform.isMacOS)
         if (!hit) return
+        if (hit.shortcut.id === "cut" && hasTextSelection(event.target)) return
         event.preventDefault()
         if (event.altKey) swallowDeadKey(event)
         // Any action other than toggling the panel ends the panel's use.

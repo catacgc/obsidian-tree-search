@@ -36,7 +36,8 @@ Alt shortcuts match the physical key, so they work on macOS even though <kbd>⌥
 | --- | --- |
 | <kbd>Ctrl</kbd>+<kbd>C</kbd> | Copy as a link |
 | <kbd>Alt</kbd>+<kbd>I</kbd> or <kbd>Ctrl</kbd>+<kbd>I</kbd> | Insert after |
-| <kbd>Alt</kbd>+<kbd>M</kbd> | Move to… (search for the new parent: a note, heading, line or folder) |
+| <kbd>Alt</kbd>+<kbd>M</kbd> | Move under… (search for the new parent: a note, heading, line or folder) |
+| <kbd>⌘</kbd>+<kbd>X</kbd> (<kbd>Ctrl</kbd>+<kbd>X</kbd> on Windows/Linux) | Cut to the drawer; again: take it out (Search modal and pane; with text selected in a field it cuts the text) |
 | <kbd>Alt</kbd>+<kbd>X</kbd> | Archive / unarchive |
 | <kbd>Alt</kbd>+<kbd>P</kbd> | Consolidate notes (pages) |
 

@@ -108,10 +108,23 @@ describe("chainResults", () => {
     it("reparent of a page: other pages and matching folders, never the page itself", async () => {
         const g = await buildGraphFromScanner(scanner)
         const child = ref(page("Alpha", "Projects/Alpha.md"))
-        const chain = { mode: "reparent" as const, child, prevQuery: "", confirm: null }
+        const chain = { mode: "reparent" as const, children: [child], prevQuery: "", confirm: null }
         expect(keys(chainResults(g, chain, "proj", "proj", ";", {}, "2026-09-30"))).toEqual(["projects"])
         expect(keys(chainResults(g, chain, "alph", "alph", ";", {}, "2026-09-30"))).not.toContain("[[alpha]]")
         expect(keys(chainResults(g, chain, "road", "road", ";", {}, "2026-09-30"))).toEqual(["[[roadmap]]"])
+    })
+
+    it("reparent of several rows: lines and folders for the query, none of the moved rows", async () => {
+        const g = await buildGraphFromScanner(scanner)
+        const ship = g.getNodeAttributes("ship [[alpha]]")
+        const projects = g.getNodeAttributes("projects")
+        const chain = { mode: "reparent" as const, children: [ref(ship), ref(projects)], prevQuery: "", confirm: null }
+        const found = keys(chainResults(g, chain, "road", "road", ";", {}, "2026-09-30"))
+        expect(found).toContain("[[roadmap]]")
+        expect(found).not.toContain("ship [[alpha]]")
+        const withFolders = keys(chainResults(g, { ...chain, children: [ref(ship), ref(folder("Other"))] }, "proj", "proj", ";", {}, "2026-09-30"))
+        expect(withFolders).toContain("projects")
+        expect(keys(chainResults(g, chain, "proj", "proj", ";", {}, "2026-09-30"))).not.toContain("projects")
     })
 
     it("append under a note: its children, filtered by the query; nothing once an entry is typed", async () => {

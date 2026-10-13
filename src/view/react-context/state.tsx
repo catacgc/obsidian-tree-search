@@ -4,7 +4,8 @@ import {atom, useAtomValue, type Getter, type Setter} from 'jotai'
 import {findTargetRow, revealRow, rowTargets, type RowTarget} from '../search/select-target'
 import {expandFilterRefs, filterSuggestionsAt, toggleFilterPill} from '../search/search-filter'
 import {buildTimelineRows, tagOutlineParents} from '../search/timeline-utils'
-import {chainOutline, chainPrevQuery, chainReplacesSearch, chainResults, isEntryInput, isMovable, isPatchable, parseChainEntry, rowLabel, type ChainOutline, type ChainState, type RowRef} from '../search/chain'
+import {chainOutline, chainPrevQuery, chainReplacesSearch, chainResults, isEntryInput, isMovable, isPatchable, parseChainEntry, reparentLabel, rowLabel, type ChainOutline, type ChainState, type RowRef} from '../search/chain'
+import {toggleCut} from '../search/cut-drawer'
 import {basenameOf, dailyConfigOf, searchModalTitle} from '../editor/draft'
 import {dailyNotePath} from '../../editing/vault-edits'
 import {dragInfo, INLINE_LINK_REFUSAL, treeParentPos} from '../editor/row-editing'
@@ -62,8 +63,8 @@ export const SearchViewScope = createScope({
 
 export type RecencyWindow = "all" | "7d" | "30d" | "1y"
 export const RECENCY_WINDOWS: RecencyWindow[] = ["all", "7d", "30d", "1y"]
-/** The action panel's list: the main actions, the Move under… page list, or the Delete confirmation. */
-export type ActionPanelPage = "main" | "moveUnder" | "confirmDelete"
+/** The action panel's list: the main actions or the Delete confirmation. */
+export type ActionPanelPage = "main" | "confirmDelete"
 
 export const GlobalAppMolecule = molecule((_, scope) => {
 
@@ -258,7 +259,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
 
     const searchPlaceholderAtom = atom((get) => {
         const chain = get(chainAtom)
-        if (chain?.mode === "reparent") return `Move ${chain.child.label} under…`
+        if (chain?.mode === "reparent") return `Move ${reparentLabel(chain.children)} under…`
         if (chain?.mode === "append") {
             const last = chain.steps[chain.steps.length - 1]
             if (last?.kind === "entry") return `Add under ${last.label} — Enter adds, Alt+Enter opens the editor`
@@ -726,30 +727,58 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         set(focusSearchInputAtom, get(focusSearchInputAtom) + 1)
     })
 
-    /** Move to (`<`, Alt+M, action panel): the selected row becomes the one to move; the query then searches its new
-     *  parent (a page, header, line or folder, by the row's type). Shows the search input of a pane that hid it. */
-    const startReparentAtom = atom(null, (get, set) => {
+    /** The selected row when Move under can take it (a folder note row stands for its folder); else null, with a
+     *  Notice for a row that can't move. */
+    function movableSelectedRef(get: Getter): RowRef | null {
         const selected = selectedRowRef(get)
-        if (!selected) return
+        if (!selected) return null
         const node = selected.ref.node
         if (!isMovable(node)) {
             new Notice(node.nodeType === "header" ? "Headings can't be moved — move their page or their lines" : "This row can't be moved")
-            return
+            return null
         }
         if (node.nodeType === "text" && selected.row.indent > 0) {
             const rows = get(renderableTreeNodesAtom)
             const pos = rows.findIndex(r => r.index === selected.row.index)
             if (dragInfo(rows, pos).refusal === INLINE_LINK_REFUSAL) {
                 new Notice(INLINE_LINK_REFUSAL)
-                return
+                return null
             }
         }
-        // A folder note row stands for its folder.
-        const child = node.nodeType === "folderNote" ? {...selected.ref, node: node.folder, label: rowLabel(node.folder)} : selected.ref
-        set(chainAtom, {mode: "reparent", child, prevQuery: get(actualQueryAtom), confirm: null})
+        return node.nodeType === "folderNote" ? {...selected.ref, node: node.folder, label: rowLabel(node.folder)} : selected.ref
+    }
+
+    /** Starts the reparent chain over `children`; the query then searches their new parent. Shows the search input
+     *  of a pane that hid it. */
+    function beginReparent(get: Getter, set: Setter, children: RowRef[], prevQuery: string) {
+        set(chainAtom, {mode: "reparent", children, prevQuery, confirm: null})
         setQuery(set, "")
         set(searchVisibleAtom, true)
         set(focusSearchInputAtom, get(focusSearchInputAtom) + 1)
+    }
+
+    /** Move under (`<`, Alt+M, action panel): the selected row becomes the one to move; the query then searches its new
+     *  parent (a page, header, line or folder, by the row's type). */
+    const startReparentAtom = atom(null, (get, set) => {
+        const child = movableSelectedRef(get)
+        if (child) beginReparent(get, set, [child], get(actualQueryAtom))
+    })
+
+    /** ⌘X / the panel's Cut: adds the selected row to the cut drawer, or takes it out when it is there; ignored while a
+     *  chain is active. The selection stays. */
+    const toggleCutAtom = atom(null, (get, set) => {
+        if (get(chainAtom)) return
+        const ref = movableSelectedRef(get)
+        if (ref) set(GlobalAtoms.cutDrawerAtom, toggleCut(get(GlobalAtoms.cutDrawerAtom), ref))
+    })
+
+    /** The drawer's Move under…: the reparent chain over every cut row; Enter on a target moves them all
+     *  (reparentChainAtom). */
+    const startDrawerMoveAtom = atom(null, (get, set) => {
+        const items = get(GlobalAtoms.cutDrawerAtom)
+        if (items.length === 0) return
+        const chain = get(chainAtom)
+        beginReparent(get, set, [...items], chain ? chainPrevQuery(chain) : get(actualQueryAtom))
     })
 
     const clearChainAtom = atom(null, (_get, set) => set(chainAtom, null))
@@ -829,6 +858,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             allowEditing: scp.allowEditing,
             flashLineAtom,
             chainAtom, chainWriteAtom, chainPatchRowAtom, refreshChainResultsAtom, popChainAtom, cancelChainAtom, startReparentAtom, clearChainAtom,
+            toggleCutAtom, startDrawerMoveAtom,
             startQuickAddAtom,
             editorOpenAtom, enterEditorAtom, leaveEditorAtom, searchModalTitleAtom,
     }

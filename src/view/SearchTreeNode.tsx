@@ -15,6 +15,8 @@ import {AppendDot} from "./editor/AppendDot";
 import {dragInfo, isValidDropTarget, type AppendTarget} from "./editor/row-editing";
 import {useRowGestures} from "./search/row-gestures";
 import {TaskCheckbox} from "./search/TaskCheckbox";
+import {GlobalAtoms} from "./react-context/global";
+import {cutKeyOf} from "./search/cut-drawer";
 
 type SearchTreeNodePropsFlatten = {
     node: TreeNode;
@@ -47,6 +49,7 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
     const selectedLine = useAtomValue(selectedLineAtom);
     const flashing = useAtomValue(flashLineAtom) === props.node.index ? "ts-row-flash" : "";
     const matchTerms = useAtomValue(matchTermsAtom);
+    const cut = useAtomValue(GlobalAtoms.cutKeysAtom).has(cutKeyOf(props.node.node)) ? "ts-row-cut" : "";
     const app = useAtomValue(appAtom);
 
     const expandNode = useSetAtom(expandNodeAtom);
@@ -168,7 +171,7 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
         >
             <div
                 ref={nodeRef}
-                className={`ts-list-line ${highlighted} ${flashing} ${expandableClass} ${dimClass} ${archivedClass} ${dropTarget === props.pos ? "ts-drop-target" : ""}`}
+                className={`ts-list-line ${highlighted} ${flashing} ${expandableClass} ${dimClass} ${archivedClass} ${cut} ${dropTarget === props.pos ? "ts-drop-target" : ""}`}
                 dir="ltr"
                 style={{ '--indent-level': indentLevel } as React.CSSProperties}
             >

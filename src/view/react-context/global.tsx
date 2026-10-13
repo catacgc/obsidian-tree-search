@@ -4,6 +4,8 @@ import {getDefaultStore, atom} from "jotai";
 import type {IndexedTree} from "../../indexing/indexed-tree";
 import type {EditorState} from "../editor/EditorMolecule";
 import type {RowTarget} from "../search/select-target";
+import type {RowRef} from "../search/chain";
+import {cutKeyOf} from "../search/cut-drawer";
 
 const appAtom = atom<App>(null as any as App)
 const graphAtom = atom<NotesGraph>(new NotesGraph())
@@ -12,6 +14,7 @@ const isGraphLoadingAtom = atom(false)
 const currentModalAtom = atom<Modal | null>(null)
 const pinAtom = atom<boolean>(false)
 const parserTypeAtom = atom<"native-wasm" | "typescript">("typescript")
+const cutDrawerAtom = atom<RowRef[]>([])
 
 export type GlobalStore = ReturnType<typeof getDefaultStore>
 
@@ -37,4 +40,8 @@ export const GlobalAtoms = {
     selectQueryAtom: atom<{view: string} | null>(null),
     /** The transient Alt-Edit or prose session, shown over the Append draft; discarded when its editor closes. */
     editSessionAtom: atom<EditorState | null>(null),
+    /** The cut drawer (⌘X), shared by the Search modal and pane; lives until the plugin reloads (the store is recreated). */
+    cutDrawerAtom,
+    /** cutKeyOf of every drawer item, for marking cut rows. */
+    cutKeysAtom: atom(get => new Set(get(cutDrawerAtom).map(r => cutKeyOf(r.node)))),
 }

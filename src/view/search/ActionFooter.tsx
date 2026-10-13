@@ -8,6 +8,7 @@ import {SearchViewMolecule} from "../react-context/state";
 import {ActionsMolecule} from "../react-context/actions";
 import {EditorMolecule} from "../editor/EditorMolecule";
 import {ActionPanel, Keycaps, truncateMiddle} from "./ActionPanel";
+import {CutDrawer} from "./CutDrawer";
 import {rowLabel} from "./chain";
 import {SHORTCUTS} from "./shortcuts";
 import {nodeLabel} from "./timeline-utils";
@@ -46,6 +47,7 @@ export const ActionFooter = () => {
 
     return <div ref={dockRef} className="ts-action-dock">
         <ActionPanel dockRef={dockRef}/>
+        <CutDrawer/>
         <div className={`ts-action-footer ${Platform.isPhone ? "is-phone" : ""}`}>
             <span className="ts-action-footer-title" title={title}>{title}</span>
             {main && <div role="button" tabIndex={-1} className="ts-action-footer-item ts-action-footer-main"

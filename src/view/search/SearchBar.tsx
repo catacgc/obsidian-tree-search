@@ -11,7 +11,7 @@ import {applyDateSuggestion, INVALID_NAME_RE, isDateSuggestion, openLinkAt, reve
 import {SearchAutocomplete} from "./SearchAutocomplete";
 import {EditorMolecule} from "../editor/EditorMolecule";
 import {linkPasteEdit} from "../editor/clipboard";
-import {canMoveUnderNewPage} from "./chain";
+import {canMoveUnderNewPage, reparentLabel} from "./chain";
 import {isFilterSuggestion} from "./search-filter";
 
 export type SearchBarProps = {
@@ -118,7 +118,7 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
         startQuickAdd()
     }, [quickAddRequest])
 
-    // During a chain (`>` append, `<` Move to), Escape leaves it (clears the chips, restores the query) instead of
+    // During a chain (`>` append, `<` Move under), Escape leaves it (clears the chips, restores the query) instead of
     // closing the modal, and Alt+Enter opens an append chain in the editor (Obsidian's hotkeys would take it before
     // React sees it). While the autocomplete is open, Escape closes only it. Claimed through an Obsidian Scope (like
     // the action panel), pushed only while the input has focus and a chain or the autocomplete is open.
@@ -199,7 +199,7 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
     }
 
     /** Chain keys; true when the key was handled. `>` pushes a chip onto the append chain (pushChainAtom), Enter writes
-     *  it, Alt+Enter opens the Outline editor on it; `<` starts Move to. `>` and `<` need editor mode; Move to started
+     *  it, Alt+Enter opens the Outline editor on it; `<` starts Move under. `>` and `<` need editor mode; Move under started
      *  from Alt+M or the action panel works in every view. */
     const handleChainKey = (ev: React.KeyboardEvent<HTMLInputElement>): boolean => {
         if (ev.nativeEvent.isComposing || ev.metaKey || ev.ctrlKey) return false
@@ -216,7 +216,7 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
         } else if (ev.key === "Enter" && chain?.mode === "reparent" && !ev.altKey && !ev.shiftKey) {
             const name = q.trim()
             if (selectedRow) void reparentChain(selectedRow.node)
-            else if (rows.length === 0 && canMoveUnderNewPage(chain.child.node) && name.length >= 3 && !INVALID_NAME_RE.test(name)) {
+            else if (rows.length === 0 && chain.children.some(c => canMoveUnderNewPage(c.node)) && name.length >= 3 && !INVALID_NAME_RE.test(name)) {
                 if (chain.confirm === name) void reparentChain({nodeType: "newPage", name})
                 else setChain({...chain, confirm: name})
             }
@@ -292,7 +292,7 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
     }
 
     const chips = chain?.mode === "reparent"
-        ? [<span key="reparent" className="ts-chain-chip is-reparent">{chain.child.label} &lt;</span>]
+        ? [<span key="reparent" className="ts-chain-chip is-reparent">{reparentLabel(chain.children)} &lt;</span>]
         : chain?.mode === "append"
         ? chain.steps.map((step, i) =>
             <span key={i} className={"ts-chain-chip" + (step.kind === "entry" ? " is-entry" : "")}>{step.label} &gt;</span>)
