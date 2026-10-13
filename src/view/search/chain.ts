@@ -198,10 +198,10 @@ function lastAnchor(steps: ChainStep[]): ChainAnchor {
     return {kind: "today"}
 }
 
-/** True when typed text in an append chain is an entry (`|`, `#`, `(`, `[ ] `, `- `, `[[`, `key::`, a markdown link
- *  `[…](`), not a search. */
+/** True when typed text in an append chain is an entry, not a search: `|`, `#`, `(`, a bullet (`-`, `*`, `+`) alone or
+ *  before a space, a task box (`[`, `[]`, `[ ]`, `[x]`) alone or before a space, `[[`, `key::`, a markdown link `[…](`. */
 export function isEntryInput(text: string): boolean {
-    return /^(\||#|\(|\[[ xX]\]\s|[-*+]\s|\[\[|[A-Za-z][\w-]*::|\[(?:\\.|[^\]\\])*\]\()/.test(text.trimStart())
+    return /^(\||#|\(|\[(?:[ xX]?\])?(?:\s|$)|[-*+](?:\s|$)|\[\[|[A-Za-z][\w-]*::|\[(?:\\.|[^\]\\])*\]\()/.test(text.trimStart())
 }
 
 const FIELD_PAREN_RE = /^\(\s*([A-Za-z][\w -]*?)\s*::\s*(.*?)\s*\)$/
@@ -224,11 +224,12 @@ export function parseChainEntry(text: string): ChainEntry | null | {error: strin
     }
     const link = parseLinkBullet(t)
     if (link) return {kind: "note", link}
-    let rest = t.replace(/^[-*+]\s+/, "")
+    let rest = t.replace(/^[-*+](?:\s+|$)/, "")
+    if (rest === "[") return null // a task box still being typed
     let marker: "- " | "- [ ] " | "- [x] " = "- "
-    const box = rest.match(/^\[([ xX])\]\s+/)
+    const box = rest.match(/^\[([ xX]?)\](?:\s+|$)/)
     if (box) {
-        marker = box[1] === " " ? "- [ ] " : "- [x] "
+        marker = box[1].toLowerCase() === "x" ? "- [x] " : "- [ ] "
         rest = rest.slice(box[0].length)
     }
     rest = rest.trim()

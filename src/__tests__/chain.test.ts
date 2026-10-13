@@ -134,6 +134,9 @@ describe("chainResults", () => {
         expect(keys(chainResults(g, chain, "zzz", "zzz", ";", {}, "2026-09-30"))).toEqual([])
         const typed = { mode: "append" as const, steps: [...chain.steps, entry({ kind: "item", marker: "- ", text: "x" })] }
         expect(chainResults(g, typed, "", "", ";", {}, "2026-09-30")).toEqual([])
+        expect(chainResults(g, chain, "-", "-", ";", {}, "2026-09-30")).toEqual([])
+        expect(chainResults(g, chain, "[ ]", "[ ]", ";", {}, "2026-09-30")).toEqual([])
+        expect(chainResults(g, chain, "[]", "[]", ";", {}, "2026-09-30")).toEqual([])
     })
 
     it("append: an expanded filter reference searches, though its `(` would read as an entry", async () => {
@@ -178,6 +181,12 @@ describe("parseChainEntry", () => {
         expect(parseChainEntry("(k:: )")).toEqual({ error: "Type a value after ::" })
         expect(parseChainEntry("meta-x:: y")).toEqual({ error: "meta- fields are reserved" })
     })
+
+    it("writes nothing for a bare or partial marker and an open task for []", () => {
+        for (const t of ["-", "[", "- [", "[]", "[ ]", "- [ ]", "- [x]"]) expect(parseChainEntry(t)).toBeNull()
+        expect(parseChainEntry("[] call Bob")).toEqual({ kind: "item", marker: "- [ ] ", text: "call Bob" })
+        expect(parseChainEntry("- [x] done")).toEqual({ kind: "item", marker: "- [x] ", text: "done" })
+    })
 })
 
 describe("isEntryInput", () => {
@@ -189,6 +198,10 @@ describe("isEntryInput", () => {
     })
     it("keeps bracketed text without a destination a search", () => {
         expect(isEntryInput("[draft] notes")).toBe(false)
+    })
+    it("takes a bare or partial bullet or task marker as an entry, not a search", () => {
+        for (const t of ["-", "*", "+", "[", "[ ", "[]", "[ ]", "[x]", "- [ ]", "[] call"]) expect(isEntryInput(t)).toBe(true)
+        for (const t of ["-foo", "[x", "apollo"]) expect(isEntryInput(t)).toBe(false)
     })
 })
 
@@ -242,6 +255,9 @@ describe("Quick Add (chip-less append chain)", () => {
         expect(chainReplacesSearch(quickAdd(), "alpha")).toBe(false)
         expect(chainReplacesSearch(quickAdd(), "- new item")).toBe(true)
         expect(chainReplacesSearch(quickAdd([row({ kind: "note", name: "P" })]), "alpha")).toBe(true)
+        expect(chainReplacesSearch(quickAdd(), "-")).toBe(true)
+        expect(chainReplacesSearch(quickAdd(), "[ ]")).toBe(true)
+        expect(chainReplacesSearch(quickAdd(), "-alpha")).toBe(false)
     })
 
     it("writes typed text into today's daily note, with no parent", () => {
