@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test"
 import yaml from "js-yaml"
 import type { App } from "obsidian"
-import { StaleLineError, type TextNode } from "@mdtree/core"
+import { NOTE_BODY_CHANGED, StaleLineError, type TextNode } from "@mdtree/core"
 import {
     addFrontmatterValue,
     applyNotePatch,
@@ -15,6 +15,7 @@ import {
     trashVaultFile,
     reparent,
     writeNoteContents,
+    writeNoteBody,
     writeWholeNote,
 } from "../editing/vault-edits"
 
@@ -365,6 +366,25 @@ describe("writeWholeNote", () => {
     it("throws for a null original when the note now exists", async () => {
         const { app } = makeFakeApp({ "P.md": "x\n" })
         await expect(writeWholeNote(app, "P.md", null, "new\n")).rejects.toThrow("Note changed since editing started")
+    })
+})
+
+describe("writeNoteBody", () => {
+    it("replaces the body when it is unchanged", async () => {
+        const { app, files } = makeFakeApp({ "P.md": "- a\n\nold\n" })
+        await writeNoteBody(app, "P.md", "old", "new")
+        expect(files.get("P.md")).toBe("- a\n\nnew\n")
+    })
+
+    it("throws and leaves the file when the body changed since it was loaded", async () => {
+        const { app, files } = makeFakeApp({ "P.md": "- a\n\nedited\n" })
+        await expect(writeNoteBody(app, "P.md", "old", "new")).rejects.toThrow(NOTE_BODY_CHANGED)
+        expect(files.get("P.md")).toBe("- a\n\nedited\n")
+    })
+
+    it("throws for a missing file", async () => {
+        const { app } = makeFakeApp()
+        await expect(writeNoteBody(app, "gone.md", "", "x")).rejects.toThrow(NOTE_BODY_CHANGED)
     })
 })
 

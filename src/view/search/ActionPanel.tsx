@@ -127,7 +127,7 @@ const PanelBody = ({page, dockRef}: {page: ActionPanelPage; dockRef: React.RefOb
             }
             // Actions that open the inline editor leave focus to it; everything else returns to the search.
             close(!(item.run.kind === "renameFile" || item.run.kind === "saveFilter" || item.run.kind === "renameFilter" || item.run.kind === "shortcut" && OPENS_EDITOR[item.run.id]))
-            if (item.run.kind === "action") void executeAction(item.run.action)
+            if (item.run.kind === "action") void executeAction(item.run.action, item.run.inObsidian ?? false)
             else if (item.run.kind === "task") { if (selectedRow) void editTask(selectedRow.node, item.run.change) }
             else if (item.run.kind === "renameFile") openRenameFile(item.run.path)
             else if (item.run.kind === "saveFilter") openSaveFilter(actualQuery.trim())

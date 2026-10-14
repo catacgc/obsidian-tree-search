@@ -2,8 +2,9 @@ import { highlightLine, openFileByName } from "../obsidian-utils";
 import { triggerLinkPreview } from "./hover-preview";
 import { ParsedNode, ParsedTextToken, Location, stripUrlQueryStrings } from "@mdtree/core";
 import {useMolecule} from "bunshi/react";
-import {GlobalAppMolecule, SearchViewMolecule} from "./react-context/state";
-import {useAtomValue} from "jotai";
+import {GlobalAppMolecule} from "./react-context/state";
+import {EditorMolecule} from "./editor/EditorMolecule";
+import {useAtomValue, useSetAtom} from "jotai";
 import React from "react";
 
 export function highlightText(text: string, terms: string[]): React.ReactNode {
@@ -31,6 +32,21 @@ function renderLinkName(display: string, href: string, terms: string[]): React.R
     return display
 }
 
+/** Click on a note link in a row: in views with editor mode the note's (or heading's) Patch view (openPatchViewAtom);
+ *  with Mod held, elsewhere, or when that doesn't apply, the note in Obsidian. Prevents the default first, so the row's
+ *  own click (select, second-click open) skips it. */
+function useOpenNoteLink() {
+    const {appAtom} = useMolecule(GlobalAppMolecule)
+    const app = useAtomValue(appAtom)
+    const {openPatchViewAtom} = useMolecule(EditorMolecule)
+    const openPatchView = useSetAtom(openPatchViewAtom)
+    return async (ev: React.MouseEvent, target: string, obsidianName: string = target) => {
+        ev.preventDefault()
+        if (!ev.metaKey && !ev.ctrlKey && await openPatchView(target)) return
+        if (app) await openFileByName(app, obsidianName)
+    }
+}
+
 export const BaseNodeRender = (
     props: { node: ParsedNode; matchTerms: string[] }
 ) => {
@@ -38,6 +54,8 @@ export const BaseNodeRender = (
 
     const app = useAtomValue(appAtom)
     const { matchTerms } = props
+
+    const openNoteLink = useOpenNoteLink()
 
     async function openFile(name: string) {
         if (app == undefined) return
@@ -60,11 +78,7 @@ export const BaseNodeRender = (
             return <span className={isRef ? "is-unresolved" : ""}>
                 <a className={"obsidian-link " + (isRef ? "cm-underline" : "")} href="#"
                    onMouseOver={ev => previewLink(ev, page)}
-                   onClick={async ev => {
-                    await openFile(page)
-                    ev.preventDefault()
-                }
-                }>{highlightText(page, matchTerms)}{aliases ? <> ({highlightText(aliases, matchTerms)})</> : ""}</a>
+                   onClick={ev => void openNoteLink(ev, page)}>{highlightText(page, matchTerms)}{aliases ? <> ({highlightText(aliases, matchTerms)})</> : ""}</a>
             </span>
         case "header":
             return <span>{highlightText(`${props.node.page} > ${props.node.header}`, matchTerms)}</span>
@@ -90,11 +104,7 @@ export const BaseNodeRender = (
             return <span>
                 <a className="obsidian-link" href="#"
                    onMouseOver={ev => previewLink(ev, folderNotePage)}
-                   onClick={async ev => {
-                    await openFile(folderNotePage)
-                    ev.preventDefault()
-                }
-                }>{highlightText(folderNoteName, matchTerms)}</a> 📂📄
+                   onClick={ev => void openNoteLink(ev, folderNotePage)}>{highlightText(folderNoteName, matchTerms)}</a> 📂📄
             </span>
         case "pointer":
             return <span>⚠️ Pointer node should not be rendered</span>
@@ -115,11 +125,7 @@ export const TextNodeRenderer = (props: { parsedTokens: ParsedTextToken[]; match
     const {appAtom} = useMolecule(GlobalAppMolecule)
     const app = useAtomValue(appAtom)
     const { matchTerms } = props
-
-    async function openFile(name: string) {
-        if (app == undefined) return
-        await openFileByName(app, name)
-    }
+    const openNoteLink = useOpenNoteLink()
 
     if (props.parsedTokens.length == 0) return <></>
     const token = props.parsedTokens[0]
@@ -137,10 +143,7 @@ export const TextNodeRenderer = (props: { parsedTokens: ParsedTextToken[]; match
                        ev.stopPropagation()
                        triggerLinkPreview(app, ev.nativeEvent, ev.currentTarget, linktext)
                    }}
-                   onClick={async ev => {
-                    await openFile(token.pageTarget)
-                    ev.preventDefault()
-                }}>
+                   onClick={ev => void openNoteLink(ev, linktext, token.pageTarget)}>
                     {highlightText(display, matchTerms)}{header}
                 </a>
                 {rest}

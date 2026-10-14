@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test"
-import { prioritizeWebLinks, RaycastAction, getTreeNodeActions } from "../node-actions"
+import { prioritizeWebLinks, RaycastAction, getTreeNodeActions, openTargetOf } from "../node-actions"
 
 const browse = (url: string, title: string, shortcut?: RaycastAction["shortcut"]): RaycastAction => ({
     type: "browse",
@@ -338,6 +338,16 @@ describe("insert-link (quick-link) actions", () => {
         const insert = actions.find(a => a.type === "insertLink")
         expect(insert?.type).toBe("insertLink")
         if (insert?.type === "insertLink") expect(insert.text).toBe("[[Page Name#Header]]")
+    })
+
+    it("reads the note or heading an Open action opens: page and header rows, text-row links, not web links", () => {
+        const targets = (node: Parameters<typeof getTreeNodeActions>[1]) => getTreeNodeActions(mockApp, node).map(openTargetOf).filter(t => t !== null)
+        expect(targets(createPageNode())).toEqual(["Page Name"])
+        expect(targets(createHeaderNode())).toEqual(["Page Name#Header"])
+        const text = { ...createPageNode(), node: { nodeType: "text", searchKey: "x", location, boost: 0, ageDays: 1, tags: [],
+            parsedTokens: [{ tokenType: "obsidian_link", source: "[[Other Note#Plan B]]", pageTarget: "Other Note", headerName: "Plan B" }] } }
+        expect(targets(text)).toEqual(["Other Note#Plan B"])
+        expect(openTargetOf({ type: "browse", url: "https://example.com", title: "x", icon: "" })).toBeNull()
     })
 
     it("leaves exactly one plain-Enter action but keeps Shift+Enter", () => {

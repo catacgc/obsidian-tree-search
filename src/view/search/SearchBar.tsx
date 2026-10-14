@@ -121,9 +121,10 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
     }, [quickAddRequest])
 
     // During a chain (`>` append, `<` Move under), Escape leaves it (clears the chips, restores the query) instead of
-    // closing the modal, and Alt+Enter opens an append chain in the editor (Obsidian's hotkeys would take it before
-    // React sees it). While the autocomplete is open, Escape closes only it. Claimed through an Obsidian Scope (like
-    // the action panel), pushed only while the input has focus and a chain or the autocomplete is open.
+    // closing the modal, Alt+Enter opens an append chain in the editor (Obsidian's hotkeys would take it before React
+    // sees it), and Mod+Enter saves an append chain with the content pane's buffers. While the autocomplete is open,
+    // Escape closes only it. Claimed through an Obsidian Scope (like the action panel), pushed only while the input has
+    // focus and a chain or the autocomplete is open.
     const app = useAtomValue(GlobalAtoms.appAtom)
     const scopeRef = useRef<Scope | null>(null)
     const escapeRef = useRef<() => void>(() => {})
@@ -134,12 +135,19 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
         void openChainEditor(null)
         return true
     }
+    const modEnterRef = useRef<() => boolean>(() => false)
+    modEnterRef.current = () => {
+        if (chain?.mode !== "append") return false
+        void commitChain()
+        return true
+    }
     const pushScope = () => {
         if (scopeRef.current || !app) return
         const scope = new Scope(app.scope)
         scope.register([], "Escape", () => { escapeRef.current(); return false })
         // Unhandled (undefined) falls through to Obsidian's hotkeys.
         scope.register(["Alt"], "Enter", () => altEnterRef.current() ? false : undefined)
+        scope.register(["Mod"], "Enter", () => modEnterRef.current() ? false : undefined)
         app.keymap.pushScope(scope)
         scopeRef.current = scope
     }
@@ -344,7 +352,7 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
                         <button
                             className="text-obs-base-40 focus:outline-none hover:text-obs-accent bg-transparent border-none p-1"
                             aria-label="Clear search"
-                            onClick={() => { clearChain(); setSearch("") }}
+                            onClick={() => { if (clearChain()) setSearch("") }}
                         >
                             ×
                         </button>

@@ -5,7 +5,7 @@
 import React, {useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
 import {useAtomValue, useSetAtom, useStore} from "jotai";
 import {useMolecule} from "bunshi/react";
-import {htmlToMarkdown, Notice, Platform, Scope, type Modifier} from "obsidian";
+import {htmlToMarkdown, Notice, Platform, Scope} from "obsidian";
 import {Brackets, ClipboardPaste, IndentDecrease, IndentIncrease, ListTodo, Paperclip} from "lucide-react";
 import {applyDateSuggestion, attachmentExt, attachmentKind, attachmentName, newLinkName, reverseMarkdownParsing, type DateSuggestion} from "@mdtree/core";
 import {GlobalAtoms} from "../react-context/global";
@@ -21,7 +21,7 @@ import {LinkResults, useLinkSuggest, type LinkSuggestState} from "./LinkSuggest"
 import {useDateSuggest} from "./date-suggest";
 import {SearchAutocomplete} from "../search/SearchAutocomplete";
 import {MarkdownLine} from "./MarkdownLine";
-import {MarkdownField, type MarkdownFieldHandle} from "./MarkdownField";
+import {ANY_MODIFIERS, MarkdownField, type MarkdownFieldHandle} from "./MarkdownField";
 import {autoConvertHtml} from "./obsidian-editor";
 import {linkPasteEdit} from "./clipboard";
 import {
@@ -47,9 +47,6 @@ import {
 type Section = "outline" | "content"
 
 const PREVIEW_LINES = 6
-
-// `Scope.register` matches any modifiers when given null (obsidian.d.ts only declares arrays).
-const ANY_MODIFIERS = null as unknown as Modifier[]
 
 /** Existing buffer key for `name` (links are case-insensitive), else `name`. */
 const bufferKey = (contents: Record<string, string>, name: string) =>

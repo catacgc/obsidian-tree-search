@@ -63,7 +63,8 @@
 }
 
 /* MarkdownField: Obsidian's markdown editor in a box styled like the search input; grows to 8 lines, then scrolls. */
-.ts-inline-editor .ts-editor-text {
+.ts-inline-editor .ts-editor-text,
+.ts-note-body .ts-editor-text {
     width: 100%;
     min-height: calc(1lh + 14px);
     max-height: calc(8lh + 14px);
@@ -81,15 +82,19 @@
 }
 
 .ts-inline-editor .ts-editor-text:hover,
-.ts-inline-editor .ts-editor-text:focus-within {
+.ts-inline-editor .ts-editor-text:focus-within,
+.ts-note-body .ts-editor-text:hover,
+.ts-note-body .ts-editor-text:focus-within {
     border-color: var(--background-modifier-border-hover);
 }
 
-.ts-inline-editor .ts-editor-text .markdown-source-view.mod-cm6 {
+.ts-inline-editor .ts-editor-text .markdown-source-view.mod-cm6,
+.ts-note-body .ts-editor-text .markdown-source-view.mod-cm6 {
     display: block;
 }
 
-.ts-inline-editor .ts-editor-text .cm-scroller {
+.ts-inline-editor .ts-editor-text .cm-scroller,
+.ts-note-body .ts-editor-text .cm-scroller {
     padding: 0;
     overflow: visible;
     font-family: var(--font-text);
@@ -97,21 +102,24 @@
     line-height: var(--line-height-normal);
 }
 
-.ts-inline-editor .ts-editor-text .cm-sizer {
+.ts-inline-editor .ts-editor-text .cm-sizer,
+.ts-note-body .ts-editor-text .cm-sizer {
     margin: 0;
     padding: 0;
     max-width: none;
     min-height: 0;
 }
 
-.ts-inline-editor .ts-editor-text .cm-content {
+.ts-inline-editor .ts-editor-text .cm-content,
+.ts-note-body .ts-editor-text .cm-content {
     padding-top: 0 !important;
     padding-bottom: 0 !important;
     min-height: 0;
 }
 
 /* Obsidian spaces list lines by `--list-spacing`; the field keeps the input's height. */
-.ts-inline-editor .ts-editor-text .cm-line {
+.ts-inline-editor .ts-editor-text .cm-line,
+.ts-note-body .ts-editor-text .cm-line {
     padding-top: 0;
     padding-bottom: 0;
 }
@@ -141,7 +149,8 @@
     display: none;
 }
 
-.ts-inline-editor .ts-editor-text .cm-editor.cm-focused {
+.ts-inline-editor .ts-editor-text .cm-editor.cm-focused,
+.ts-note-body .ts-editor-text .cm-editor.cm-focused {
     outline: none;
 }
 
@@ -286,4 +295,57 @@
 .ts-prose-name {
 	width: 100%;
 	margin-bottom: 6px;
+}
+
+/* Patch view's content pane (NoteBodyPane): the anchored note's text after its outline, docked above the footer. */
+.ts-note-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 4px 8px 6px;
+    background: var(--ts-surface);
+    border-top: 1px solid var(--background-modifier-border);
+}
+
+.ts-note-body-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--font-ui-smaller);
+    color: var(--text-muted);
+}
+
+.ts-note-body-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-normal);
+    font-weight: var(--font-semibold);
+}
+
+.ts-note-body-dirty {
+    color: var(--text-accent);
+}
+
+/* Scoped to outrank Obsidian's `button:not(.clickable-icon)` styles, like .ts-editor-button. */
+.ts-note-body .ts-note-body-save {
+    margin-left: auto;
+    height: auto;
+    padding: 0 4px;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    color: var(--color-accent);
+    font-size: var(--font-ui-smaller);
+}
+
+.ts-note-body .ts-note-body-save:disabled {
+    color: var(--text-faint);
+    cursor: default;
+}
+
+.ts-note-body .ts-editor-text {
+    height: 30vh;
+    min-height: 0;
+    max-height: none;
 }

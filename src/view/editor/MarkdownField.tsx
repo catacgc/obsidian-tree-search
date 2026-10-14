@@ -4,11 +4,14 @@
 // it, and the owner handles keys, pastes, drops and link clicks first through capture listeners
 // on the host (they run before CodeMirror's and Obsidian's handlers on `.cm-content`).
 import React, {useEffect, useLayoutEffect, useRef} from "react";
-import {Notice, Platform, type App} from "obsidian";
+import {Notice, Platform, type App, type Modifier} from "obsidian";
 import {ChangeSet, Compartment, EditorState, Prec, type Extension} from "@codemirror/state";
 import {EditorView, keymap, type ViewUpdate} from "@codemirror/view";
 import {editorAppProxy, embeddedEditorClass, type EmbeddedEditor, type EmbeddedEditorClass} from "./obsidian-editor";
 import {changedRange} from "./textarea-ops";
+
+// `Scope.register` matches any modifiers when given null (obsidian.d.ts only declares arrays).
+export const ANY_MODIFIERS = null as unknown as Modifier[]
 
 export type MarkdownFieldHandle = {
     text(): string

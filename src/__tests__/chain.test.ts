@@ -7,6 +7,7 @@ import {
     chainPrevQuery,
     chainReplacesSearch,
     chainResults,
+    dirtyBodyPaths,
     isEntryInput,
     parseChainEntry,
     planReparent,
@@ -31,6 +32,12 @@ const folder = (path: string): ParsedNode =>
     ({ ...base(path, 0), nodeType: "folder", path, name: path.split("/").pop()!, folderNote: "" })
 
 const ref = (node: ParsedNode, parent: ParsedNode | null = null, label = "label"): RowRef => ({ node, label, parent })
+
+describe("dirtyBodyPaths", () => {
+    it("lists only the buffers whose text differs from the loaded body", () => {
+        expect(dirtyBodyPaths({ "a.md": { original: "x", text: "x" }, "b.md": { original: "x", text: "y" } })).toEqual(["b.md"])
+    })
+})
 
 describe("planReparent", () => {
     const cfg: DailyNoteConfig = { folder: "Daily", format: "YYYY-MM-DD", template: "" }

@@ -19,6 +19,9 @@ import {
   pasteUnderLine,
   outlineChanged,
   StaleLineError,
+  NOTE_BODY_CHANGED,
+  noteBody,
+  replaceNoteBody,
 } from "../edit/outline-edit.ts"
 import { NotesGraph } from "../graph/graph.ts"
 import { indexSinglePage, DEFAULT_SETTINGS } from "../graph/indexer.ts"
@@ -28,6 +31,39 @@ import type { ParsedNode } from "../graph/types.ts"
 const outline = (text: string) => parseOutline(text).lines
 
 const EXAMPLE_1 = "- [[Standup]]\n    - [[Alice]]\nNotes from the day…\n"
+
+describe("noteBody / replaceNoteBody", () => {
+  it("takes what follows the leading outline, headings included", () => {
+    expect(noteBody("---\nk: v\n---\n- [[A]]\n    - b\n\n## Notes\nprose\n")).toBe("## Notes\nprose")
+  })
+
+  it("takes everything after the frontmatter in a note without bullets, nothing in an outline-only note", () => {
+    expect(noteBody("---\nk: v\n---\n\n# Title\nprose\n")).toBe("# Title\nprose")
+    expect(noteBody("- a\n- b\n")).toBe("")
+  })
+
+  it("starts the body at the prose that ends the outline", () => {
+    expect(noteBody("- a\nprose\n- c\n")).toBe("prose\n- c")
+  })
+
+  it("replaces the body in the file's line ending", () => {
+    expect(replaceNoteBody("- a\r\n\r\nold\r\n", "old", "new\ntext")).toBe("- a\r\n\r\nnew\r\ntext\r\n")
+  })
+
+  it("adds a body after one blank line", () => {
+    expect(replaceNoteBody("- a\n", "", "prose")).toBe("- a\n\nprose\n")
+    expect(replaceNoteBody("---\nk: v\n---\n", "", "hi")).toBe("---\nk: v\n---\n\nhi\n")
+    expect(replaceNoteBody("", "", "hi")).toBe("hi\n")
+  })
+
+  it("clears the body", () => {
+    expect(replaceNoteBody("- a\n\nold\n", "old", "")).toBe("- a\n")
+  })
+
+  it("refuses a body that changed since it was loaded", () => {
+    expect(() => replaceNoteBody("- a\n\nold\n", "older", "x")).toThrow(NOTE_BODY_CHANGED)
+  })
+})
 
 describe("appendUnderLinkBullet", () => {
   it("EDITOR.md §4.3 example 1: adds a [[P]] bullet after the leading outline, before prose", () => {

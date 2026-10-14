@@ -69,6 +69,14 @@ The editor understands the same patches on a bullet that is only a link: `- [[No
 
 In the editor, <kbd>Alt</kbd>+<kbd>Enter</kbd> on a line without a link opens the whole note: the note you are adding to, today's daily note, or, under a line, a new note that Save links from that line.
 
+### The note's content
+
+In the Search modal and pane, opening a result opens Patch mode on it instead of opening it in Obsidian: <kbd>Enter</kbd> or **Open** in the footer on a note, heading or line, clicking a selected row again, the action panel's **Open …** items, and clicking a note link in a row (that note). Opening another result from Patch mode adds it as the next chip. <kbd>Esc</kbd> (or <kbd>Backspace</kbd> on the last chip) goes back to the search you came from, with the same row selected.
+
+While a chain has a note, heading or line chip, a pane above the footer shows that note's text after its leading outline (its headings, prose and code blocks), and you can edit it there. A dot by the note's name marks unsaved changes. **Save**, <kbd>Ctrl</kbd>+<kbd>Enter</kbd> (<kbd>⌘</kbd>+<kbd>Enter</kbd> on macOS) in the pane or the search box, or <kbd>Enter</kbd> on a pending patch writes them, together with the patch. If the note changed in the meantime, nothing is written: copy your edits and reopen the note. <kbd>Esc</kbd> in the pane goes back to the search box. Leaving Patch mode (or dropping the chip) with unsaved changes shows a notice instead; do it again to discard them. Closing the modal discards them.
+
+To open in Obsidian instead, press <kbd>Shift</kbd>+<kbd>Enter</kbd> (See in Obsidian), choose **Open … in Obsidian** in the action panel, <kbd>Ctrl</kbd>/<kbd>⌘</kbd>-click a link in a row, or click the pane's open button. Folders and attachments still open in Obsidian.
+
 ## Move under
 
 To move a note or line, select it and type <kbd>&lt;</kbd>, press <kbd>Alt</kbd>+<kbd>M</kbd>, or choose **Move under…** in the action panel. The row becomes a chip, and the search now looks for its new parent: any note in the vault, not only the ones in the results. Select one and press <kbd>Enter</kbd> (the footer shows **Move under**). <kbd>Alt</kbd>+<kbd>M</kbd> and **Move under…** work in every search view, including on mobile; <kbd>&lt;</kbd> works where you can edit (the Search modal and pane).

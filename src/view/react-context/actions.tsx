@@ -1,19 +1,20 @@
 import {atom, useAtomValue} from "jotai";
 import {Notice} from "obsidian";
 import {highlightLine, archiveLine, unarchiveLine, archivePage, unarchivePage, insertHere} from "../../obsidian-utils";
-import {getTreeNodeActions, raycastActionOf, RaycastAction} from "../node-actions";
+import {getTreeNodeActions, openTargetOf, raycastActionOf, RaycastAction} from "../node-actions";
 import {molecule} from "bunshi";
 import {GlobalAppMolecule, SearchViewMolecule, SearchViewScope} from "./state";
 import {GlobalAtoms} from "./global";
 import {settingsAtom} from "./settings";
 import {EditorMolecule} from "../editor/EditorMolecule";
+import {isPatchable} from "../search/chain";
 
 
 export const ActionsMolecule = molecule((mol, scope) => {
     const scp = scope(SearchViewScope)
     const {selectedNodeAtom, enterRowAtom, selectEnterRowAtom, hoveredLineAtom, selectedLineAtom} = mol(SearchViewMolecule)
     const { appAtom } = mol(GlobalAppMolecule)
-    const { openAppendForSelectedAtom } = mol(EditorMolecule)
+    const { openAppendForSelectedAtom, openPatchViewAtom } = mol(EditorMolecule)
 
     /**
      * Close the currently opened modal
@@ -27,9 +28,12 @@ export const ActionsMolecule = molecule((mol, scope) => {
         const newLine = get(hoveredLineAtom)
         const oldLine = get(selectedLineAtom)
 
-        // A second click runs the row's main action: reveal it.
-        if (newLine == oldLine) await set(highlightSelectedItemAtom)
-
+        // A second click opens the row: its Patch view in views with editor mode (openPatchViewAtom), else (or when
+        // that doesn't apply) it reveals the row in Obsidian.
+        if (newLine == oldLine) {
+            if (await set(openPatchViewAtom, null)) return
+            await set(highlightSelectedItemAtom)
+        }
         set(selectedLineAtom, newLine)
     })
 
@@ -63,9 +67,11 @@ export const ActionsMolecule = molecule((mol, scope) => {
         if (action) await set(executeActionAtom, action)
     })
 
-    /** Enter: the selected row's default action; with nothing selected, the first row's (enterRowAtom). */
+    /** Enter: the selected row's default action; with nothing selected, the first row's (enterRowAtom). Views with
+     *  editor mode open a page, header or line in its Patch view instead. */
     const handleDefaultActionAtom = atom(null, async (get, set) => {
         set(selectEnterRowAtom)
+        if (await set(openPatchViewAtom, null)) return
         const actions = get(selectedTreeNodeActionsAtom)
         if (actions.length == 0) return
 
@@ -93,7 +99,14 @@ export const ActionsMolecule = molecule((mol, scope) => {
         return getTreeNodeActions(app, node, scp.isQuickLink ? "insertLink" : "default")
     })
 
-    const executeActionAtom = atom(null, async (get, set, action: RaycastAction) => {
+    /** Runs a row action. `inObsidian`: the action panel's "… in Obsidian" items, which open a note in Obsidian even
+     *  where Open shows its Patch view. */
+    const executeActionAtom = atom(null, async (get, set, action: RaycastAction, inObsidian: boolean = false) => {
+        // Views with editor mode open a page row's, header row's or text row's note or heading link in its Patch view
+        // (its `>` chain with the content pane) instead of in Obsidian.
+        const target = openTargetOf(action)
+        const sel = get(selectedNodeAtom)
+        if (!inObsidian && target !== null && sel && !sel.archiveRow && isPatchable(sel.node) && await set(openPatchViewAtom, target)) return
         // Views with editor mode open the inline Append editor for the selected row (like Alt+A)
         // instead of inserting a line in an Obsidian note; the modal stays open to host it.
         if (scp.allowEditing && raycastActionOf(action) === "insert") {

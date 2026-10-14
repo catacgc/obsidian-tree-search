@@ -67,6 +67,17 @@ export const raycastActionOf = (action: RaycastAction): string | null =>
         ? new URL(action.url).searchParams.get("raycastaction")
         : null
 
+/** The note (`Name`) or heading (`Name#Heading`) an `raycastaction=open` action opens, else null: a page or header
+ *  row's own Open, a text row's `Open 🔹 [[link]]`, a folder's folder note. Views with editor mode show its Patch view
+ *  instead of opening it in Obsidian. */
+export function openTargetOf(action: RaycastAction): string | null {
+    if (raycastActionOf(action) !== "open" || action.type !== "browse") return null
+    const url = new URL(action.url)
+    const file = url.searchParams.get("filepath")
+    if (!file) return null
+    return url.hash.length > 1 ? `${file}#${decodeURIComponent(url.hash.slice(1))}` : file
+}
+
 /** Icon.* values in the Raycast API */
 const Icons = {
     pencil: "pencil-16",
@@ -303,7 +314,7 @@ function renderTitle(result: TreeNode, actions: RaycastAction[], app: App): stri
         case "header":
             actions.push({
                 type: "browse",
-                url: getHighlightUrl(result.node.location, vault),
+                url: getOpenUrl({tokenType: "obsidian_link", source: result.node.page, pageTarget: result.node.page, headerName: result.node.header}, vault),
                 title: `Open ${result.node.page} > ${result.node.header}`,
                 icon: Icons.blankDocument
             })

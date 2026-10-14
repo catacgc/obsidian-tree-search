@@ -14,7 +14,7 @@ Alt shortcuts match the physical key, so they work on macOS even though <kbd>⌥
 | --- | --- |
 | <kbd>↓</kbd> | Select next |
 | <kbd>↑</kbd> | Select previous |
-| <kbd>Enter</kbd> | Open (default action) |
+| <kbd>Enter</kbd> | Open (default action); in the Search modal and pane a note, heading or line opens in Patch mode with its content pane |
 | <kbd>Shift</kbd>+<kbd>Enter</kbd> | See in Obsidian |
 | <kbd>Ctrl</kbd>+<kbd>K</kbd> | Actions |
 | <kbd>→</kbd> (caret at the end of the search) | Expand / collapse the selected row, or show the rest of its list |
@@ -49,7 +49,7 @@ Alt shortcuts match the physical key, so they work on macOS even though <kbd>⌥
 | <kbd>Alt</kbd>+<kbd>Enter</kbd> | Edit the row (Rename a heading or attachment) |
 | <kbd>Alt</kbd>+<kbd>N</kbd> | Quick Add: search to patch, or type to add to today |
 | <kbd>&gt;</kbd> | Add under the selected row (or today's note): it becomes a chip; typed text then becomes another chip |
-| <kbd>Enter</kbd> (with chips) | Write the chain; <kbd>Alt</kbd>+<kbd>Enter</kbd> continues in the editor |
+| <kbd>Enter</kbd> (with chips) | Write the chain; <kbd>Alt</kbd>+<kbd>Enter</kbd> continues in the editor; <kbd>Ctrl</kbd>+<kbd>Enter</kbd> also saves the content pane |
 | <kbd>&lt;</kbd> | Move the selected page or line: search for its new parent |
 | <kbd>Backspace</kbd> (empty input) | Drop the last chip |
 | <kbd>Esc</kbd> | Cancel the chain or the move |
@@ -63,6 +63,15 @@ Alt shortcuts match the physical key, so they work on macOS even though <kbd>⌥
 | <kbd>Tab</kbd> or <kbd>Shift</kbd>+<kbd>Tab</kbd> | Indent / outdent |
 | <kbd>Alt</kbd>+<kbd>Enter</kbd> | Content of the link on the line, else the whole note |
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>Ctrl</kbd>+<kbd>I</kbd> <kbd>Ctrl</kbd>+<kbd>K</kbd> | Bold / italic / link |
+
+## Content pane (Patch mode)
+
+| Keys | Action |
+| --- | --- |
+| <kbd>Ctrl</kbd>+<kbd>Enter</kbd> or <kbd>Shift</kbd>+<kbd>Enter</kbd> | Save the pane with the pending patch |
+| <kbd>Esc</kbd> | Back to the search box |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>Ctrl</kbd>+<kbd>I</kbd> <kbd>Ctrl</kbd>+<kbd>K</kbd> | Bold / italic / link |
+| <kbd>Ctrl</kbd>+click a link | Open the note |
 
 ## Mobile
 

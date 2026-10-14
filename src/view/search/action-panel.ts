@@ -4,7 +4,7 @@
 import {hasScheduledDate} from "@mdtree/core"
 import type {TreeNode} from "./SearchViewFlatten"
 import type {RaycastAction} from "../node-actions"
-import {raycastActionOf} from "../node-actions"
+import {openTargetOf, raycastActionOf} from "../node-actions"
 import {SHORTCUTS, type KeySpec, type ShortcutId} from "./shortcuts"
 import {
     appendTargetAt, deleteTargetOf, isEditableRow, isLinkLineRow, type DeleteTarget, type OwnPath,
@@ -26,7 +26,7 @@ export type PanelIcon =
 
 export type PanelRun =
     | {kind: "shortcut"; id: ShortcutId}
-    | {kind: "action"; action: RaycastAction}
+    | {kind: "action"; action: RaycastAction; inObsidian?: boolean}
     | {kind: "task"; change: TaskChange}
     | {kind: "patch"}
     | {kind: "renameFile"; path: string}
@@ -134,6 +134,9 @@ function rowActionShortcut(action: RaycastAction): {id?: ShortcutId; icon: Panel
 export function panelItems(ctx: PanelContext): PanelItem[] {
     const items: PanelItem[] = []
     const row = ctx.selectedPos >= 0 ? ctx.rows[ctx.selectedPos] : undefined
+    const patchable = ctx.allowEditing && row !== undefined && !row.archiveRow && isPatchable(row.node)
+    // With editor mode Enter opens a page, header or line in its Patch view: the Patch item shows ↵, not a row action.
+    const enterPatches = patchable && ctx.chainMode === null
 
     ctx.rowActions.forEach((action, i) => {
         // Move To (folder picker) is replaced by Move under… below. With editor mode, Insert after opens Append, which
@@ -141,7 +144,12 @@ export function panelItems(ctx: PanelContext): PanelItem[] {
         if (raycastActionOf(action) === "moveToFolder") return
         if (ctx.allowEditing && raycastActionOf(action) === "insert") return
         const {id, icon} = rowActionShortcut(action)
-        items.push({id: `row:${i}`, section: "row", title: action.title, icon, key: id && keyOf(id), run: {kind: "action", action}})
+        const key = id === "open" && enterPatches ? undefined : id && keyOf(id)
+        items.push({id: `row:${i}`, section: "row", title: action.title, icon, key, run: {kind: "action", action}})
+        // With editor mode an Open shows the note's Patch view; this one opens it in Obsidian.
+        if (patchable && openTargetOf(action) !== null) {
+            items.push({id: `row:${i}:obsidian`, section: "row", title: `${action.title} in Obsidian`, icon: "link", run: {kind: "action", action, inObsidian: true}})
+        }
     })
     // Move under…: the `<` flow (search for the new parent), for every row it can move.
     if (row && !row.archiveRow && isMovable(row.node)) {
@@ -171,7 +179,7 @@ export function panelItems(ctx: PanelContext): PanelItem[] {
         const type = row.node.nodeType
         // Patch: what typing `>` does (`>` is typed text, not a shortcut).
         if (!row.archiveRow && ctx.chainMode !== "reparent" && isPatchable(row.node)) {
-            items.push({id: "patch", section: "edit", title: "Patch", icon: "patch", run: {kind: "patch"}})
+            items.push({id: "patch", section: "edit", title: "Patch", icon: "patch", key: enterPatches ? keyOf("open") : undefined, run: {kind: "patch"}})
         }
         if (isEditableRow(row, ctx.ownPath, ctx.timelineActive) && !isLinkLineRow(row, ctx.ownPath, ctx.timelineActive)) {
             const rename = type === "header" || type === "attachment"

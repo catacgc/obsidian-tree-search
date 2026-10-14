@@ -54,8 +54,12 @@ describe("panelItems", () => {
     it("maps row actions to their shortcut keys and drops Insert after when Append exists", () => {
         const row = panelItems(ctx()).filter(i => i.section === "row")
         expect(row.map(i => i.title)).toEqual(["Browse example", "See in Obsidian", "Copy Node", "Archive", "Move under…", "Cut to drawer"])
-        expect(row.map(i => i.key?.label)).toEqual(["Enter", "Enter", "C", "X", "M", "X"])
+        // Enter opens the row's Patch view in views with editor mode: Patch shows ↵, the plain-Enter web link doesn't.
+        expect(row.map(i => i.key?.label)).toEqual([undefined, "Enter", "C", "X", "M", "X"])
         expect(row[1].key?.shift).toBe(true)
+        expect(panelItems(ctx()).find(i => i.id === "patch")?.key?.label).toBe("Enter")
+        expect(panelItems(ctx({ chainMode: "append" })).find(i => i.id === "patch")?.key).toBeUndefined()
+        expect(panelItems(ctx({ allowEditing: false })).find(i => i.title === "Browse example")?.key?.label).toBe("Enter")
     })
 
     it("keeps Insert after in views without editor mode, which also have no Edit section", () => {
@@ -74,6 +78,15 @@ describe("panelItems", () => {
         }
         const headerRows = rowsOf(row({ ...base("P.md", 2), nodeType: "header", page: "P", header: "H", indent: 1 } as ParsedNode, 0))
         expect(titles(ctx({ rows: headerRows, selectedPos: 0 }), "row")).not.toContain("Move under…")
+    })
+
+    it("adds an … in Obsidian item after each Open of a note in views with editor mode", () => {
+        const open: RaycastAction = { type: "browse", url: tsUri("open"), title: "Open Project X", icon: "", shortcut: { modifiers: [], key: "enter" } }
+        const c = ctx({ rowActions: [open], selectedPos: 0 })
+        expect(titles(c, "row").slice(0, 2)).toEqual(["Open Project X", "Open Project X in Obsidian"])
+        const item = panelItems(c).find(i => i.title === "Open Project X in Obsidian")
+        expect(item?.run).toEqual({ kind: "action", action: open, inObsidian: true })
+        expect(titles(ctx({ rowActions: [open], selectedPos: 0, allowEditing: false }), "row")).not.toContain("Open Project X in Obsidian")
     })
 
     it("offers a Task section, before Edit, for an open task row only, in every view", () => {

@@ -155,6 +155,44 @@ export function findOutlineEnd(content: string): number {
   return outlineEndOf(splitLines(content).lines)
 }
 
+/** Message of the error replaceNoteBody (and writeNoteBody) throws when the note's body isn't the one loaded. */
+export const NOTE_BODY_CHANGED = "The note's content changed since it was loaded — copy your edits, then reopen the note"
+
+/** First line of a note's body: the line after its leading outline's last line, else (no outline) after the frontmatter. */
+function bodyStartOf(lines: string[]): number {
+  const { lastOutline } = scanOutline(lines)
+  return lastOutline >= 0 ? lastOutline + 1 : frontmatterEnd(lines)
+}
+
+function trimBlankLines(lines: string[]): string[] {
+  let a = 0
+  let b = lines.length
+  while (a < b && !lines[a].trim()) a++
+  while (b > a && !lines[b - 1].trim()) b--
+  return lines.slice(a, b)
+}
+
+/** What follows a note's leading outline (with no outline: everything after the frontmatter), without leading and
+ *  trailing blank lines, joined by "\n": the text Patch view's content pane edits. "" when there is none. */
+export function noteBody(content: string): string {
+  const { lines } = splitLines(content)
+  return trimBlankLines(lines.slice(bodyStartOf(lines))).join("\n")
+}
+
+/** `content` with its body (noteBody) replaced by `body`. The head (frontmatter + leading outline) is kept, without
+ *  trailing blank lines; one blank line separates it from a non-empty body; the result ends with one line ending
+ *  (the file's). Throws Error(NOTE_BODY_CHANGED) when noteBody(content) !== expected. */
+export function replaceNoteBody(content: string, expected: string, body: string): string {
+  const { lines, eol } = splitLines(content)
+  const start = bodyStartOf(lines)
+  if (trimBlankLines(lines.slice(start)).join("\n") !== expected) throw new Error(NOTE_BODY_CHANGED)
+  const head = lines.slice(0, start)
+  while (head.length > 0 && !head[head.length - 1].trim()) head.pop()
+  const next = trimBlankLines(body.split(/\r\n|\r|\n/))
+  const out = head.length === 0 ? next : next.length === 0 ? head : [...head, "", ...next]
+  return out.length === 0 ? "" : out.join(eol) + eol
+}
+
 /** Exclusive end of the subtree headed by `headLine`: inner blank lines count, trailing blank lines don't. */
 export function findSubtreeEnd(lines: string[], headLine: number): number {
   const head = indentWidth(lines[headLine])

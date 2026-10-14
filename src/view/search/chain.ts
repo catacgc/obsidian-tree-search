@@ -65,6 +65,14 @@ export type AppendChain = {mode: "append"; steps: ChainStep[]; quickAdd?: {prevQ
 export type ReparentChain = {mode: "reparent"; children: RowRef[]; prevQuery: string; confirm: string | null}
 export type ChainState = AppendChain | ReparentChain
 
+/** A content-pane buffer: the note's body as loaded or last saved, and the edited text. */
+export type NoteBody = {original: string; text: string}
+
+/** Paths of the buffers with unsaved edits, in insertion order. */
+export function dirtyBodyPaths(bodies: Record<string, NoteBody>): string[] {
+    return Object.entries(bodies).filter(([, b]) => b.text !== b.original).map(([p]) => p)
+}
+
 /** The query to restore when the chain is left: the one typed before Quick Add, its first chip or the reparent. */
 export function chainPrevQuery(chain: ChainState): string {
     if (chain.mode === "reparent") return chain.prevQuery
@@ -191,7 +199,7 @@ function appendChainResults(graph: NotesGraph, chain: AppendChain, query: string
     return partitionArchived(advancedSearch(graph, key, searchText, separator), reveal).visible
 }
 
-function lastAnchor(steps: ChainStep[]): ChainAnchor {
+export function lastAnchor(steps: ChainStep[]): ChainAnchor {
     for (let i = steps.length - 1; i >= 0; i--) {
         const s = steps[i]
         if (s.kind === "row") return s.anchor

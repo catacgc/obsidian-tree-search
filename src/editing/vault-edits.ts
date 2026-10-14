@@ -15,9 +15,11 @@ import {
     cutHeadingSection,
     lineHasIdentity,
     localIsoDate,
+    NOTE_BODY_CHANGED,
     pasteAtOutlineEnd,
     pasteUnderLine,
     pasteUnderLinkBullet,
+    replaceNoteBody,
     replaceLineText,
     rescheduleDate,
     splitLines,
@@ -220,6 +222,15 @@ export async function writeWholeNote(app: App, path: string, original: string | 
         return text
     })
     return existing
+}
+
+/** Replaces what follows note `path`'s leading outline with `body` (replaceNoteBody); throws NOTE_BODY_CHANGED when
+ *  that part is no longer `original` or the file is gone. */
+export async function writeNoteBody(app: App, path: string, original: string, body: string): Promise<TFile> {
+    const file = app.vault.getFileByPath(path)
+    if (!file) throw new Error(NOTE_BODY_CHANGED)
+    await app.vault.process(file, c => replaceNoteBody(c, original, body))
+    return file
 }
 
 export async function appendToDailyNote(app: App, outline: OutlineLine[], cfg: DailyNoteConfig, now: MomentLike = nowMoment()): Promise<{ file: TFile; line: number | null }> {

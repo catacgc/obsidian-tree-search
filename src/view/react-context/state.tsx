@@ -1,10 +1,10 @@
 import {TreeNode} from '../search/SearchViewFlatten'
-import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, linkTargetTree, type QueryExpr, partitionArchived, extractArchiveReveal, suggestAt, dateSuggestAt, type Suggestion, parseDuration, flattenIndex, defaultVisibility, blockFooters, pruneToRecency, openLinkAt} from '@mdtree/core'
+import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, linkTargetTree, type QueryExpr, partitionArchived, extractArchiveReveal, suggestAt, dateSuggestAt, type Suggestion, parseDuration, flattenIndex, defaultVisibility, blockFooters, pruneToRecency, openLinkAt, noteBody} from '@mdtree/core'
 import {atom, useAtomValue, type Getter, type Setter} from 'jotai'
 import {findTargetRow, revealRow, rowTargets, type RowTarget} from '../search/select-target'
 import {expandFilterRefs, filterSuggestionsAt, toggleFilterPill} from '../search/search-filter'
 import {buildTimelineRows, tagOutlineParents} from '../search/timeline-utils'
-import {chainOutline, chainPrevQuery, chainReplacesSearch, chainResults, isEntryInput, isMovable, isPatchable, parseChainEntry, reparentLabel, rowLabel, type ChainOutline, type ChainState, type RowRef} from '../search/chain'
+import {chainOutline, chainPrevQuery, chainReplacesSearch, chainResults, dirtyBodyPaths, isEntryInput, isMovable, isPatchable, lastAnchor, parseChainEntry, reparentLabel, rowLabel, type ChainAnchor, type ChainOutline, type ChainState, type ChainStep, type NoteBody, type RowRef} from '../search/chain'
 import {toggleCut} from '../search/cut-drawer'
 import {basenameOf, dailyConfigOf, searchModalTitle} from '../editor/draft'
 import {dailyNotePath} from '../../editing/vault-edits'
@@ -12,7 +12,7 @@ import {dragInfo, INLINE_LINK_REFUSAL, treeParentPos} from '../editor/row-editin
 
 type SearchQuery = { query: string; file?: string; heading?: string }
 import {createScope, molecule} from "bunshi";
-import {App, Notice} from "obsidian";
+import {App, Notice, Platform} from "obsidian";
 import {GlobalAtoms} from "./global";
 import {searchFiltersAtom, searchViewModesAtom, separatorAtom, type SearchFilter, type SearchViewMode} from "./settings";
 import {atomWithDefault} from "jotai/utils";
@@ -204,8 +204,26 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         set(selectAnchorAtom, null)
         set(selectedLineValueAtom, line)
     })
-    /** Search's append (`>`) or reparent (`<`) chain; null when searching normally. */
-    const chainAtom = atom<ChainState | null>(null)
+    /** Content-pane buffers by note path; they live as long as the append chain (chainAtom drops them when it ends). */
+    const chainBodiesAtom = atom<Record<string, NoteBody>>({})
+    /** Set when unsaved buffers refused a leave; repeating the leave then discards them. Reset by an edit and by a save. */
+    const bodyDiscardArmedAtom = atom(false)
+    const chainValueAtom = atom<ChainState | null>(null)
+    /** The row selected when the chain started, reselected when leaving it returns to the search (leaveChain). */
+    const chainReturnAtom = atom<RowTarget[]>([])
+    /** Search's append (`>`) or reparent (`<`) chain; null when searching normally. Starting one remembers the selected
+     *  row; ending the append chain (null or a reparent) drops the content-pane buffers. */
+    const chainAtom = atom(get => get(chainValueAtom), (get, set, next: ChainState | null) => {
+        if (get(chainValueAtom) === null && next !== null) {
+            const sel = get(selectedNodeAtom)
+            set(chainReturnAtom, sel && !sel.archiveRow ? rowTargets(sel) : [])
+        }
+        if (next?.mode !== "append") {
+            set(chainBodiesAtom, {})
+            set(bodyDiscardArmedAtom, false)
+        }
+        set(chainValueAtom, next)
+    })
     /** Row index that is flashing (just saved); cleared by the view after the animation. */
     const flashLineAtom = atom<number | null>(null)
     const searchVisibleAtom = atom(scp.showSearch)
@@ -278,6 +296,70 @@ export const SearchViewMolecule = molecule((mol, scope) => {
 
     /** Today's daily note basename (the Today chip's note). */
     const dailyNameOf = (get: Getter) => basenameOf(dailyNotePath(dailyConfigOf(get(GlobalAtoms.indexAtom))))
+
+    /** The markdown file a row chip's content pane shows: Today → today's daily note, a note or header → its page's
+     *  note, a line → its file; null without one. */
+    const bodyPathOf = (get: Getter, anchor: ChainAnchor): string | null => {
+        const app = get(GlobalAtoms.appAtom)
+        const file = anchor.kind === "today" ? app.vault.getFileByPath(dailyNotePath(dailyConfigOf(get(GlobalAtoms.indexAtom))))
+            : anchor.kind === "note" ? app.metadataCache.getFirstLinkpathDest(anchor.name, "")
+            : anchor.kind === "header" ? app.metadataCache.getFirstLinkpathDest(anchor.page, "")
+            : app.vault.getFileByPath(anchor.target.path)
+        return file && file.extension === "md" ? file.path : null
+    }
+
+    /** The note the Patch view's content pane edits: the append chain's last row chip's (bodyPathOf); null with no row
+     *  chip (Quick Add before its first) or no such file (a reference, today's note not created yet). */
+    const chainBodyPathAtom = atom<string | null>(get => {
+        const chain = get(chainAtom)
+        if (chain?.mode !== "append" || !chain.steps.some(s => s.kind === "row")) return null
+        get(GlobalAtoms.graphVersionAtom)   // a note a save created resolves after its reindex
+        return bodyPathOf(get, lastAnchor(chain.steps))
+    })
+
+    /** Reads `path`'s body into chainBodiesAtom: a new buffer, or a clean one (text === original) whose file changed. An
+     *  edited buffer is left alone; its save checks freshness. */
+    const loadChainBodyAtom = atom(null, async (get, set, path: string) => {
+        const app = get(GlobalAtoms.appAtom)
+        const file = app.vault.getFileByPath(path)
+        if (!file) return
+        const body = noteBody(await app.vault.read(file))
+        if (get(chainAtom)?.mode !== "append") return
+        const bodies = get(chainBodiesAtom)
+        const cur = bodies[path]
+        if (cur && (cur.text !== cur.original || cur.original === body)) return
+        set(chainBodiesAtom, {...bodies, [path]: {original: body, text: body}})
+    })
+
+    /** The content pane's edit of `path`'s buffer. */
+    const setChainBodyTextAtom = atom(null, (get, set, path: string, text: string) => {
+        const bodies = get(chainBodiesAtom)
+        const cur = bodies[path]
+        if (!cur || cur.text === text) return
+        set(chainBodiesAtom, {...bodies, [path]: {...cur, text}})
+        set(bodyDiscardArmedAtom, false)
+    })
+
+    /** Before leaving the append chain (`remaining` null) or dropping chips (`remaining`: the steps kept). Returns true and
+     *  drops the buffers of notes no remaining row chip shows when none of them has unsaved edits, or when this repeats a
+     *  refused leave. Otherwise it shows the Notice, arms the repeat and returns false (the caller does nothing). */
+    const releaseBodiesAtom = atom(null, (get, set, remaining: ChainStep[] | null): boolean => {
+        const bodies = get(chainBodiesAtom)
+        const keep = new Set<string>()
+        for (const s of remaining ?? []) {
+            const p = s.kind === "row" ? bodyPathOf(get, s.anchor) : null
+            if (p !== null) keep.add(p)
+        }
+        const lost = dirtyBodyPaths(bodies).filter(p => !keep.has(p))
+        if (lost.length > 0 && !get(bodyDiscardArmedAtom)) {
+            set(bodyDiscardArmedAtom, true)
+            new Notice(`Unsaved changes to ${lost.map(basenameOf).join(", ")} — do it again to discard them, or ${Platform.isMacOS ? "⌘↵" : "Ctrl+Enter"} to save`)
+            return false
+        }
+        set(bodyDiscardArmedAtom, false)
+        set(chainBodiesAtom, Object.fromEntries(Object.entries(bodies).filter(([p]) => keep.has(p))))
+        return true
+    })
 
     /** The append chain's pending write (what Enter adds), an error to show, or null when Enter searches/opens instead. */
     const chainWriteAtom = atom<ChainOutline | {error: string} | null>(get => {
@@ -707,35 +789,46 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         if (chain.mode === "append" && chain.quickAdd) {
             const last = chain.steps[chain.steps.length - 1]
             if (!last) return
+            if (!set(releaseBodiesAtom, chain.steps.slice(0, -1))) return
             set(chainAtom, {...chain, steps: chain.steps.slice(0, -1)})
             setQuery(set, last.prevQuery)
             return
         }
         if (chain.mode === "reparent" || chain.steps.length === 1) {
-            set(chainAtom, null)
-            setQuery(set, chainPrevQuery(chain))
+            if (chain.mode === "append" && !set(releaseBodiesAtom, null)) return
+            leaveChain(get, set, chain)
             return
         }
         const last = chain.steps[chain.steps.length - 1]
+        if (!set(releaseBodiesAtom, chain.steps.slice(0, -1))) return
         set(chainAtom, {...chain, steps: chain.steps.slice(0, -1)})
         setQuery(set, last.prevQuery)
     })
 
-    /** Escape: leaves the chain, restoring the query typed before it. */
+    /** Escape: leaves the chain, back to the search it started from. */
     const cancelChainAtom = atom(null, (get, set) => {
         const chain = get(chainAtom)
         if (chain?.mode !== "append") {
             set(popChainAtom)
             return
         }
-        set(chainAtom, null)
-        setQuery(set, chainPrevQuery(chain))
+        if (!set(releaseBodiesAtom, null)) return
+        leaveChain(get, set, chain)
     })
+
+    /** Ends `chain` back in the search it started from: the query typed before it, with the row then selected. */
+    function leaveChain(get: Getter, set: Setter, chain: ChainState) {
+        const targets = get(chainReturnAtom)
+        set(chainAtom, null)
+        if (targets.length > 0) set(GlobalAtoms.pendingSelectAtom, {view: scp.name, targets, flash: false})
+        setQuery(set, chainPrevQuery(chain))
+    }
 
     /** Quick Add (the commands, Alt+N): chip-less patch mode. The input searches; Enter on a page, header or line
      *  makes it the anchor chip, and text that matches nothing is added to today's daily note. */
     const startQuickAddAtom = atom(null, (get, set) => {
         const chain = get(chainAtom)
+        if (chain?.mode === "append" && !set(releaseBodiesAtom, null)) return
         const prevQuery = chain ? chainPrevQuery(chain) : get(actualQueryAtom)
         set(chainAtom, {mode: "append", steps: [], quickAdd: {prevQuery}})
         setQuery(set, "")
@@ -797,7 +890,11 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         beginReparent(get, set, [...items], chain ? chainPrevQuery(chain) : get(actualQueryAtom))
     })
 
-    const clearChainAtom = atom(null, (_get, set) => set(chainAtom, null))
+    const clearChainAtom = atom(null, (get, set): boolean => {
+        if (get(chainAtom)?.mode === "append" && !set(releaseBodiesAtom, null)) return false
+        set(chainAtom, null)
+        return true
+    })
 
     // ── The editor shown in place (Search modal / pane) ─────────────────────
     /** The query and selected row this view returns to when its editor closes; null while it shows its search. */
@@ -874,6 +971,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             allowEditing: scp.allowEditing,
             flashLineAtom,
             chainAtom, chainWriteAtom, chainPatchRowAtom, refreshChainResultsAtom, popChainAtom, cancelChainAtom, startReparentAtom, clearChainAtom,
+            chainBodiesAtom, bodyDiscardArmedAtom, chainBodyPathAtom, loadChainBodyAtom, setChainBodyTextAtom, releaseBodiesAtom,
             toggleCutAtom, startDrawerMoveAtom,
             startQuickAddAtom,
             editorOpenAtom, enterEditorAtom, leaveEditorAtom, searchModalTitleAtom,

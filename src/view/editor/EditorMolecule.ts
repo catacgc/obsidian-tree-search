@@ -58,6 +58,7 @@ import {
     trashVaultFile,
     writeNoteContents,
     writeWholeNote,
+    writeNoteBody,
     type EditorAttachment,
     type ReparentPlan,
     type TaskChange,
@@ -70,7 +71,9 @@ import {
     chainOutline,
     chainPrefill,
     chainPrevQuery,
+    dirtyBodyPaths,
     isEntryInput,
+    isPatchable,
     parseChainEntry,
     planReparent,
     rowLabel,
@@ -454,14 +457,51 @@ export const EditorMolecule = molecule((mol, scope) => {
         if (prefill !== "") set(view.focusSearchInputAtom, get(view.focusSearchInputAtom) + 1)
     })
 
+    /** Opening a row or a link in the Search modal and pane: its Patch view (the `>` chain anchored at it, with the
+     *  content pane), as a new chain or the next chip of an append chain with only row chips whose input isn't an entry. `link`
+     *  is a note (`Name`) or heading (`Name#Heading`); null opens the selected row (a page, header or line). False when
+     *  it doesn't apply (another view, chain or input, no such row, a link to a file that isn't a note): the caller then
+     *  opens it in Obsidian. */
+    const openPatchViewAtom = atom(null, async (get, set, link: string | null): Promise<boolean> => {
+        if (!scp.allowEditing) return false
+        const chain = get(view.chainAtom)
+        const q = get(view.actualQueryAtom)
+        if (chain !== null && (chain.mode !== "append" || chain.steps.some(s => s.kind === "entry") || isEntryInput(q))) return false
+        const dailyName = dailyNameOf(get)
+        let pick: AppendPick
+        let label: string
+        if (link === null) {
+            const sel = get(view.selectedNodeAtom)
+            if (!sel || sel.archiveRow || !isPatchable(sel.node)) return false
+            pick = appendPickFor(sel.node, "", dailyName)
+            label = rowLabel(sel.node)
+        } else {
+            const page = link.split("#")[0].trim()
+            const file = get(GlobalAtoms.appAtom).metadataCache.getFirstLinkpathDest(page, "")
+            if (!page || (file ? file.extension !== "md" : /\.(?!md$)[a-z0-9]+$/i.test(page))) return false
+            pick = link.toLowerCase() === dailyName.toLowerCase() ? {kind: "draft"} : {kind: "link", name: link}
+            label = link.replace("#", " > ")
+        }
+        const step = await anchorStepFor(get, pick, label, q)
+        if (step) {
+            set(view.chainAtom, {...chain, mode: "append", steps: [...(chain?.steps ?? []), step]})
+            setViewQuery(set, "")
+            set(view.searchVisibleAtom, true)
+        }
+        return true
+    })
+
     let committing = false
     /** Enter in an append chain: writes the chain through the editor's append Save (note patches, then the outline),
-     *  keeps the anchor chips for the next entry, and selects the written row. */
+     *  keeps the anchor chips for the next entry, and selects the written row; and the content pane's unsaved buffers,
+     *  which are written first (a heading patch appends after them); with no pending chain write it writes only the
+     *  buffers. */
     const commitChainAtom = atom(null, async (get, set) => {
         if (committing) return
         const write = get(view.chainWriteAtom)
-        if (write === null) return
-        if ("error" in write) {
+        const dirty = dirtyBodyPaths(get(view.chainBodiesAtom))
+        if (write === null && dirty.length === 0) return
+        if (write !== null && "error" in write) {
             new Notice(write.error)
             return
         }
@@ -469,29 +509,43 @@ export const EditorMolecule = molecule((mol, scope) => {
         const index = get(GlobalAtoms.indexAtom)
         const cfg = dailyConfigOf(index)
         const today = localIsoDate(new Date())
-        let s: EditorState = {
-            ...emptySession(), mode: "append", sourcePath: dailyNotePath(cfg),
-            parentName: write.parentName, underLine: write.underLine,
-            outline: renderOutline(write.lines, 0).join("\n"), caret: 0,
-        }
+        const written: string[] = []
+        let s: EditorState | null = null
         committing = true
-        let appended: {path: string; line: number} | null
         try {
-            appended = await runAppendSteps(app, cfg, today, () => s, p => { s = {...s, ...p} })
+            for (const path of dirty) {
+                const b = get(view.chainBodiesAtom)[path]
+                if (!b || b.text === b.original) continue
+                const saved = b.text
+                written.push((await writeNoteBody(app, path, b.original, saved)).path)
+                const now = get(view.chainBodiesAtom)
+                if (now[path]) set(view.chainBodiesAtom, {...now, [path]: {...now[path], original: saved}})
+            }
+            set(view.bodyDiscardArmedAtom, false)
+            if (write === null) {
+                await refreshPaths(app, index, written)
+                return
+            }
+            s = {
+                ...emptySession(), mode: "append", sourcePath: dailyNotePath(cfg),
+                parentName: write.parentName, underLine: write.underLine,
+                outline: renderOutline(write.lines, 0).join("\n"), caret: 0,
+            }
+            const appended = await runAppendSteps(app, cfg, today, () => s!, p => { s = {...s!, ...p} })
+            const chain = get(view.chainAtom)
+            if (chain?.mode === "append") set(view.chainAtom, {...chain, steps: chain.steps.filter(st => st.kind === "row")})
+            setViewQuery(set, "")
+            set(GlobalAtoms.pendingSelectAtom, {view: scp.name, targets: appendTargets(s, appended), flash: true})
+            await refreshPaths(app, index, [...written, ...s.touchedPaths])
         } catch (err) {
-            // The chain stays for a retry; patches are idempotent.
-            if (err instanceof StaleLineError && s.underLine) new Notice(`"${s.underLine.label}" changed since you picked it — pick the line again`)
-            else new Notice(`${err instanceof Error ? err.message : String(err)}\nWritten: ${s.touchedPaths.join(", ") || "nothing"}`)
-            await refreshPaths(app, index, s.touchedPaths)
-            return
+            // The chain and the unsaved buffers stay for a retry; patches are idempotent and saved buffers are clean.
+            const touched = [...written, ...(s?.touchedPaths ?? [])]
+            if (err instanceof StaleLineError && s?.underLine) new Notice(`"${s.underLine.label}" changed since you picked it — pick the line again`)
+            else new Notice(`${err instanceof Error ? err.message : String(err)}\nWritten: ${touched.join(", ") || "nothing"}`)
+            await refreshPaths(app, index, touched)
         } finally {
             committing = false
         }
-        const chain = get(view.chainAtom)
-        if (chain?.mode === "append") set(view.chainAtom, {...chain, steps: chain.steps.filter(st => st.kind === "row")})
-        setViewQuery(set, "")
-        set(GlobalAtoms.pendingSelectAtom, {view: scp.name, targets: appendTargets(s, appended), flash: true})
-        await refreshPaths(app, index, s.touchedPaths)
     })
 
     /** Alt+Enter in an append chain (or a list/file paste): opens the Outline editor on the chain's text, applying
@@ -506,6 +560,7 @@ export const EditorMolecule = molecule((mol, scope) => {
             return
         }
         if (chain.steps.length === 0 && parsed === null && paste === null) {
+            if (!set(view.releaseBodiesAtom, null)) return
             set(view.chainAtom, null)
             setViewQuery(set, chainPrevQuery(chain))
             set(showEditorAtom, {kind: "draft"})
@@ -517,6 +572,7 @@ export const EditorMolecule = molecule((mol, scope) => {
             return
         }
         const {outline, caret} = chainEditorText(o)
+        if (!set(view.releaseBodiesAtom, null)) return
         set(pendingPasteAtom, paste)
         set(view.chainAtom, null)
         setViewQuery(set, chainPrevQuery(chain))
@@ -538,6 +594,7 @@ export const EditorMolecule = molecule((mol, scope) => {
         const anchor = chain.steps[chain.steps.length - 1]
         if (anchor && anchor.kind !== "row") return
         const text = data.plain.replace(/\r\n?/g, "\n")
+        if (!set(view.releaseBodiesAtom, null)) return
         set(view.chainAtom, null)
         setViewQuery(set, chainPrevQuery(chain))
         // Quick Add before its first chip writes into today's daily note.
@@ -982,6 +1039,6 @@ export const EditorMolecule = molecule((mol, scope) => {
         openAppendForSelectedAtom, openEditForSelectedAtom, saveEditorAtom,
         clearDragAtom, reparentAtom, editTaskAtom, deleteRowAtom,
         reparentChainAtom, archiveDrawerAtom, openProseAtom,
-        pendingPasteAtom, pushChainAtom, commitChainAtom, openChainEditorAtom, pasteIntoChainAtom,
+        pendingPasteAtom, pushChainAtom, openPatchViewAtom, commitChainAtom, openChainEditorAtom, pasteIntoChainAtom,
     }
 })
