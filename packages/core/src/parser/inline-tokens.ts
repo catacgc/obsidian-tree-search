@@ -1,7 +1,7 @@
 import MarkdownIt from "markdown-it"
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Token = any
-import type { MetaActionToken, MetaMdtreeToken, ParsedTextToken } from "../graph/types.ts"
+import type { MetaActionToken, ParsedTextToken } from "../graph/types.ts"
 
 // Remove the query string (`?…`) from any http(s) URL in the text, keeping
 // scheme/domain/path. Used to keep query-param noise out of search keys.
@@ -143,24 +143,16 @@ function parseTokenList(tokens: Token[]): ParsedTextToken[] {
 
 const META_ACTION_TRIPLE_RE =
   /\(meta-action-name::([^)]*)\)\(meta-action-url::([^)]*)\)(?:\(meta-action-icon::([^)]*)\))?/g
-const META_MDTREE_RE = /\(meta-mdtree::\s*(\w+)\)/g
 
 export function parseTokens(markdownString: string): ParsedTextToken[] {
   // Extract meta-action triples first, remove them from the string for markdown-it
   const metaActions: MetaActionToken[] = []
-  let cleaned = markdownString.replace(META_ACTION_TRIPLE_RE, (_, name, url, icon) => {
+  const cleaned = markdownString.replace(META_ACTION_TRIPLE_RE, (_, name, url, icon) => {
     metaActions.push({ tokenType: "meta_action", name, url, icon: icon || undefined })
-    return ""
-  })
-
-  // Extract meta-mdtree directives
-  const metaMdtree: MetaMdtreeToken[] = []
-  cleaned = cleaned.replace(META_MDTREE_RE, (_, directive) => {
-    metaMdtree.push({ tokenType: "meta_mdtree", directive })
     return ""
   })
 
   const md = getMd()
   const tokens = md.parseInline(cleaned.trim(), {})
-  return [...parseTokenList(tokens), ...metaActions, ...metaMdtree]
+  return [...parseTokenList(tokens), ...metaActions]
 }

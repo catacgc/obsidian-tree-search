@@ -54,12 +54,17 @@ A few rules decide what ends up in the tree:
 
 ## Archiving
 
-Archive things you no longer need without deleting them. You can archive:
+Archive things you no longer need without deleting them. One tag, `#archive`, does it everywhere:
 
-- a line, with the **Archive** action, which adds `(meta-mdtree:: archive)` to the end of the line. Everything nested under it is archived with it;
-- a whole note, by adding `archive` to its frontmatter `tags`.
+- **a line:** add `#archive` to it, or use the **Archive** action. Everything nested under the line is archived with it;
+- **a heading:** add `#archive` to it (`## 2024-12-19 #archive`), or use **Archive** on the heading's row. Its subheadings and every line in its section are archived with it;
+- **a whole note:** add `archive` to its frontmatter `tags`, or use **Archive** on the note's row.
 
-The tag is `archive` by default and can be changed in [Settings](panes-and-integrations.md#settings). A bullet tagged `#archive` is left out of the index entirely, so it won't show up even with `is:archived`.
+Only the whole tag counts: `#archived` or `#archive-old` don't archive anything. A line under an archived line or heading is archived itself, so it is hidden wherever it shows up, also under the notes it links to. To unarchive it, use **Unarchive** on the row that carries the tag (the line, heading or note); a row archived only through its parent has no Archive action.
+
+The tag is `archive` by default and can be changed in [Settings](panes-and-integrations.md#settings).
+
+Notes archived with the older `(meta-mdtree:: archive)` marker are no longer hidden. Run the command **Tree Search: Convert legacy archive markers to #archive** once to rewrite every marker in the vault to the tag.
 
 Archived items are hidden from results. Tree Search collapses them into a single row so you know they are there.
 

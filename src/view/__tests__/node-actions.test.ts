@@ -90,7 +90,7 @@ describe("prioritizeWebLinks", () => {
 describe("archive/unarchive actions", () => {
     const mockApp = { vault: { getName: () => "TestVault", getFileByPath: () => null } } as any
 
-    function createTreeNode(parsedTokens: any[]): any {
+    function createTreeNode(parsedTokens: any[], extra: object = {}): any {
         return {
             node: {
                 nodeType: "text",
@@ -104,7 +104,8 @@ describe("archive/unarchive actions", () => {
                 parsedTokens,
                 tags: [],
                 isTask: false,
-                isCompleted: false
+                isCompleted: false,
+                ...extra
             },
             indent: 0,
             hasChildren: false,
@@ -124,9 +125,7 @@ describe("archive/unarchive actions", () => {
     })
 
     it("shows Unarchive action for archived text node", () => {
-        const treeNode = createTreeNode([
-            { tokenType: "meta_mdtree", directive: "archive" }
-        ])
+        const treeNode = createTreeNode([], { archived: true })
         const actions = getTreeNodeActions(mockApp, treeNode)
 
         const unarchiveAction = actions.find(a => a.title === "Unarchive")
@@ -152,9 +151,7 @@ describe("archive/unarchive actions", () => {
     })
 
     it("unarchive action URL contains raycastaction=unarchive", () => {
-        const treeNode = createTreeNode([
-            { tokenType: "meta_mdtree", directive: "archive" }
-        ])
+        const treeNode = createTreeNode([], { archived: true })
         const actions = getTreeNodeActions(mockApp, treeNode)
 
         const unarchiveAction = actions.find(a => a.title === "Unarchive")
@@ -173,6 +170,31 @@ describe("archive/unarchive actions", () => {
         }
         archiveRow.node.location = { file: "", line: 0 }
         expect(getTreeNodeActions(mockApp, archiveRow)).toEqual([])
+    })
+
+    it("offers neither for a line archived only through its parent, which carries the tag", () => {
+        const titles = getTreeNodeActions(mockApp, createTreeNode([], { archived: true, archiveInherited: true })).map(a => a.title)
+        expect(titles).not.toContain("Archive")
+        expect(titles).not.toContain("Unarchive")
+    })
+
+    function headerTreeNode(extra: object): any {
+        const node = createTreeNode([])
+        node.node = { nodeType: "header", page: "test", header: "H", indent: 2, searchKey: "test#h",
+            location: node.node.location, boost: 0, ageDays: 1, ...extra }
+        return node
+    }
+
+    it("archives and unarchives a heading on its own line", () => {
+        const archive = getTreeNodeActions(mockApp, headerTreeNode({})).find(a => a.title === "Archive")
+        expect(archive?.type === "browse" && archive.url).toContain("raycastaction=archive")
+        const unarchive = getTreeNodeActions(mockApp, headerTreeNode({ archived: true })).find(a => a.title === "Unarchive")
+        expect(unarchive?.type === "browse" && unarchive.url).toContain("raycastaction=unarchive")
+    })
+
+    it("offers no archive action for a heading only known from a link (no line of its own)", () => {
+        const titles = getTreeNodeActions(mockApp, headerTreeNode({ indent: -1 })).map(a => a.title)
+        expect(titles).not.toContain("Archive")
     })
 })
 

@@ -121,9 +121,9 @@ export const ActionsMolecule = molecule((mol, scope) => {
             } else if (raycastaction === "unarchivePage") {
                 await unarchivePage(app, action.location.path, get(settingsAtom).archiveTag)
             } else if (raycastaction === "archive") {
-                await archiveLine(app, action.location)
+                await archiveLine(app, action.location, get(settingsAtom).archiveTag)
             } else {
-                await unarchiveLine(app, action.location)
+                await unarchiveLine(app, action.location, get(settingsAtom).archiveTag)
             }
             return  // modal stays open
         }

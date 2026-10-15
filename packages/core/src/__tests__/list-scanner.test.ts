@@ -68,7 +68,6 @@ describe("scanMarkdown", () => {
       expect(lists).toHaveLength(1)
       expect(lists[0].task).toBe(true)
       expect(scan("- [ ] ").lists).toHaveLength(0)
-      expect(scan("- [ ] call #archive").lists).toHaveLength(0)
     })
 
     it("detects completed tasks", () => {
@@ -185,15 +184,51 @@ describe("scanMarkdown", () => {
     })
   })
 
-  describe("archive tag filtering", () => {
-    it("skips items containing the archive tag", () => {
-      const { lists } = scan("- [[Note]] #archive", "archive")
-      expect(lists).toHaveLength(0)
+  describe("archive marks", () => {
+    const marks = (md: string) => scan(md).lists.map(l => [l.text, l.archived])
+    const headingMarks = (md: string) => scan(md).headers.map(h => [h.heading, h.archived])
+
+    it("keeps a tagged line, marked own, with lines nested under it inherited", () => {
+      expect(marks("- [[Note]] #archive\n    - [[Child]]\n        - [[Grandchild]]\n- [[Sibling]]")).toEqual([
+        ["[[Note]] #archive", "own"],
+        ["[[Child]]", "inherited"],
+        ["[[Grandchild]]", "inherited"],
+        ["[[Sibling]]", undefined],
+      ])
     })
 
-    it("keeps items with a different tag", () => {
-      const { lists } = scan("- [[Note]] #todo", "archive")
-      expect(lists).toHaveLength(1)
+    it("inherits through a skipped prose line", () => {
+      expect(marks("- [[A]] #archive\n    - plain prose\n        - [[B]]")).toEqual([
+        ["[[A]] #archive", "own"],
+        ["[[B]]", "inherited"],
+      ])
+    })
+
+    it("archives a tagged heading's section, subheadings included, but not the next sibling heading", () => {
+      const md = "## Old #archive\n- [[A]]\n### Sub\n- [[B]]\n## New\n- [[C]]"
+      expect(headingMarks(md)).toEqual([["Old #archive", "own"], ["Sub", "inherited"], ["New", undefined]])
+      expect(marks(md)).toEqual([["[[A]]", "inherited"], ["[[B]]", "inherited"], ["[[C]]", undefined]])
+    })
+
+    it("ends a subheading's archive at its parent level", () => {
+      const md = "## Top\n### Old #archive\n- [[A]]\n## Next\n- [[B]]"
+      expect(headingMarks(md)).toEqual([["Top", undefined], ["Old #archive", "own"], ["Next", undefined]])
+      expect(marks(md)).toEqual([["[[A]]", "inherited"], ["[[B]]", undefined]])
+    })
+
+    it("matches the tag case-insensitively and only as a whole tag", () => {
+      expect(marks("- [[A]] #Archive\n- [[B]] #archived\n- [[C]] #archive-old\n- [[D]] #archive/x\n- [[N#archive]]")).toEqual([
+        ["[[A]] #Archive", "own"],
+        ["[[B]] #archived", undefined],
+        ["[[C]] #archive-old", undefined],
+        ["[[D]] #archive/x", undefined],
+        ["[[N#archive]]", undefined],
+      ])
+    })
+
+    it("uses the configured tag", () => {
+      expect(scan("- [[A]] #old", "old").lists[0].archived).toBe("own")
+      expect(scan("- [[A]] #archive", "old").lists[0].archived).toBeUndefined()
     })
   })
 

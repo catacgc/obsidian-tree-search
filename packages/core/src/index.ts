@@ -16,11 +16,11 @@ export type {
   LinkToken,
   ImageToken,
   MetaActionToken,
-  MetaMdtreeToken,
   ParsedTextToken,
   EdgeAttributes,
   EdgeEntry,
   HeadingCache,
+  ArchiveMark,
   DvList,
   DvPage,
 } from "./graph/types.ts"
@@ -40,6 +40,7 @@ export { scanMarkdown } from "./parser/list-scanner.ts"
 export { parseTokens, stripUrlQueryStrings } from "./parser/inline-tokens.ts"
 export { parseCanvasData, type CanvasData, type NodeTextLine } from "./parser/canvas.ts"
 export { buildNodesFromTextLines } from "./parser/text-lines.ts"
+export { hasArchiveTag, addArchiveTag, removeArchiveTag, convertLegacyArchive } from "./parser/archive-tag.ts"
 
 // Search
 export { searchIndex, advancedSearch, searchParents, flattenTasks, pruneResultTree, linkTargetTree, newLinkName, type ResultNode, type SearchOptions } from "./search/search.ts"
@@ -61,7 +62,7 @@ export { buildTimeline, fileParent, outlineContext, type TimelineItem, type Bloc
 export { pruneToRecency } from "./search/recency.ts"
 export { isUnscheduledTask, rowDate, textSourceDate } from "./search/relative-date.ts"
 export { reverseMarkdownParsing } from "./search/copy.ts"
-export { isArchived, partitionArchived } from "./search/archive.ts"
+export { isArchived, partitionArchived, archiveToggle } from "./search/archive.ts"
 export {
   buildPullTree,
   formatOccurrenceDate,

@@ -1,3 +1,4 @@
+import type { ParsedNode } from "../graph/types.ts"
 import type { ResultNode } from "./search.ts"
 import { isArchived } from "./query.ts"
 
@@ -5,6 +6,13 @@ import { isArchived } from "./query.ts"
 // matcher can reference it without an import cycle; re-exported here to keep the
 // historical import path (`search/archive.ts`) working.
 export { isArchived }
+
+/** The archive action a heading or line row offers: `unarchive` when it carries the archive tag itself, none when it
+ *  is archived only through its note, heading or parent line (the tag lives there), else `archive`. */
+export function archiveToggle(node: ParsedNode): "archive" | "unarchive" | null {
+  if (!isArchived(node)) return "archive"
+  return node.archiveInherited ? null : "unarchive"
+}
 
 function subtreeSize(node: ResultNode): number {
   let count = 1

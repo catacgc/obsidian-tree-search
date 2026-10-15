@@ -6,6 +6,6 @@
   - task two #todo
 
 ## Done
-- [[Beta]] done (meta-mdtree:: archive)
+- [[Beta]] done #archive
   - [[SubTask]] completed
 - [[Gamma]] still relevant

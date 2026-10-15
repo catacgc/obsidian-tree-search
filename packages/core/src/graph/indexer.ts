@@ -1,6 +1,6 @@
-import type { DvList, DvPage, HeaderNode, ParsedNode, ParsedTextToken, TextNode } from "./types.ts"
+import type { ArchiveMark, DvList, DvPage, HeaderNode, HeadingCache, ParsedNode, ParsedTextToken, TextNode } from "./types.ts"
 import type { NotesGraph } from "./graph.ts"
-import { getKey } from "./graph.ts"
+import { archiveFields, getKey } from "./graph.ts"
 import { calculateBoost, getAgeDays, ageDaysFromText, deadlineDate, isUndated } from "./boost.ts"
 import { parseTokens, stripUrlQueryStrings } from "../parser/inline-tokens.ts"
 import { extractPageDate } from "../parser/frontmatter.ts"
@@ -51,7 +51,7 @@ function createNodeFromText(
   item: DvList,
   pageAge: number,
   parseTokensFn: (text: string) => ParsedTextToken[],
-  forceArchived: boolean,
+  archived: ArchiveMark | undefined,
 ): ParsedNode {
   const parsed = item.precomputedTokens ?? parseTokensFn(item.rawText)
   const location = {
@@ -73,15 +73,8 @@ function createNodeFromText(
   }
 
   const searchKey = stripUrlQueryStrings(item.text).toLowerCase()
-  // Intrinsic archive: `forceArchived` (a line `#archive` tag, or the line
-  // living inside a frontmatter-archived page) or a `(meta-mdtree:: archive)`
-  // directive. Previously any of these skipped the line at index time; now it is
-  // indexed and marked, so it can be hidden (default) or revealed via
-  // `is:archived`. Descendant propagation is applied path-contextually at query
-  // time, not here (nodes are content-keyed and may have multiple parents).
-  const archived =
-    forceArchived ||
-    parsed.some(t => t.tokenType === "meta_mdtree" && t.directive === "archive")
+  // Archived lines are indexed and marked, so they are hidden by default and revealed by `is:archived`. A line under
+  // an archived heading or line is marked too (inherited), so it is hidden under every note it links to as well.
   const textNode: TextNode = {
     nodeType: "text",
     location,
@@ -92,7 +85,7 @@ function createNodeFromText(
     isCompleted: item.completed,
     boost: calculateBoost("text", searchKey, ageDays),
     ageDays,
-    ...(archived ? { archived: true } : {}),
+    ...archiveFields(archived),
   }
 
   graph.addOrUpdateNode(textNode)
@@ -116,9 +109,9 @@ function createTreeFromTextLine(
   item: DvList,
   pageAge: number,
   parseTokensFn: (text: string) => ParsedTextToken[],
-  forceArchived: boolean,
+  archived: ArchiveMark | undefined,
 ): ParsedNode {
-  const createdNode = createNodeFromText(graph, page, item, pageAge, parseTokensFn, forceArchived)
+  const createdNode = createNodeFromText(graph, page, item, pageAge, parseTokensFn, archived)
 
   const closestParentHeader = getClosestHeader(page.headers, item.position.start.line)
 
@@ -163,7 +156,8 @@ function getClosestHeader(
 
 // ── Header tree builder ───────────────────────────────────────────────────────
 
-function createHeadersNodes(graph: NotesGraph, pageRef: ParsedNode, page: DvPage, pageAge: number, archived: boolean): void {
+function createHeadersNodes(graph: NotesGraph, pageRef: ParsedNode, page: DvPage, pageAge: number, pageArchived: boolean): void {
+  const markOf = (h: HeadingCache): ArchiveMark | null => h.archived ?? (pageArchived ? "inherited" : null)
   function findParent(idx: number): DvPage["headers"][number] | null {
     const header = page.headers[idx]
     if (header.level === 1) return null
@@ -188,7 +182,7 @@ function createHeadersNodes(graph: NotesGraph, pageRef: ParsedNode, page: DvPage
       location,
       h.level,
       pageAge,
-      archived,
+      markOf(h),
     )
 
     const parent = findParent(i)
@@ -206,7 +200,7 @@ function createHeadersNodes(graph: NotesGraph, pageRef: ParsedNode, page: DvPage
         parentLocation,
         parent.level,
         pageAge,
-        archived,
+        markOf(parent),
       )
       graph.addChild(parentNode, headerNode, location, page.file.mtime.ts)
     } else {
@@ -293,23 +287,19 @@ export function indexSinglePage(
     graph.addChild(refNode, pageNode, pageNode.location, page.file.mtime.ts)
   }
 
-  // Archived pages are no longer excluded from the index: their body is indexed
-  // and marked archived (below, via `forceArchived`) so it is hidden by default
-  // but revealable with `is:archived`.
+  // An archived note's headings and lines are indexed and marked archived (inherited from the note), so they are
+  // hidden by default but revealable with `is:archived`.
   createHeadersNodes(graph, pageNode, page, ageDays, isArchivedPage)
-
-  const lineArchiveTag = "#" + settings.archiveTag
 
   function createSubtree(parent: ParsedNode, children: DvList[]): ParsedNode[] {
     const created: ParsedNode[] = []
     for (const child of children) {
       child.text = child.text.trim()
       if (shouldSkip(child)) continue
-      // A line is intrinsically archived if it carries the `#archive` tag or the
-      // whole page is archived (frontmatter tag); the directive form is detected
-      // from tokens inside createNodeFromText.
-      const forceArchived = isArchivedPage || child.tags.includes(lineArchiveTag)
-      const node = createTreeFromTextLine(graph, parent, page, child, ageDays, parseTokensFn, forceArchived)
+      // The scanner marks lines with the archive tag and those under an archived heading or line; every line of an
+      // archived note inherits it.
+      const archived = child.archived ?? (isArchivedPage ? "inherited" : undefined)
+      const node = createTreeFromTextLine(graph, parent, page, child, ageDays, parseTokensFn, archived)
       const kids = createSubtree(node, child.children)
       created.push(node.nodeType === "text" ? finishTextNode(graph, node, parent, kids) : node)
     }

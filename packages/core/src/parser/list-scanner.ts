@@ -1,4 +1,5 @@
-import type { DvList, HeadingCache } from "../graph/types.ts"
+import type { ArchiveMark, DvList, HeadingCache } from "../graph/types.ts"
+import { hasArchiveTag } from "./archive-tag.ts"
 import type { Frontmatter } from "./frontmatter.ts"
 
 export const LIST_ITEM_RE = /^(\s*)(?:[-*+]|\d+\.)\s+(.*)/
@@ -8,7 +9,6 @@ export const LIST_MARKER_RE = /^\s*(?:[-*+]|\d+\.)(?:\s|$)/
 const TASK_RE = /^\[([ xX])\]\s+(.*)/
 const INLINE_TAG_RE = /#([\w/]+)/g
 const META_ACTION_RE = /\(meta-action-[\w-]+::[^)]*\)/g
-const META_MDTREE_RE = /\(meta-mdtree::\s*\w+\)/g
 
 /** A `[created:: YYYY-MM-DD]` inline field: dates a bullet and makes it indexed even when it is otherwise prose. */
 export const CREATED_FIELD_RE = /\[created::\s*\d{4}-\d{2}-\d{2}\s*\]/
@@ -19,8 +19,7 @@ export function isProseText(text: string): boolean {
 }
 
 /** Lines that carry no graph-relevant information and should be skipped */
-function shouldSkip(text: string, archiveTag: string, isTask: boolean): boolean {
-  if (text.includes(archiveTag)) return true
+function shouldSkip(text: string, isTask: boolean): boolean {
   if (isTask) return text === ""
   if (CREATED_FIELD_RE.test(text)) return false
   // skip pure prose; tasks are always kept
@@ -52,6 +51,8 @@ export function indentWidth(line: string): number {
  *
  * Mimics the output that Obsidian's Dataview plugin provides via dv.page().
  * List items are only collected from the leading outline; see `outlineEnded`.
+ * Headings and lines carrying `#<archiveTag>` are marked `archived: "own"`; the subheadings and lines of an archived
+ * heading's section, and the lines nested under an archived line, `archived: "inherited"`.
  */
 export function scanMarkdown(
   content: string,
@@ -81,12 +82,16 @@ export function scanMarkdown(
   let currentSectionSubpath = ""
 
   // stack entries: { indent: number, lineNum: number }
-  type StackEntry = { indent: number; lineNum: number }
+  type StackEntry = { indent: number; lineNum: number; archived?: ArchiveMark }
   const indentStack: StackEntry[] = []
 
   // header stack for section tracking and parent-header relationship
-  type HeaderEntry = { level: number; lineNum: number; text: string }
+  type HeaderEntry = { level: number; lineNum: number; text: string; archived?: ArchiveMark }
   const headerStack: HeaderEntry[] = []
+
+  /** `own` when `text` has the tag, else `inherited` under an archived parent. */
+  const markOf = (text: string, parentArchived: ArchiveMark | undefined): ArchiveMark | undefined =>
+    hasArchiveTag(text, archiveTag) ? "own" : parentArchived ? "inherited" : undefined
 
   // The outline is the leading run of list items; the first other content line
   // (outside headings/comments/list continuations) starts free-form notes, whose
@@ -125,13 +130,14 @@ export function scanMarkdown(
         start: { line: lineNum, ch: 0 },
         end: { line: lineNum, ch: line.length },
       }
-      headers.push({ heading, level, position: pos })
 
       // maintain header stack for section subpath
       while (headerStack.length > 0 && headerStack[headerStack.length - 1].level >= level) {
         headerStack.pop()
       }
-      headerStack.push({ level, lineNum, text: heading })
+      const archived = markOf(heading, headerStack[headerStack.length - 1]?.archived)
+      headers.push({ heading, level, position: pos, ...(archived ? { archived } : {}) })
+      headerStack.push({ level, lineNum, text: heading, archived })
       currentSectionSubpath = `#${heading}`
 
       // reset list indent stack on new section
@@ -164,7 +170,7 @@ export function scanMarkdown(
 
     // strip meta-action properties from text (they go into rawText for token parsing)
     const rawText = text
-    text = text.replace(META_ACTION_RE, "").replace(META_MDTREE_RE, "").trim()
+    text = text.replace(META_ACTION_RE, "").trim()
 
     // inline tags
     const tags: string[] = []
@@ -174,15 +180,17 @@ export function scanMarkdown(
       tags.push(`#${m[1]}`)
     }
 
-    if ((rawText === text || text === "") && shouldSkip(text, "#" + archiveTag, isTask)) continue
+    if ((rawText === text || text === "") && shouldSkip(text, isTask)) continue
 
     // parent: pop stack entries with >= current indent
     while (indentStack.length > 0 && indentStack[indentStack.length - 1].indent >= indent) {
       indentStack.pop()
     }
-    const parentLineNum = indentStack.length > 0 ? indentStack[indentStack.length - 1].lineNum : undefined
+    const parent = indentStack[indentStack.length - 1]
+    const parentLineNum = parent?.lineNum
+    const archived = markOf(text, parent ? parent.archived : headerStack[headerStack.length - 1]?.archived)
 
-    indentStack.push({ indent, lineNum })
+    indentStack.push({ indent, lineNum, archived })
 
     lists.push({
       link: { path: filePath },
@@ -199,6 +207,7 @@ export function scanMarkdown(
       section: { subpath: currentSectionSubpath },
       task: isTask,
       completed: isCompleted,
+      ...(archived ? { archived } : {}),
     })
   }
 

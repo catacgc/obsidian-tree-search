@@ -1,5 +1,5 @@
 import {App, normalizePath, TFile, FuzzySuggestModal, TFolder, FuzzyMatch} from "obsidian";
-import {Location, PullDeletion, renderPullLine, upsertOrganiseSections, type NotesGraph, type OrganiseHome, type SectionWrite, type PullLine, type PullNode} from "@mdtree/core";
+import {Location, PullDeletion, addArchiveTag, convertLegacyArchive, removeArchiveTag, renderPullLine, upsertOrganiseSections, type NotesGraph, type OrganiseHome, type SectionWrite, type PullLine, type PullNode} from "@mdtree/core";
 
 // Reverse engineer the Canvas api
 interface CanvasNode {
@@ -231,7 +231,8 @@ export async function insertLine(app: App, loc: Location) {
     }
 }
 
-export async function archiveLine(app: App, loc: Location) {
+/** Rewrites line `loc.position.start.line` of its note with `edit`, keeping a CRLF line ending. */
+async function editLine(app: App, loc: Location, edit: (line: string) => string) {
     const file = app.vault.getFileByPath(loc.path)
     if (!file) return
 
@@ -241,24 +242,38 @@ export async function archiveLine(app: App, loc: Location) {
 
     if (lineIdx >= lines.length) return
 
-    // Append the archive annotation before any trailing whitespace
-    lines[lineIdx] = lines[lineIdx].trimEnd() + " (meta-mdtree:: archive)"
+    const cr = lines[lineIdx].endsWith("\r") ? "\r" : ""
+    lines[lineIdx] = edit(lines[lineIdx].slice(0, lines[lineIdx].length - cr.length)) + cr
     await app.vault.modify(file, lines.join("\n"))
 }
 
-export async function unarchiveLine(app: App, loc: Location) {
-    const file = app.vault.getFileByPath(loc.path)
-    if (!file) return
+/** Appends `#<archiveTag>` to a line or heading, archiving it with everything under it. */
+export async function archiveLine(app: App, loc: Location, archiveTag: string) {
+    await editLine(app, loc, line => addArchiveTag(line, archiveTag))
+}
 
-    const content = await app.vault.read(file)
-    const lines = content.split("\n")
-    const lineIdx = loc.position.start.line
+export async function unarchiveLine(app: App, loc: Location, archiveTag: string) {
+    await editLine(app, loc, line => removeArchiveTag(line, archiveTag))
+}
 
-    if (lineIdx >= lines.length) return
-
-    // Remove the archive annotation and trim trailing whitespace
-    lines[lineIdx] = lines[lineIdx].replace(/\s*\(meta-mdtree::\s*archive\)/, "").trimEnd()
-    await app.vault.modify(file, lines.join("\n"))
+/** Rewrites every legacy `(meta-mdtree:: archive)` marker in the vault's notes to `#<archiveTag>`. Returns the notes
+ *  changed and how many lines; the caller reindexes them. */
+export async function convertLegacyArchiveMarkers(app: App, archiveTag: string): Promise<{files: TFile[], lines: number}> {
+    const files: TFile[] = []
+    let lines = 0
+    for (const file of app.vault.getMarkdownFiles()) {
+        if (!(await app.vault.cachedRead(file)).includes("meta-mdtree::")) continue
+        let changed = 0
+        await app.vault.process(file, content => {
+            const converted = convertLegacyArchive(content, archiveTag)
+            changed = converted.lines
+            return converted.content
+        })
+        if (changed === 0) continue
+        files.push(file)
+        lines += changed
+    }
+    return {files, lines}
 }
 
 // `fm.tags` may be a bare string (Obsidian's YAML shorthand for a single tag)

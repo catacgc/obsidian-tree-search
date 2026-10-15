@@ -26,7 +26,7 @@ describe("parseLinkBullet", () => {
     expect(parseLinkBullet("met [[Bob]]")).toBeNull()
     expect(parseLinkBullet("[[a/b]]")).toBeNull()
     expect(parseLinkBullet("[[N#^blk]]")).toBeNull()
-    expect(parseLinkBullet("[[N]] (meta-mdtree:: archive)")).toBeNull()
+    expect(parseLinkBullet("[[N]] #archive")).toBeNull()
   })
 })
 
