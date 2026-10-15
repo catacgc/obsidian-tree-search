@@ -1,23 +1,23 @@
 import { describe, it, expect } from "bun:test"
 import type { ParsedNode, TextNode, PageNode } from "../graph/types.ts"
 import type { ResultNode } from "../search/search.ts"
-import { isArchived, partitionArchived } from "../search/archive.ts"
+import { archiveToggle, partitionArchived } from "../search/archive.ts"
 
 // ── Test helpers ──────────────────────────────────────────────────────────────
 
-function textNode(key: string, archived = false): TextNode {
+function textNode(key: string, archived = false, inherited = false): TextNode {
   return {
     nodeType: "text",
     searchKey: key,
-    parsedTokens: archived
-      ? [{ tokenType: "meta_mdtree", directive: "archive" }]
-      : [],
+    parsedTokens: [],
     tags: [],
     isTask: false,
     isCompleted: false,
     location: { path: "test.md", position: { start: { line: 0, ch: 0 }, end: { line: 0, ch: 0 } } },
     boost: 0,
     ageDays: 0,
+    ...(archived ? { archived: true } : {}),
+    ...(inherited ? { archiveInherited: true } : {}),
   }
 }
 
@@ -41,17 +41,17 @@ function rn(node: ParsedNode, children: ResultNode[] = []): ResultNode {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe("isArchived", () => {
-  it("returns true for text node with meta_mdtree archive token", () => {
-    expect(isArchived(textNode("item", true))).toBe(true)
+describe("archiveToggle", () => {
+  it("offers Archive for a row that isn't archived", () => {
+    expect(archiveToggle(textNode("item"))).toBe("archive")
   })
 
-  it("returns false for text node without meta_mdtree archive token", () => {
-    expect(isArchived(textNode("item", false))).toBe(false)
+  it("offers Unarchive for a row carrying the tag itself", () => {
+    expect(archiveToggle(textNode("item", true))).toBe("unarchive")
   })
 
-  it("returns false for non-text nodes", () => {
-    expect(isArchived(pageNode("page"))).toBe(false)
+  it("offers nothing for a row archived only through a parent", () => {
+    expect(archiveToggle(textNode("item", true, true))).toBeNull()
   })
 })
 

@@ -880,7 +880,7 @@ export const EditorMolecule = molecule((mol, scope) => {
                         continue
                     }
                     if (!isArchived(node)) {
-                        await archiveLine(app, node.location)
+                        await archiveLine(app, node.location, get(settingsAtom).archiveTag)
                         touched.push(path)
                     }
                 } else if (node.nodeType === "page") {

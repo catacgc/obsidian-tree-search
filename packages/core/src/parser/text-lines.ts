@@ -1,6 +1,6 @@
 import type { HeaderNode, Location, PageNode, ParsedNode, ParsedTextToken, TextNode } from "../graph/types.ts"
 import type { NotesGraph } from "../graph/graph.ts"
-import { getKey } from "../graph/graph.ts"
+import { archiveFields, getKey } from "../graph/graph.ts"
 import { calculateBoost, ageDaysFromText, UNDATED_AGE } from "../graph/boost.ts"
 import { parseTokens, stripUrlQueryStrings } from "./inline-tokens.ts"
 import type { NodeTextLine } from "./canvas.ts"
@@ -73,7 +73,7 @@ function createHeaderNode(
     searchKey,
     boost: calculateBoost("header", searchKey, ageDays),
     ageDays,
-    ...(archived ? { archived: true } : {}),
+    ...archiveFields(archived ? "inherited" : null),
   }
 }
 
@@ -98,9 +98,7 @@ function createTextNode(
   }
 
   const searchKey = stripUrlQueryStrings(text).toLowerCase()
-  const archived =
-    pageArchived ||
-    parsed.some(t => t.tokenType === "meta_mdtree" && t.directive === "archive")
+  // Canvas text has no archive tag of its own (no settings reach the canvas parser): only its page archives it.
   const textNode: TextNode = {
     nodeType: "text",
     location,
@@ -111,7 +109,7 @@ function createTextNode(
     isCompleted,
     boost: calculateBoost("text", searchKey, ageDays),
     ageDays,
-    ...(archived ? { archived: true } : {}),
+    ...archiveFields(pageArchived ? "inherited" : null),
   }
 
   graph.addOrUpdateNode(textNode)

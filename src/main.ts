@@ -7,7 +7,7 @@ import {IndexedTree} from "./indexing/indexed-tree";
 import {FILE_CONTEXT, FileContextView} from "./view/file-context/file-context";
 import {ContextCodeBlock} from "./view/markdown-code-block/ContextCodeBlock";
 import {SearchModal} from "./view/search-modal/SearchModal";
-import {archiveLine, archivePage, highlightLine, insertLine, moveToFolder, openFileByName, revealFolder, showFolder, unarchiveLine, unarchivePage} from './obsidian-utils';
+import {archiveLine, archivePage, convertLegacyArchiveMarkers, highlightLine, insertLine, moveToFolder, openFileByName, revealFolder, showFolder, unarchiveLine, unarchivePage} from './obsidian-utils';
 import {createStore} from 'jotai';
 import {appendDraftAtom, getPluginData, getSettings, searchFiltersAtom, searchViewModesAtom, updateSettings} from './view/react-context/settings';
 import './view/styles.css';
@@ -153,6 +153,17 @@ export default class TreeSearchPlugin extends Plugin {
             }
         });
 
+        this.addCommand({
+            id: 'convert-legacy-archive',
+            name: 'Convert legacy archive markers to #archive',
+            callback: async () => {
+                const {files, lines} = await convertLegacyArchiveMarkers(this.app, getSettings(this.globalStore).archiveTag)
+                // Reindexed here: the shared modify debounce drops reindexes when several files change at once.
+                for (const file of files) await this.index.refreshPage(file)
+                new Notice(`Converted ${lines} ${lines === 1 ? "line" : "lines"} in ${files.length} ${files.length === 1 ? "note" : "notes"}`)
+            }
+        });
+
         this.addSettingTab(new SettingsTab(this.app, this));
         await this.loadSettings();
         // Tree/Timeline toggles and filter pills persist each change.
@@ -214,9 +225,9 @@ export default class TreeSearchPlugin extends Plugin {
             } else if (uri.raycastaction === "unarchivePage") {
                 await unarchivePage(this.app, uri.filepath, getSettings(this.globalStore).archiveTag)
             } else if (uri.raycastaction === "archive") {
-                await archiveLine(this.app, location)
+                await archiveLine(this.app, location, getSettings(this.globalStore).archiveTag)
             } else if (uri.raycastaction === "unarchive") {
-                await unarchiveLine(this.app, location)
+                await unarchiveLine(this.app, location, getSettings(this.globalStore).archiveTag)
             } else if (uri.raycastaction === "pullChildren") {
                 // The selected page's own note, never the active one: pairing the page's key with
                 // whatever note was open gathered its children into that unrelated note.
@@ -326,7 +337,7 @@ class SettingsTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName('Archive tag')
-            .setDesc('Archive tag to ignore notes, lines or sections / headers')
+            .setDesc("Tag that archives a note (in its frontmatter), a heading's section or a line and everything under it")
             .addText(text => text
                 .setPlaceholder('archive')
                 .setValue(settings.archiveTag)

@@ -392,40 +392,45 @@ describe("todoist meta-action integration", () => {
   })
 })
 
-describe("meta-mdtree archive", () => {
-  it("meta-mdtree archive syntax does not appear in searchKey", () => {
-    const g = buildGraph(parse("- My archived item (meta-mdtree:: archive)", "n.md"))
-    const nodes = g.filterNodes((_, attrs) => attrs.nodeType === "text")
-    expect(nodes.length).toBeGreaterThan(0)
-    const textNode = g.getNodeAttributes(nodes[0]) as { searchKey: string; parsedTokens: unknown[] }
-    expect(textNode.searchKey).not.toContain("meta-mdtree")
-    expect(textNode.searchKey).toContain("my archived item")
+describe("archive tag", () => {
+  const textAttrs = (g: NotesGraph, text: string) =>
+    g.getNodeAttributes(g.filterNodes((_, n) => n.nodeType === "text" && n.searchKey.includes(text))[0])
+  const marks = (n: { archived?: boolean; archiveInherited?: true }) => [n.archived, n.archiveInherited]
+
+  it("marks a tagged line own and the lines under it inherited", () => {
+    const g = buildGraph(parse("- old plan #archive\n    - step one #todo\n- live plan #todo", "n.md"))
+    expect(marks(textAttrs(g, "old plan"))).toEqual([true, undefined])
+    expect(marks(textAttrs(g, "step one"))).toEqual([true, true])
+    expect(marks(textAttrs(g, "live plan"))).toEqual([undefined, undefined])
   })
 
-  it("parsedTokens contains meta_mdtree token with directive 'archive'", () => {
-    const g = buildGraph(parse("- My archived item (meta-mdtree:: archive)", "n.md"))
-    const nodes = g.filterNodes((_, attrs) => attrs.nodeType === "text")
-    expect(nodes.length).toBeGreaterThan(0)
-    const textNode = g.getNodeAttributes(nodes[0]) as {
-      parsedTokens: Array<{ tokenType: string; directive?: string }>
-    }
-    const metaMdtree = textNode.parsedTokens.find(t => t.tokenType === "meta_mdtree")
-    expect(metaMdtree).toBeDefined()
-    expect(metaMdtree?.directive).toBe("archive")
+  it("marks a tagged heading own, its subheadings and section lines inherited, a sibling heading not", () => {
+    const g = buildGraph(parse("## Old #archive\n- one #todo\n### Sub\n- two #todo\n## New\n- three #todo", "n.md"))
+    expect(marks(g.getNodeAttributes("n#old #archive"))).toEqual([true, undefined])
+    expect(marks(g.getNodeAttributes("n#sub"))).toEqual([true, true])
+    expect(marks(g.getNodeAttributes("n#new"))).toEqual([undefined, undefined])
+    expect(marks(textAttrs(g, "one"))).toEqual([true, true])
+    expect(marks(textAttrs(g, "two"))).toEqual([true, true])
+    expect(marks(textAttrs(g, "three"))).toEqual([undefined, undefined])
   })
 
-  it("item with only meta-mdtree annotation (no links/tags) is still indexed", () => {
-    const g = buildGraph(parse("- Plain text (meta-mdtree:: archive)", "n.md"))
-    const nodes = g.filterNodes((_, attrs) => {
-      if (attrs.nodeType !== "text") return false
-      return (attrs as { searchKey: string }).searchKey.includes("plain text")
-    })
-    expect(nodes.length).toBe(1)
+  it("does not archive a note linked by a bare link line under an archived heading", () => {
+    const g = buildGraph(parse("## Old #archive\n- [[Project]]\n    - kickoff #todo", "n.md"))
+    expect(g.getNodeAttributes("[[project]]").archived).toBeUndefined()
+    expect(marks(textAttrs(g, "kickoff"))).toEqual([true, true])
+  })
+
+  it("hides a line under an archived line also where it shows under the note it links to", () => {
+    const g = buildGraph(parse("- old plan #archive\n    - call [[Bob]] about it #todo", "n.md"))
+    const [lineKey] = g.outboundEdgeEntries("[[bob]]").map(e => e.target)
+    expect(lineKey).toBe("call [[bob]] about it #todo")
+    const underBob = [{ node: g.getNodeAttributes("[[bob]]"), parents: [], children: [{ node: g.getNodeAttributes(lineKey), parents: [], children: [] }] }]
+    expect(partitionArchived(underBob, false)).toEqual({ visible: [{ ...underBob[0], effectiveArchived: false, children: [] }], archivedCount: 1 })
   })
 })
 
 describe("archive visibility (end-to-end)", () => {
-  const alphaTree = "- project alpha (meta-mdtree:: archive)\n    - deep alpha task #todo"
+  const alphaTree = "- project alpha #archive\n    - deep alpha task #todo"
 
   it("hides an archived subtree (and its non-archived descendants) by default", () => {
     const g = buildGraph(parse(alphaTree, "n.md"))
@@ -462,7 +467,7 @@ describe("archive visibility (end-to-end)", () => {
   })
 
   it("bare is:archived surfaces only archived items", () => {
-    const g = buildGraph(parse("- keep me #todo\n- toss me (meta-mdtree:: archive)", "n.md"))
+    const g = buildGraph(parse("- keep me #todo\n- toss me #archive", "n.md"))
     const q = "is:archived"
     const { reveal } = extractArchiveReveal(parseQuery(q, "."))
     const { visible } = partitionArchived(searchIndex(g, q, "."), reveal)

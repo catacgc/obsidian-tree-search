@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **One archive tag:** `#archive` (the **Archive tag** setting) archives a line with everything nested under it, a heading with its subheadings and section, or, in the frontmatter `tags`, a whole note. An archived line is hidden by default and shown greyed with `is:archived`; before, a `#archive` line was left out of the index and its children moved up a level, and a `#archive` heading did nothing. A line under an archived line or heading is hidden wherever it shows up, also under the notes it links to. **Archive** / **Unarchive** now add or remove the tag, and also work on heading rows.
+- **Breaking:** the `(meta-mdtree:: archive)` marker is no longer read. Run **Convert legacy archive markers to #archive** from the command palette once to rewrite every marker in the vault to the tag. The parse cache is rebuilt once after updating.
 - **No default selection:** in the Search modal and pane, results no longer select their first row; press <kbd>↓</kbd> or click a row. <kbd>Enter</kbd> with nothing selected still acts on the first row (the footer names it). <kbd>&gt;</kbd>, <kbd>&lt;</kbd>, <kbd>Alt</kbd> keys and the action panel need a selected row; <kbd>↑</kbd> on the first row clears the selection. Quick Link and `[[` link completion still select the first row.
 - **Patch from a search:** <kbd>&gt;</kbd> with nothing selected patches today's daily note and pre-fills the box with an item matching the search: `is:task #home` (or a saved filter such as `:Tasks`) gives `- [ ] #home `, ready to finish and add with <kbd>Enter</kbd>.
 - **Fix:** the date chips (All, 7d, 30d, 1y) and filter pills show their tooltip on hover (`in:7d`, `:Tasks — is:task`).

@@ -1,5 +1,5 @@
 import type { TreeNode, ParsedTextToken, ObsidianLinkToken } from "@mdtree/core"
-import { reverseMarkdownParsing, isArchived, rowDate } from "@mdtree/core"
+import { reverseMarkdownParsing, archiveToggle, rowDate } from "@mdtree/core"
 
 // ── Response model (matches existing Raycast plugin contract) ─────────────────
 
@@ -211,9 +211,6 @@ function nodeRenderer(
       })
       return nodeRenderer(tokens.slice(1), actions, vault)
     }
-
-    case "meta_mdtree":
-      return nodeRenderer(tokens.slice(1), actions, vault)
   }
   return ""
 }
@@ -272,9 +269,11 @@ function defaultActions(result: TreeNode, vault: string): RaycastAction[] {
     })
   }
 
-  if (isText) {
+  // A heading only seen as a `[[Note#Heading]]` link (indent -1) has no line of its own to tag.
+  const toggle = isText || (node.nodeType === "header" && node.indent > 0) ? archiveToggle(node) : null
+  if (toggle) {
     base.push(
-      isArchived(node)
+      toggle === "unarchive"
         ? {
             type: "browse",
             url: unarchiveUrl(node.location, vault),

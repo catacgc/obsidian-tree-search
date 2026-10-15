@@ -33,27 +33,52 @@ describe("reindexFileInGraph — incremental reindex parity with full rebuild", 
     const [key] = textNodeKeys(graph)
     expect(isArchived(graph.getNodeAttributes(key))).toBe(false)
 
-    content = "# note\n- buy milk #groceries (meta-mdtree:: archive)\n"
+    content = "# note\n- buy milk #groceries #archive\n"
     await reindexFileInGraph("note.md", graph, scanner, DEFAULT_SETTINGS)
 
-    // Same searchKey (the annotation is stripped from it), so this must be a
-    // real update to the existing node, not a silent no-op.
-    expect(textNodeKeys(graph)).toEqual([key])
-    expect(isArchived(graph.getNodeAttributes(key))).toBe(true)
+    expect(textNodeKeys(graph)).toEqual(["buy milk #groceries #archive"])
+    expect(isArchived(graph.getNodeAttributes("buy milk #groceries #archive"))).toBe(true)
   })
 
   it("reflects unarchiving a line without a full vault rebuild", async () => {
-    let content = "# note\n- buy milk #groceries (meta-mdtree:: archive)\n"
+    let content = "# note\n- buy milk #groceries #archive\n    - check price #todo\n"
     const scanner = makeScanner(() => content)
 
     const graph = await buildGraphFromScanner(scanner, DEFAULT_SETTINGS)
-    const [key] = textNodeKeys(graph)
-    expect(isArchived(graph.getNodeAttributes(key))).toBe(true)
+    expect(isArchived(graph.getNodeAttributes("check price #todo"))).toBe(true)
 
-    content = "# note\n- buy milk #groceries\n"
+    content = "# note\n- buy milk #groceries\n    - check price #todo\n"
     await reindexFileInGraph("note.md", graph, scanner, DEFAULT_SETTINGS)
 
-    expect(isArchived(graph.getNodeAttributes(key))).toBe(false)
+    expect(isArchived(graph.getNodeAttributes("buy milk #groceries"))).toBe(false)
+    expect(isArchived(graph.getNodeAttributes("check price #todo"))).toBe(false)
+  })
+
+  it("reflects unarchiving a heading on its subheadings without a full vault rebuild", async () => {
+    let content = "## Old #archive\n### Sub\n- buy milk #groceries\n"
+    const scanner = makeScanner(() => content)
+
+    const graph = await buildGraphFromScanner(scanner, DEFAULT_SETTINGS)
+    expect(isArchived(graph.getNodeAttributes("note#sub"))).toBe(true)
+
+    content = "## Old\n### Sub\n- buy milk #groceries\n"
+    await reindexFileInGraph("note.md", graph, scanner, DEFAULT_SETTINGS)
+
+    expect(isArchived(graph.getNodeAttributes("note#old"))).toBe(false)
+    expect(isArchived(graph.getNodeAttributes("note#sub"))).toBe(false)
+    expect(isArchived(graph.getNodeAttributes("buy milk #groceries"))).toBe(false)
+  })
+
+  it("replaces a heading archived by tagging it, rather than keeping its untagged copy", async () => {
+    let content = "## Old\n- buy milk #groceries\n"
+    const scanner = makeScanner(() => content)
+
+    const graph = await buildGraphFromScanner(scanner, DEFAULT_SETTINGS)
+    content = "## Old #archive\n- buy milk #groceries\n"
+    await reindexFileInGraph("note.md", graph, scanner, DEFAULT_SETTINGS)
+
+    expect(graph.hasNode("note#old")).toBe(false)
+    expect(isArchived(graph.getNodeAttributes("note#old #archive"))).toBe(true)
   })
 
   it("removes a deleted line from the graph without a full vault rebuild", async () => {

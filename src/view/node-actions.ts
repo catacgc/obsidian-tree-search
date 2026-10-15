@@ -1,6 +1,6 @@
 import { reverseMarkdownParsing } from "./copy";
 import { TreeNode } from "./search/SearchViewFlatten";
-import { ObsidianLinkToken, ParsedTextToken, isArchived, Location, isUndated, rowDate, textSourceDate } from "@mdtree/core";
+import { ObsidianLinkToken, ParsedTextToken, archiveToggle, isArchived, Location, isUndated, rowDate, textSourceDate } from "@mdtree/core";
 import {App} from "obsidian";
 import {resolveThumbnail, stripDateAnnotations, timelineCrumbs, type FileUrl} from "./search/timeline-utils";
 
@@ -219,8 +219,12 @@ function getDefaultActions(app: App, result: TreeNode, vault: string): RaycastAc
         shortcut: { modifiers: ["ctrl"], key: "m" }
     }] : []
 
-    const archiveAction: RaycastAction[] = isText ? [
-        isArchived(result.node) ? {
+    // Lines and headings carry the tag on their own line; one archived only through its note, heading or parent line
+    // has no action (the tag lives there). A heading only seen as a `[[Note#Heading]]` link (indent -1) has no line.
+    const lineRow = isText || (result.node.nodeType === "header" && result.node.indent > 0)
+    const toggle = lineRow ? archiveToggle(result.node) : null
+    const archiveAction: RaycastAction[] = toggle ? [
+        toggle === "unarchive" ? {
             type: "browse",
             url: unarchiveUrl(result.node.location, vault),
             title: `Unarchive`,
@@ -458,8 +462,6 @@ function nodeRenderer(
                 title: truncateActionTitle(token.name),
                 icon: token.icon ?? Icons.globe
             });
-            return nodeRenderer(tokens.slice(1), actions, vault);
-        case "meta_mdtree":
             return nodeRenderer(tokens.slice(1), actions, vault);
     }
     return ""

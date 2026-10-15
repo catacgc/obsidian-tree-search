@@ -12,12 +12,12 @@ export type BaseNode = {
   location: Location
   boost: number
   ageDays: number
-  // Intrinsic archive flag, derived at index time from any of the three
-  // authoring forms (page frontmatter `#archive`, a line `#archive` tag, or a
-  // `(meta-mdtree:: archive)` directive). `isArchived()` reads this (and, for
-  // directly-constructed nodes, the directive token). Path-contextual
-  // propagation to descendants happens at query time in `partitionArchived`.
+  // Archived at index time: a note with the archive tag in its frontmatter (with its headings and lines), a heading
+  // carrying `#archive` (with its subheadings and section lines), or a line carrying it (with everything nested under
+  // it). `isArchived()` reads this; `partitionArchived` hides archived rows and everything under them in a result tree.
   archived?: boolean
+  // Archived only through its note, an enclosing heading or a parent line: the tag isn't on this row itself.
+  archiveInherited?: true
 }
 
 export type PageNode = BaseNode & {
@@ -130,12 +130,7 @@ export type MetaActionToken = {
   icon?: string
 }
 
-export type MetaMdtreeToken = {
-  tokenType: "meta_mdtree"
-  directive: string
-}
-
-export type ParsedTextToken = TextToken | ObsidianLinkToken | LinkToken | ImageToken | MetaActionToken | MetaMdtreeToken
+export type ParsedTextToken = TextToken | ObsidianLinkToken | LinkToken | ImageToken | MetaActionToken
 
 // ── Edge types ────────────────────────────────────────────────────────────────
 
@@ -162,6 +157,10 @@ export type EdgeEntry = {
 
 // ── DvPage-equivalent (output of the vault file parser) ───────────────────────
 
+/** How a heading or line is archived: `own` carries the archive tag; `inherited` sits under an archived heading or
+ *  line (in its note's outline). */
+export type ArchiveMark = "own" | "inherited"
+
 export type HeadingCache = {
   heading: string
   level: number
@@ -169,6 +168,7 @@ export type HeadingCache = {
     start: { line: number; ch: number }
     end: { line: number; ch: number }
   }
+  archived?: ArchiveMark
 }
 
 export type DvList = {
@@ -186,6 +186,7 @@ export type DvList = {
   section: { subpath: string }
   task: boolean
   completed: boolean
+  archived?: ArchiveMark
   /** Pre-computed inline tokens for rawText. Populated by native parser only. */
   precomputedTokens?: ParsedTextToken[]
 }

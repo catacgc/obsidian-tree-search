@@ -1,4 +1,5 @@
 import type {
+  ArchiveMark,
   AttachmentNode,
   BaseNode,
   EdgeAttributes,
@@ -15,6 +16,12 @@ import type {
   TextNode,
 } from "./types.ts"
 import { calculateBoost, getAgeDays, ageDaysFromText, UNDATED_AGE } from "./boost.ts"
+
+/** A node's archive fields for `mark`: none when not archived. */
+export function archiveFields(mark: ArchiveMark | null | undefined): Pick<BaseNode, "archived" | "archiveInherited"> {
+  if (!mark) return {}
+  return mark === "own" ? { archived: true } : { archived: true, archiveInherited: true }
+}
 
 // ── Key derivation ─────────────────────────────────────────────────────────────
 
@@ -95,18 +102,17 @@ export class NotesGraph {
       // Preserve archived across merges: a page indexed from its own file (with
       // the flag) is often also created as a bare reference from other files
       // (without it), in either order — don't let the reference clear it.
+      // A page is archived only by its own frontmatter tag, never inherited.
       ...(existing.archived || incoming.archived ? { archived: true } : {}),
     }
   }
 
+  // Archive fields stay the existing node's: only the heading's own note marks it, in createHeaderNode.
   private mergeHeaderNode(existing: HeaderNode, incoming: HeaderNode): HeaderNode {
     return {
       ...existing,
       indent: Math.max(existing.indent, incoming.indent),
       boost: Math.max(existing.boost, incoming.boost),
-      // Archived if either creation marked it so (a header may be created both as
-      // a parent reference and as itself; don't let an unmarked one clear it).
-      ...(existing.archived || incoming.archived ? { archived: true } : {}),
     }
   }
 
@@ -333,13 +339,18 @@ export class NotesGraph {
     return refs.map(ref => this.createVirtualPage(ref, textNode.location, ageDays))
   }
 
+  /** `archived`: the heading's archive state as read from its own note (`null`: not archived). That creation is
+   *  authoritative: its archive state and location replace the stored ones, so a reindex after unarchiving a heading
+   *  clears it and its subheadings, and the row points at the heading even when a `[[Note#Heading]]` link elsewhere
+   *  created it first. The heading is tracked by its note's path, so a reindex after renaming it (e.g. adding the
+   *  archive tag) drops the old one. Left out by links and other creations, which keep the stored state. */
   createHeaderNode(
     page: string,
     heading: string,
     location: BaseNode["location"],
     indent = -1,
     inheritedAge: number = UNDATED_AGE,
-    archived = false,
+    archived?: ArchiveMark | null,
   ): HeaderNode {
     const searchKey = `${page}#${heading}`.toLowerCase()
     // A date in the heading text wins; otherwise inherit the page's age.
@@ -353,11 +364,15 @@ export class NotesGraph {
       searchKey,
       boost: calculateBoost("header", searchKey, ageDays),
       ageDays,
-      // A header belongs to exactly one page (keyed by page#header), so marking
-      // it archived when its page is archived is unambiguous.
-      ...(archived ? { archived: true } : {}),
+      ...archiveFields(archived),
     }
     this.addOrUpdateNode(node)
+    if (archived !== undefined) {
+      const key = getKey(node)
+      const { archived: _a, archiveInherited: _i, ...stored } = this.nodes.get(key) as HeaderNode
+      this.nodes.set(key, { ...stored, location, ...archiveFields(archived) })
+      this.trackNodePath(key, location.path)
+    }
     return node
   }
 

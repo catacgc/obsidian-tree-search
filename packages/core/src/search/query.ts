@@ -21,20 +21,11 @@ export const HAS_VALUES = ["emoji", "link", "page"]
 // contain ":", so it never collides with an `outline:<note>` value.
 export const DAILY_NOTE = ":daily"
 
-// Intrinsic archive check: a node authored as archived via any of the three
-// forms. The index-time derived `archived` flag covers page frontmatter and
-// line `#archive` tags; the `(meta-mdtree:: archive)` directive is also
-// detected directly from tokens so directly-constructed text nodes work too.
-// This is *intrinsic* only — path-contextual propagation to descendants is
-// applied at query time in `partitionArchived`.
+// Intrinsic archive check: the node was marked archived at index time (its own
+// archive tag, or inherited from its note, heading or parent line). Archived
+// rows hide everything under them in a result tree (`partitionArchived`).
 export function isArchived(node: ParsedNode): boolean {
-  if (node.archived === true) return true
-  return (
-    node.nodeType === "text" &&
-    node.parsedTokens.some(
-      t => t.tokenType === "meta_mdtree" && t.directive === "archive",
-    )
-  )
+  return node.archived === true
 }
 
 // `in:<n><unit>` durations, expressed in whole days. Both short (d/w/m/y) and
