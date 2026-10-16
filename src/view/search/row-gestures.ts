@@ -1,4 +1,4 @@
-// Result-row gestures: Alt+click opens Alt-Edit (desktop, editor mode); a long-press selects the
+// Result-row gestures: Alt+click edits the row in the outline editor (desktop, editor mode); a long-press selects the
 // row and opens the action panel (mobile, every view with the action footer).
 import type React from "react";
 import {useRef} from "react";
@@ -16,8 +16,8 @@ type RowGestureHandlers = Pick<React.HTMLAttributes<HTMLDivElement>,
 
 export function useRowGestures(row: TreeNode, editable: boolean): RowGestureHandlers {
     const {allowEditing, searchVisibleAtom, selectedLineAtom, openActionPanelAtom} = useMolecule(SearchViewMolecule)
-    const {openEditAtom} = useMolecule(EditorMolecule)
-    const openEdit = useSetAtom(openEditAtom)
+    const {editAtom} = useMolecule(EditorMolecule)
+    const edit = useSetAtom(editAtom)
     const hasFooter = useAtomValue(searchVisibleAtom)
     const setSelected = useSetAtom(selectedLineAtom)
     const openActionPanel = useSetAtom(openActionPanelAtom)
@@ -41,7 +41,7 @@ export function useRowGestures(row: TreeNode, editable: boolean): RowGestureHand
             if (allowEditing && ev.altKey && editable) {
                 ev.preventDefault()
                 ev.stopPropagation()
-                void openEdit(row)
+                void edit(row)
             }
         },
     }

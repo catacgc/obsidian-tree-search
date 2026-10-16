@@ -2,10 +2,16 @@ import { highlightLine, openFileByName } from "../obsidian-utils";
 import { triggerLinkPreview } from "./hover-preview";
 import { ParsedNode, ParsedTextToken, Location, stripUrlQueryStrings } from "@mdtree/core";
 import {useMolecule} from "bunshi/react";
-import {GlobalAppMolecule} from "./react-context/state";
-import {EditorMolecule} from "./editor/EditorMolecule";
+import {GlobalAppMolecule, SearchViewMolecule} from "./react-context/state";
 import {useAtomValue, useSetAtom} from "jotai";
 import React from "react";
+import {Notice} from "obsidian";
+
+/** A row's code snippet clicked: copied to the clipboard. */
+async function copySnippet(text: string) {
+    await navigator.clipboard.writeText(text)
+    new Notice(`*${text}* copied to clipboard`)
+}
 
 export function highlightText(text: string, terms: string[]): React.ReactNode {
     if (terms.length === 0) return text
@@ -32,17 +38,17 @@ function renderLinkName(display: string, href: string, terms: string[]): React.R
     return display
 }
 
-/** Click on a note link in a row: in views with editor mode the note's (or heading's) Patch view (openPatchViewAtom);
+/** Click on a note link in a row: in views with editor mode the note's (or heading's) outline editor (openOutlineAtom);
  *  with Mod held, elsewhere, or when that doesn't apply, the note in Obsidian. Prevents the default first, so the row's
  *  own click (select, second-click open) skips it. */
 function useOpenNoteLink() {
     const {appAtom} = useMolecule(GlobalAppMolecule)
     const app = useAtomValue(appAtom)
-    const {openPatchViewAtom} = useMolecule(EditorMolecule)
-    const openPatchView = useSetAtom(openPatchViewAtom)
+    const {openOutlineAtom} = useMolecule(SearchViewMolecule)
+    const openOutline = useSetAtom(openOutlineAtom)
     return async (ev: React.MouseEvent, target: string, obsidianName: string = target) => {
         ev.preventDefault()
-        if (!ev.metaKey && !ev.ctrlKey && await openPatchView(target)) return
+        if (!ev.metaKey && !ev.ctrlKey && openOutline({kind: "link", link: target, mode: "explore"})) return
         if (app) await openFileByName(app, obsidianName)
     }
 }
@@ -167,7 +173,12 @@ export const TextNodeRenderer = (props: { parsedTokens: ParsedTextToken[]; match
                 case "italic":      decorated = <i>{highlighted}</i>; break
                 case "underline":   decorated = <u>{highlighted}</u>; break
                 case "strikethrough": decorated = <s>{highlighted}</s>; break
-                case "code":        decorated = <code className="code-block">{highlighted}</code>; break
+                case "code":        decorated = <code className="code-block ts-copy-snippet" title="Copy" onClick={ev => {
+                    // Copies only the snippet clicked; the row's own click (select, open) skips it.
+                    ev.preventDefault()
+                    ev.stopPropagation()
+                    void copySnippet(token.text.trim())
+                }}>{highlighted}</code>; break
                 default:            decorated = highlighted; break
             }
             if ("location" in token) {

@@ -63,6 +63,7 @@ export { pruneToRecency } from "./search/recency.ts"
 export { isUnscheduledTask, rowDate, textSourceDate } from "./search/relative-date.ts"
 export { reverseMarkdownParsing } from "./search/copy.ts"
 export { isArchived, partitionArchived, archiveToggle } from "./search/archive.ts"
+export { lineNode, lineMatches, blockMisses, filterOutline } from "./search/line-node.ts"
 export {
   buildPullTree,
   formatOccurrenceDate,
@@ -88,6 +89,8 @@ export {
   NOTE_BODY_CHANGED,
   noteBody,
   replaceNoteBody,
+  headingBody,
+  replaceHeadingBody,
   findSubtreeEnd,
   findLinkBullet,
   appendUnderLinkBullet,
@@ -98,6 +101,7 @@ export {
   splitEditableLine,
   lineHasIdentity,
   replaceLineText,
+  editOutlineBlock,
   cutSubtree,
   cutHeadingSection,
   pasteUnderLinkBullet,

@@ -29,6 +29,22 @@
 	to { background-color: hsla(var(--interactive-accent-hsl), 0.1); }
 }
 
+/* Outline editor: a row (or a line editor's line) listed only because it was edited there; the filter would hide it. */
+.ts-outline-miss {
+	outline: 1px solid var(--color-red);
+	outline-offset: -1px;
+	border-radius: var(--radius-s);
+}
+
+/* The outline editor's trailing New line row. */
+.ts-new-line .ts-list-content {
+	color: var(--text-faint);
+}
+
+.ts-new-line:hover .ts-list-content {
+	color: var(--text-muted);
+}
+
 .obsidian-link {
 	text-decoration: none;
 }
@@ -195,4 +211,9 @@
     opacity: 0.6;
     outline: 1px dashed var(--interactive-accent);
     outline-offset: -1px;
+}
+
+/* A row's code snippet: a click copies it (NodeRenderer). */
+.ts-copy-snippet {
+    cursor: copy;
 }

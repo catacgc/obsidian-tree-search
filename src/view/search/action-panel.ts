@@ -6,9 +6,7 @@ import type {TreeNode} from "./SearchViewFlatten"
 import type {RaycastAction} from "../node-actions"
 import {openTargetOf, raycastActionOf} from "../node-actions"
 import {SHORTCUTS, type KeySpec, type ShortcutId} from "./shortcuts"
-import {
-    appendTargetAt, deleteTargetOf, isEditableRow, isLinkLineRow, type DeleteTarget, type OwnPath,
-} from "../editor/row-editing"
+import {appendTargetAt, deleteTargetOf, isLinkLineRow, type DeleteTarget, type OwnPath} from "../editor/row-editing"
 import {isMovable, isPatchable} from "./chain"
 import type {TaskChange} from "../../editing/vault-edits"
 import type {SearchFilter} from "../react-context/settings"
@@ -19,7 +17,7 @@ export type PanelSection = "row" | "task" | "edit" | "drawer" | "filter" | "view
 export type PanelIcon =
     | "link" | "reveal" | "copy" | "insert" | "archive" | "consolidate"
     | "done" | "schedule" | "unschedule"
-    | "append" | "edit" | "moveUnder" | "cut" | "patch" | "rename" | "delete"
+    | "append" | "edit" | "moveUnder" | "cut" | "rename" | "delete"
     | "clearDrawer"
     | "saveFilter" | "deleteFilter"
     | "quickAdd" | "tree" | "timeline" | "expand" | "collapse" | "refresh"
@@ -28,13 +26,13 @@ export type PanelRun =
     | {kind: "shortcut"; id: ShortcutId}
     | {kind: "action"; action: RaycastAction; inObsidian?: boolean}
     | {kind: "task"; change: TaskChange}
-    | {kind: "patch"}
     | {kind: "renameFile"; path: string}
     | {kind: "delete"}
     | {kind: "saveFilter"}
     | {kind: "renameFilter"; name: string}
     | {kind: "deleteFilter"; name: string}
     | {kind: "drawer"; op: "move" | "archive" | "clear"}
+    | {kind: "addTo"}
 
 export type PanelItem = {
     id: string
@@ -56,8 +54,10 @@ export type PanelContext = {
     allowTimeline: boolean
     timelineActive: boolean
     ownPath: OwnPath
-    /** The view's append-chain mode (`chainAtom`), or null with no chain. */
-    chainMode: "append" | "reparent" | null
+    /** The reparent chain is on (`chainAtom`). */
+    chainMode: "reparent" | null
+    /** The view shows the outline editor (`outlineAtom`). */
+    outline: boolean
     resolveLink: ResolveLink
     /** The search query (actualQueryAtom). */
     query: string
@@ -67,6 +67,8 @@ export type PanelContext = {
     rowCut: boolean
     /** Items in the cut drawer. */
     drawerCount: number
+    /** The Add to item's title (addToLabelAtom); null where the view doesn't list Add to. */
+    addTo: string | null
 }
 
 /** The vault path of the file `linkpath` resolves to from `sourcePath`, or null. */
@@ -135,7 +137,7 @@ export function panelItems(ctx: PanelContext): PanelItem[] {
     const items: PanelItem[] = []
     const row = ctx.selectedPos >= 0 ? ctx.rows[ctx.selectedPos] : undefined
     const patchable = ctx.allowEditing && row !== undefined && !row.archiveRow && isPatchable(row.node)
-    // With editor mode Enter opens a page, header or line in its Patch view: the Patch item shows ↵, not a row action.
+    // With editor mode Enter opens a page, header or line in the outline editor (in it: edits the row), not a row action.
     const enterPatches = patchable && ctx.chainMode === null
 
     ctx.rowActions.forEach((action, i) => {
@@ -146,17 +148,17 @@ export function panelItems(ctx: PanelContext): PanelItem[] {
         const {id, icon} = rowActionShortcut(action)
         const key = id === "open" && enterPatches ? undefined : id && keyOf(id)
         items.push({id: `row:${i}`, section: "row", title: action.title, icon, key, run: {kind: "action", action}})
-        // With editor mode an Open shows the note's Patch view; this one opens it in Obsidian.
+        // With editor mode an Open shows the note in the outline editor; this one opens it in Obsidian.
         if (patchable && openTargetOf(action) !== null) {
             items.push({id: `row:${i}:obsidian`, section: "row", title: `${action.title} in Obsidian`, icon: "link", run: {kind: "action", action, inObsidian: true}})
         }
     })
-    // Move under…: the `<` flow (search for the new parent), for every row it can move.
-    if (row && !row.archiveRow && isMovable(row.node)) {
+    // Move under…: the `<` flow (search for the new parent), for every row it can move; not in the outline editor.
+    if (row && !row.archiveRow && isMovable(row.node) && !ctx.outline) {
         items.push({id: "moveUnder", section: "row", title: "Move under…", icon: "moveUnder", key: keyOf("moveUnder"), run: {kind: "shortcut", id: "moveUnder"}})
     }
-    // Cut (⌘X): into the cut drawer, or out of it; not over a chain.
-    if (ctx.allowEditing && row && !row.archiveRow && isMovable(row.node) && ctx.chainMode === null) {
+    // Cut (⌘X): into the cut drawer, or out of it; not over a chain or in the outline editor.
+    if (ctx.allowEditing && row && !row.archiveRow && isMovable(row.node) && ctx.chainMode === null && !ctx.outline) {
         items.push({id: "cut", section: "row", title: ctx.rowCut ? "Take out of drawer" : "Cut to drawer", icon: "cut", key: keyOf("cut"), run: {kind: "shortcut", id: "cut"}})
     }
 
@@ -173,18 +175,15 @@ export function panelItems(ctx: PanelContext): PanelItem[] {
         if (hasScheduledDate(row.node.searchKey) || row.node.inheritedDate !== undefined) task("unschedule", "Unschedule", "unschedule", {kind: "unschedule"})
     }
 
+    // Edit (Alt+Enter): the row's line editor, in place (an attachment: Rename; a note's own row: its content pane);
+    // with nothing selected, outside the outline editor, the outline editor on the search.
+    if (ctx.allowEditing && ctx.chainMode === null
+        && (row ? !row.archiveRow && (isPatchable(row.node) || row.node.nodeType === "attachment") : !ctx.outline)) {
+        items.push({id: "edit", section: "edit", title: row ? "Edit" : "Edit search", icon: "edit", key: keyOf("edit"), run: {kind: "shortcut", id: "edit"}})
+    }
     if (ctx.allowEditing && row) {
-        const target = appendTargetAt(ctx.rows, ctx.selectedPos, ctx.timelineActive)
+        const target = ctx.outline ? null : appendTargetAt(ctx.rows, ctx.selectedPos, ctx.timelineActive)
         if (target) items.push({id: "append", section: "edit", title: `Append to [[${target.parentName}]]`, icon: "append", key: keyOf("append"), run: {kind: "shortcut", id: "append"}})
-        const type = row.node.nodeType
-        // Patch: what typing `>` does (`>` is typed text, not a shortcut).
-        if (!row.archiveRow && ctx.chainMode !== "reparent" && isPatchable(row.node)) {
-            items.push({id: "patch", section: "edit", title: "Patch", icon: "patch", key: enterPatches ? keyOf("open") : undefined, run: {kind: "patch"}})
-        }
-        if (isEditableRow(row, ctx.ownPath, ctx.timelineActive) && !isLinkLineRow(row, ctx.ownPath, ctx.timelineActive)) {
-            const rename = type === "header" || type === "attachment"
-            items.push({id: "edit", section: "edit", title: rename ? "Rename" : "Edit line", icon: "edit", key: keyOf("edit"), run: {kind: "shortcut", id: "edit"}})
-        }
         for (const t of renameTargets(row, ctx.ownPath, ctx.resolveLink, ctx.timelineActive)) {
             items.push({id: `rename:${t.path}`, section: "edit", title: t.title, icon: "rename", run: {kind: "renameFile", path: t.path}})
         }
@@ -192,9 +191,11 @@ export function panelItems(ctx: PanelContext): PanelItem[] {
             items.push({id: "delete", section: "edit", title: "Delete", icon: "delete", run: {kind: "delete"}})
         }
     }
+    // Add to: a new line at the end of the view (in the plain search, after exploring the selected row).
+    if (ctx.addTo !== null) items.push({id: "addTo", section: "edit", title: ctx.addTo, icon: "append", run: {kind: "addTo"}})
 
-    // The cut drawer's bulk actions.
-    if (ctx.allowEditing && ctx.drawerCount > 0 && ctx.chainMode === null) {
+    // The cut drawer's bulk actions; not in the outline editor.
+    if (ctx.allowEditing && ctx.drawerCount > 0 && ctx.chainMode === null && !ctx.outline) {
         const n = ctx.drawerCount
         const cut = `${n} cut item${n === 1 ? "" : "s"}`
         items.push({id: "drawer:move", section: "drawer", title: `Move ${cut} under…`, icon: "moveUnder", run: {kind: "drawer", op: "move"}})
@@ -202,8 +203,9 @@ export function panelItems(ctx: PanelContext): PanelItem[] {
         items.push({id: "drawer:clear", section: "drawer", title: "Clear drawer", icon: "clearDrawer", run: {kind: "drawer", op: "clear"}})
     }
 
-    // Filter pills (Search modal and pane, which show the filter bar and the editor); not over a chain's sub-search.
-    if (ctx.allowEditing && ctx.allowTimeline && ctx.chainMode === null) {
+    // Filter pills (Search modal and pane, which show the filter bar and the editor); not over a chain's sub-search or
+    // in the outline editor.
+    if (ctx.allowEditing && ctx.allowTimeline && ctx.chainMode === null && !ctx.outline) {
         if (ctx.query.trim() !== "" && !ctx.filters.some(f => sameFilterQuery(f.query, ctx.query) || ctx.query.trim().toLowerCase() === `:${f.name.toLowerCase()}`)) {
             items.push({id: "saveFilter", section: "filter", title: "Save as Filter", icon: "saveFilter", run: {kind: "saveFilter"}})
         }
@@ -216,7 +218,7 @@ export function panelItems(ctx: PanelContext): PanelItem[] {
 
     const view = (id: ShortcutId, title: string, icon: PanelIcon) =>
         items.push({id, section: "view", title, icon, key: keyOf(id), run: {kind: "shortcut", id}})
-    if (ctx.allowEditing) view("quickAdd", "Quick Add", "quickAdd")
+    if (ctx.allowEditing && !ctx.outline) view("quickAdd", "Quick Add", "quickAdd")
     if (ctx.allowTimeline) view("toggleView", ctx.timelineActive ? "Show tree" : "Show timeline", ctx.timelineActive ? "tree" : "timeline")
     if (!ctx.timelineActive) {
         view("expand", "Expand one level", "expand")

@@ -1,13 +1,14 @@
 import {TreeNode} from '../search/SearchViewFlatten'
-import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, linkTargetTree, type QueryExpr, partitionArchived, extractArchiveReveal, suggestAt, dateSuggestAt, type Suggestion, parseDuration, flattenIndex, defaultVisibility, blockFooters, pruneToRecency, openLinkAt, noteBody} from '@mdtree/core'
+import {advancedSearch, flattenTasks, ResultNode, searchIndex, searchParents, parseQuery, linkTargetTree, type QueryExpr, type ParsedNode, partitionArchived, extractArchiveReveal, suggestAt, type Suggestion, parseDuration, flattenIndex, defaultVisibility, blockFooters, pruneToRecency, openLinkAt, noteBody, headingBody, filterOutline} from '@mdtree/core'
 import {atom, useAtomValue, type Getter, type Setter} from 'jotai'
 import {findTargetRow, revealRow, rowTargets, type RowTarget} from '../search/select-target'
 import {expandFilterRefs, filterSuggestionsAt, toggleFilterPill} from '../search/search-filter'
 import {buildTimelineRows, tagOutlineParents} from '../search/timeline-utils'
-import {chainOutline, chainPrevQuery, chainReplacesSearch, chainResults, dirtyBodyPaths, isEntryInput, isMovable, isPatchable, lastAnchor, parseChainEntry, reparentLabel, rowLabel, type ChainAnchor, type ChainOutline, type ChainState, type ChainStep, type NoteBody, type RowRef} from '../search/chain'
+import {chainResults, dirtyBodyKeys, isMovable, isPatchable, linksTo, patchPath, reparentLabel, rowLabel, type BodyRef, type ChainState, type NoteBody, type RowRef} from '../search/chain'
+import {crumbKey, extendPath, isPinned, linkCrumbs, newLineLabel, nextLineEditId, rootFor, rootKey, rootOf, TODAY_LABEL, type LineEdit, type OutlineRoot, type OutlineState, type OutlineTarget, type PaneState} from '../search/outline'
+import {dailyNotePath, trashSessionAttachments, type EditorAttachment} from '../../editing/vault-edits'
 import {toggleCut} from '../search/cut-drawer'
 import {basenameOf, dailyConfigOf, searchModalTitle} from '../editor/draft'
-import {dailyNotePath} from '../../editing/vault-edits'
 import {dragInfo, INLINE_LINK_REFUSAL, treeParentPos} from '../editor/row-editing'
 
 type SearchQuery = { query: string; file?: string; heading?: string }
@@ -62,6 +63,8 @@ export const SearchViewScope = createScope({
 })
 
 export type RecencyWindow = "all" | "7d" | "30d" | "1y"
+/** `selectedLineAtom`'s value while the outline editor's trailing New line row is selected. */
+export const NEW_LINE_ROW = -2
 export const RECENCY_WINDOWS: RecencyWindow[] = ["all", "7d", "30d", "1y"]
 /** The action panel's list: the main actions or the Delete confirmation. */
 export type ActionPanelPage = "main" | "confirmDelete"
@@ -137,12 +140,9 @@ export const GlobalAppMolecule = molecule((_, scope) => {
 export const DAILY_OUTLINE_QUERY = 'outline:":daily" is:page'
 
 /** The editor's link list while no `[[` is open: the full tree of the outline's note nearest the caret (caretNote)
- *  as `[[P]]`; else, for an Append under a picked line, the outline of that line's note (`underLinePath`); else
- *  today's daily outline. A name with `[` or `]` can't be written as a link, so it counts as none. */
-export const quickAddDefaultQuery = (parentName: string | undefined, underLinePath?: string): string =>
-    parentName && !/[[\]]/.test(parentName) ? `[[${parentName}]]`
-    : underLinePath ? `outline:"${underLinePath.replace(/\.md$/, "")}" is:page`
-    : DAILY_OUTLINE_QUERY
+ *  as `[[P]]`; else today's daily outline. A name with `[` or `]` can't be written as a link, so it counts as none. */
+export const quickAddDefaultQuery = (parentName: string | undefined): string =>
+    parentName && !/[[\]]/.test(parentName) ? `[[${parentName}]]` : DAILY_OUTLINE_QUERY
 
 export const SearchModalMolecule = molecule((mol, scope) => {
     const scp = scope(SearchViewScope)
@@ -152,12 +152,14 @@ export const SearchModalMolecule = molecule((mol, scope) => {
 
     const searchResultsComputeAtom = withAtomEffect(searchResultsAtom, (get, set) => {
         get(GlobalAtoms.graphVersionAtom)  // re-run on mutable graph updates from refreshPage
-        const searchQuery = get(searchMol.actualQueryAtom)
-        // A chain (`>` append, `<` reparent) replaces the search with its own results; Quick Add before its first chip
-        // still searches.
-        const chain = get(searchMol.chainAtom)
-        if (chain && chainReplacesSearch(chain, searchQuery)) {
+        get(searchMol.actualQueryAtom)
+        // The reparent chain (`<`) and the outline editor replace the search with their own rows.
+        if (get(searchMol.chainAtom)) {
             set(searchMol.refreshChainResultsAtom)
+            return
+        }
+        if (get(searchMol.outlineAtom)) {
+            set(searchMol.refreshOutlineResultsAtom)
             return
         }
         const graph = get(GlobalAtoms.graphAtom)
@@ -204,26 +206,43 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         set(selectAnchorAtom, null)
         set(selectedLineValueAtom, line)
     })
-    /** Content-pane buffers by note path; they live as long as the append chain (chainAtom drops them when it ends). */
-    const chainBodiesAtom = atom<Record<string, NoteBody>>({})
-    /** Set when unsaved buffers refused a leave; repeating the leave then discards them. Reset by an edit and by a save. */
-    const bodyDiscardArmedAtom = atom(false)
     const chainValueAtom = atom<ChainState | null>(null)
     /** The row selected when the chain started, reselected when leaving it returns to the search (leaveChain). */
     const chainReturnAtom = atom<RowTarget[]>([])
-    /** Search's append (`>`) or reparent (`<`) chain; null when searching normally. Starting one remembers the selected
-     *  row; ending the append chain (null or a reparent) drops the content-pane buffers. */
+    /** Search's reparent (`<`) chain; null when searching normally. Starting one remembers the selected row. */
     const chainAtom = atom(get => get(chainValueAtom), (get, set, next: ChainState | null) => {
         if (get(chainValueAtom) === null && next !== null) {
             const sel = get(selectedNodeAtom)
             set(chainReturnAtom, sel && !sel.archiveRow ? rowTargets(sel) : [])
         }
-        if (next?.mode !== "append") {
-            set(chainBodiesAtom, {})
-            set(bodyDiscardArmedAtom, false)
-        }
         set(chainValueAtom, next)
     })
+
+    // ── Outline editor state (docs/superpowers/specs/2026-10-15-outline-editor-design.md) ──
+    /** The outline editor: its crumbs, the search it returns to and its pins; null while the view searches. */
+    const outlineAtom = atom<OutlineState | null>(null)
+    /** The open line editor: an edited row, or the New line row. */
+    const lineEditAtom = atom<LineEdit | null>(null)
+    /** The view lists its trailing Add to row: in the outline editor while its line editor isn't on the new line;
+     *  in the plain search of views with editor mode, outside a reparent. */
+    const newLineShown = (get: Getter) => {
+        if (!scp.allowEditing) return false
+        return get(outlineAtom) !== null ? get(lineEditAtom)?.row !== null : get(chainAtom) === null && !get(editorOpenAtom)
+    }
+    /** The Add to row is listed and selected. */
+    const newLineSelectedAtom = atom(get => newLineShown(get) && get(selectedLineAtom) === NEW_LINE_ROW)
+    const newLineShownAtom = atom(get => newLineShown(get))
+    /** Content-pane buffers by BodyRef key; they live until the outline's root changes or it closes. */
+    const outlineBodiesAtom = atom<Record<string, NoteBody>>({})
+    /** Files pasted or dropped into the content pane, renamed by alias on save and trashed on discard. */
+    const bodyAttachmentsAtom = atom<EditorAttachment[]>([])
+    /** Set when unsaved edits refused a leave; repeating it then discards them. Reset by an edit and by a save. */
+    const discardArmedAtom = atom(false)
+    const paneAtom = atom<PaneState>({size: "normal", closedKey: null})
+    /** A page row whose content pane Enter opened (a note's own row has no line to edit). */
+    const paneRowAtom = atom<ParsedNode | null>(null)
+    /** The next results select their first row (a filter crumb was just added). */
+    const selectFirstOnceAtom = atom(false)
     /** Row index that is flashing (just saved); cleared by the view after the animation. */
     const flashLineAtom = atom<number | null>(null)
     const searchVisibleAtom = atom(scp.showSearch)
@@ -278,13 +297,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     const searchPlaceholderAtom = atom((get) => {
         const chain = get(chainAtom)
         if (chain?.mode === "reparent") return `Move ${reparentLabel(chain.children)} under…`
-        if (chain?.mode === "append") {
-            const last = chain.steps[chain.steps.length - 1]
-            if (last?.kind === "entry") return `Add under ${last.label} — Enter adds, Alt+Enter opens the editor`
-            if (!last) return "Search to patch, or type to add to today"
-            // The operators only: the chip and the modal's Patch title already name the anchor.
-            return `- item · [[note]] · |alias · #heading · (k:: v)`
-        }
+        if (get(outlineAtom)) return "Filter — Enter adds the filter, Escape goes back to the search"
         const { totalNodes } = get(searchResultsStateAtom)
         const graph = get(GlobalAtoms.graphAtom)
         if (totalNodes > 0) {
@@ -294,86 +307,104 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         return `Search ${graph.order} nodes and ${graph.size} edges`
     })
 
-    /** Today's daily note basename (the Today chip's note). */
+    /** Today's daily note basename (the Today crumb's note). */
     const dailyNameOf = (get: Getter) => basenameOf(dailyNotePath(dailyConfigOf(get(GlobalAtoms.indexAtom))))
 
-    /** The markdown file a row chip's content pane shows: Today → today's daily note, a note or header → its page's
-     *  note, a line → its file; null without one. */
-    const bodyPathOf = (get: Getter, anchor: ChainAnchor): string | null => {
+    /** What a content pane edits for `node` (null: today's daily note): a note's body, the text under a heading in its
+     *  page's note, a line's file's body; null without a markdown file. */
+    const bodyRefOf = (get: Getter, node: ParsedNode | null): BodyRef | null => {
         const app = get(GlobalAtoms.appAtom)
-        const file = anchor.kind === "today" ? app.vault.getFileByPath(dailyNotePath(dailyConfigOf(get(GlobalAtoms.indexAtom))))
-            : anchor.kind === "note" ? app.metadataCache.getFirstLinkpathDest(anchor.name, "")
-            : anchor.kind === "header" ? app.metadataCache.getFirstLinkpathDest(anchor.page, "")
-            : app.vault.getFileByPath(anchor.target.path)
-        return file && file.extension === "md" ? file.path : null
+        const file = node === null ? app.vault.getFileByPath(dailyNotePath(dailyConfigOf(get(GlobalAtoms.indexAtom))))
+            : node.nodeType === "page" || node.nodeType === "header" ? app.metadataCache.getFirstLinkpathDest(node.page, "")
+            : node.nodeType === "text" ? app.vault.getFileByPath(node.location.path)
+            : null
+        if (!file || file.extension !== "md") return null
+        return node?.nodeType === "header"
+            ? {key: `${file.path}#${node.header}`, path: file.path, heading: node.header, label: `${file.basename} > ${node.header}`}
+            : {key: file.path, path: file.path, heading: null, label: file.basename}
     }
 
-    /** The note the Patch view's content pane edits: the append chain's last row chip's (bodyPathOf); null with no row
-     *  chip (Quick Add before its first) or no such file (a reference, today's note not created yet). */
-    const chainBodyPathAtom = atom<string | null>(get => {
-        const chain = get(chainAtom)
-        if (chain?.mode !== "append" || !chain.steps.some(s => s.kind === "row")) return null
+    /** What the outline editor's content pane edits: the page, link line or heading row being edited, else the page
+     *  row Enter opened (paneRowAtom), else the root's note (Today: the daily note; a line: its file); null at the
+     *  search root or without such a file (a reference, today's note not created yet). */
+    const paneRefAtom = atom<BodyRef | null>(get => {
+        const o = get(outlineAtom)
+        if (!o) return null
         get(GlobalAtoms.graphVersionAtom)   // a note a save created resolves after its reindex
-        return bodyPathOf(get, lastAnchor(chain.steps))
+        const edited = get(lineEditAtom)?.row?.node
+        const node = edited && edited.nodeType !== "text" ? edited : get(paneRowAtom)
+        if (node) return bodyRefOf(get, node)
+        const root = rootOf(o)
+        return root === null ? null : bodyRefOf(get, root.kind === "today" ? null : root.node)
     })
 
-    /** Reads `path`'s body into chainBodiesAtom: a new buffer, or a clean one (text === original) whose file changed. An
-     *  edited buffer is left alone; its save checks freshness. */
-    const loadChainBodyAtom = atom(null, async (get, set, path: string) => {
+    /** Reads `ref`'s text into outlineBodiesAtom: a new buffer, or a clean one (text === original) whose file changed.
+     *  An edited buffer is left alone; its save checks freshness. A heading that is gone loads nothing. */
+    const loadBodyAtom = atom(null, async (get, set, ref: BodyRef) => {
         const app = get(GlobalAtoms.appAtom)
-        const file = app.vault.getFileByPath(path)
+        const file = app.vault.getFileByPath(ref.path)
         if (!file) return
-        const body = noteBody(await app.vault.read(file))
-        if (get(chainAtom)?.mode !== "append") return
-        const bodies = get(chainBodiesAtom)
-        const cur = bodies[path]
+        const content = await app.vault.read(file)
+        const body = ref.heading === null ? noteBody(content) : headingBody(content, ref.heading)
+        if (body === null || get(outlineAtom) === null) return
+        const bodies = get(outlineBodiesAtom)
+        const cur = bodies[ref.key]
         if (cur && (cur.text !== cur.original || cur.original === body)) return
-        set(chainBodiesAtom, {...bodies, [path]: {original: body, text: body}})
+        set(outlineBodiesAtom, {...bodies, [ref.key]: {...ref, original: body, text: body}})
     })
 
-    /** The content pane's edit of `path`'s buffer. */
-    const setChainBodyTextAtom = atom(null, (get, set, path: string, text: string) => {
-        const bodies = get(chainBodiesAtom)
-        const cur = bodies[path]
+    /** The content pane's edit of buffer `key`. */
+    const setBodyTextAtom = atom(null, (get, set, key: string, text: string) => {
+        const bodies = get(outlineBodiesAtom)
+        const cur = bodies[key]
         if (!cur || cur.text === text) return
-        set(chainBodiesAtom, {...bodies, [path]: {...cur, text}})
-        set(bodyDiscardArmedAtom, false)
+        set(outlineBodiesAtom, {...bodies, [key]: {...cur, text}})
+        set(discardArmedAtom, false)
     })
 
-    /** Before leaving the append chain (`remaining` null) or dropping chips (`remaining`: the steps kept). Returns true and
-     *  drops the buffers of notes no remaining row chip shows when none of them has unsaved edits, or when this repeats a
-     *  refused leave. Otherwise it shows the Notice, arms the repeat and returns false (the caller does nothing). */
-    const releaseBodiesAtom = atom(null, (get, set, remaining: ChainStep[] | null): boolean => {
-        const bodies = get(chainBodiesAtom)
-        const keep = new Set<string>()
-        for (const s of remaining ?? []) {
-            const p = s.kind === "row" ? bodyPathOf(get, s.anchor) : null
-            if (p !== null) keep.add(p)
-        }
-        const lost = dirtyBodyPaths(bodies).filter(p => !keep.has(p))
-        if (lost.length > 0 && !get(bodyDiscardArmedAtom)) {
-            set(bodyDiscardArmedAtom, true)
-            new Notice(`Unsaved changes to ${lost.map(basenameOf).join(", ")} — do it again to discard them, or ${Platform.isMacOS ? "⌘↵" : "Ctrl+Enter"} to save`)
+    /** Unsaved outline edits: a dirty content buffer or a changed line editor. */
+    const outlineDirtyAtom = atom(get => {
+        const edit = get(lineEditAtom)
+        return dirtyBodyKeys(get(outlineBodiesAtom)).length > 0 || (edit !== null && edit.text !== edit.initial)
+    })
+
+    /** The pane's Discard: every content buffer back to its text on disk and the pane's pasted files trashed; the line
+     *  editor is left alone. */
+    const discardBodiesAtom = atom(null, (get, set) => {
+        const bodies = get(outlineBodiesAtom)
+        if (dirtyBodyKeys(bodies).length === 0) return
+        void trashSessionAttachments(get(GlobalAtoms.appAtom), get(bodyAttachmentsAtom))
+        set(bodyAttachmentsAtom, [])
+        set(outlineBodiesAtom, Object.fromEntries(Object.entries(bodies).map(([k, b]) => [k, {...b, text: b.original}])))
+        set(discardArmedAtom, false)
+    })
+
+    /** Before closing the line editor (`"line"`) or leaving / changing the outline's root (`"all"`, also the content
+     *  buffers). True when nothing in scope is unsaved, or when this repeats a refused leave: the line editor closes
+     *  (its pasted files trashed) and, for `"all"`, the buffers and the pane's pasted files go. Otherwise it shows the
+     *  Notice once, arms the repeat and returns false (the caller does nothing). */
+    const releaseOutlineAtom = atom(null, (get, set, scope: "line" | "all"): boolean => {
+        const edit = get(lineEditAtom)
+        const editDirty = edit !== null && edit.text !== edit.initial
+        const bodies = get(outlineBodiesAtom)
+        const dirty = scope === "all" ? dirtyBodyKeys(bodies) : []
+        if ((editDirty || dirty.length > 0) && !get(discardArmedAtom)) {
+            set(discardArmedAtom, true)
+            const names = [...(editDirty ? [edit.row ? rowLabel(edit.row.node) : "the new line"] : []), ...dirty.map(k => bodies[k].label)]
+            new Notice(`Unsaved changes to ${names.join(", ")} — do it again to discard them, or ${Platform.isMacOS ? "⌘↵" : "Ctrl+Enter"} to save`)
             return false
         }
-        set(bodyDiscardArmedAtom, false)
-        set(chainBodiesAtom, Object.fromEntries(Object.entries(bodies).filter(([p]) => keep.has(p))))
+        set(discardArmedAtom, false)
+        const app = get(GlobalAtoms.appAtom)
+        if (edit) void trashSessionAttachments(app, edit.attachments)
+        set(lineEditAtom, null)
+        if (scope === "all") {
+            void trashSessionAttachments(app, get(bodyAttachmentsAtom))
+            set(bodyAttachmentsAtom, [])
+            set(outlineBodiesAtom, {})
+            set(paneRowAtom, null)
+        }
         return true
-    })
-
-    /** The append chain's pending write (what Enter adds), an error to show, or null when Enter searches/opens instead. */
-    const chainWriteAtom = atom<ChainOutline | {error: string} | null>(get => {
-        const chain = get(chainAtom)
-        if (chain?.mode !== "append") return null
-        const q = get(actualQueryAtom)
-        const hasEntries = chain.steps.some(s => s.kind === "entry")
-        const parsed = parseChainEntry(q)
-        if (parsed !== null && "error" in parsed) return parsed
-        // Typed text that matches rows stays a search; prefix `- ` to add it instead.
-        if (!hasEntries && (parsed === null || (!isEntryInput(q) && get(renderableTreeNodesAtom).length > 0))) return null
-        const o = chainOutline(chain.steps, parsed, dailyNameOf(get))
-        if (!("error" in o) && o.lines.length === 0 && !o.underLine) return null
-        return o
     })
 
     const incrementPagesAtom = atom(
@@ -397,19 +428,9 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         if (row && get(selectedLineAtom) !== row.index) set(selectedLineAtom, row.index)
     })
 
-    /** In an append chain with nothing to write (the input searches under the chips), the row Enter adds as the next
-     *  chip, as `>` does (the selected row, else the first: enterRowAtom); null otherwise. */
-    const chainPatchRowAtom = atom<TreeNode | null>(get => {
-        const chain = get(chainAtom)
-        if (chain?.mode !== "append" || get(chainWriteAtom) !== null) return null
-        if (chain.steps.some(s => s.kind === "entry") || isEntryInput(get(actualQueryAtom))) return null
-        const sel = get(enterRowAtom)
-        return sel && !sel.archiveRow && isPatchable(sel.node) ? sel : null
-    })
-
     // Per-view (scope name) Tree/Timeline mode, persisted to data.json by main.ts.
     const viewModeAtom = atom<SearchViewMode>(get => get(searchViewModesAtom)[scp.name] ?? "tree")
-    const timelineActiveAtom = atom(get => scp.allowTimeline === true && get(viewModeAtom) === "timeline" && !get(editorOpenAtom))
+    const timelineActiveAtom = atom(get => scp.allowTimeline === true && get(viewModeAtom) === "timeline" && !get(editorOpenAtom) && !get(outlineAtom))
     const toggleViewModeAtom = atom(null, (get, set) =>
         set(searchViewModesAtom, {...get(searchViewModesAtom), [scp.name]: get(viewModeAtom) === "timeline" ? "tree" : "timeline"}))
     // View-local recency filter; narrows the timeline, or prunes the tree to
@@ -450,9 +471,11 @@ export const SearchViewMolecule = molecule((mol, scope) => {
                 set(selectAnchorAtom, {...anchor, flash: false})
             }
         } else {
+            const first = get(selectFirstOnceAtom)
+            set(selectFirstOnceAtom, false)
             set(treeNodesAtom, nodes)
             set(pagesAtom, 1)
-            set(selectedLineValueAtom, get(searchVisibleAtom) && autoSelectsFirst(get) ? 0 : -1)
+            set(selectedLineValueAtom, first || (get(searchVisibleAtom) && autoSelectsFirst(get)) ? 0 : -1)
         }
         set(hoveredLineAtom, -1)
     }
@@ -460,8 +483,8 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     const updateSearchResultsAtom = atom(null, (get, set, result: ResultNode[], archivedCount: number = 0) => {
         set(lastResultsAtom, { results: result, archivedCount })
 
-        // The editor's link list is never narrowed by the view's recency window.
-        const w = get(editorOpenAtom) ? "all" : get(recencyWindowAtom)
+        // The editor's link list and the outline editor are never narrowed by the view's recency window.
+        const w = get(editorOpenAtom) || get(outlineAtom) ? "all" : get(recencyWindowAtom)
         if (get(timelineActiveAtom)) {
             const nodes = buildTimelineRows(get(GlobalAtoms.appAtom), get(GlobalAtoms.graphAtom), result, get(matchExprsAtom), w === "all" ? null : parseDuration(w))
             settleSelection(get, set, nodes)
@@ -484,8 +507,10 @@ export const SearchViewMolecule = molecule((mol, scope) => {
 
         // Flatten nodes with the correct expand level, tagging each row's
         // `matched` flag against the active query (drives dimming in the view).
-        // Greyed-out subtrees start collapsed (defaultVisibility).
-        const nodesWithVisibility: TreeNode[] = flattenIndex(result, expandLevel, get(matchExprsAtom))
+        // Greyed-out subtrees start collapsed (defaultVisibility). The outline editor lists siblings in file order,
+        // everything expanded.
+        const nodesWithVisibility: TreeNode[] = flattenIndex(result, expandLevel, get(matchExprsAtom),
+            get(outlineAtom) ? {fileOrder: true, expandAll: true} : {})
         tagOutlineParents(get(GlobalAtoms.graphAtom), nodesWithVisibility)
 
         const searchVisible = get(searchVisibleAtom)
@@ -533,19 +558,23 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         set(updateSearchResultsAtom, results, archivedCount)
     })
 
+    /** ↓: the next visible row; past the last one, the outline editor's New line row. */
     const arrowDownAtom = atom(null, (get, set) => {
         const line = get(selectedLineAtom)
+        if (line === NEW_LINE_ROW) return
         const nodes = get(treeNodesAtom)
         const nextVisible = nodes.slice(line + 1).find(node => node.visible)
-
-        set(selectedLineAtom, nextVisible?.index ?? nodes.length - 1)
+        if (!nextVisible && newLineShown(get)) set(selectedLineAtom, NEW_LINE_ROW)
+        else set(selectedLineAtom, nextVisible?.index ?? nodes.length - 1)
     })
 
+    /** ↑: the previous visible row (from the New line row: the last one). */
     const arrowUpAtom = atom(null, (get, set) => {
         const line = get(selectedLineAtom)
         if (line === -1) return
         const nodes = get(treeNodesAtom)
-        const prevVisible = nodes.slice(0, line).reverse().find(node => node.visible)
+        const before = line === NEW_LINE_ROW ? nodes : nodes.slice(0, line)
+        const prevVisible = before.slice().reverse().find(node => node.visible)
         set(selectedLineAtom, prevVisible?.index ?? (autoSelectsFirst(get) ? 0 : -1))
     })
 
@@ -674,16 +703,27 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         return parseQuery(query, separator).flatMap(extractTerms)
     })
 
+    /** Query `q`'s stages as searched: `:Name` filter references expanded, `is:archived` (a reveal toggle, not a
+     *  matcher) stripped. Empty for a blank query. */
+    const stagesOf = (get: Getter, q: string): QueryExpr[] => {
+        if (!q.trim()) return []
+        const separator = get(separatorAtom)
+        return extractArchiveReveal(parseQuery(expandFilterRefs(q, get(searchFiltersAtom), separator), separator)).stages
+    }
+
+    /** The outline editor's filter: its filter crumbs, then the input, as stages ANDed together. */
+    const outlineFilterStagesAtom = atom<QueryExpr[]>(get => {
+        const o = get(outlineAtom)
+        return o ? [...o.filters, get(actualQueryAtom)].flatMap(q => stagesOf(get, q)) : []
+    })
+
     // Parsed query stages, used to compute each row's `matched` flag (rows that
     // match no stage are pure ancestor/descendant context and get dimmed).
-    // Empty when there is no query.
+    // Empty when there is no query. The outline editor dims by its filter (at the search root, after the search's).
     const matchExprsAtom = atom<QueryExpr[]>((get) => {
-        const query = get(searchTextAtom)
-        if (!query) return []
-        const separator = get(separatorAtom)
-        // Strip `is:archived` (a reveal toggle, not a matcher) so it never drives
-        // the per-row `matched`/dimming computation.
-        return extractArchiveReveal(parseQuery(query, separator)).stages
+        const o = get(outlineAtom)
+        if (o) return [...(o.path.length === 0 ? stagesOf(get, o.prevQuery) : []), ...get(outlineFilterStagesAtom)]
+        return stagesOf(get, get(actualQueryAtom))
     })
 
     const cursorPosAtom = atom(0)
@@ -691,9 +731,6 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     const rawSuggestionsAtom = atom<Suggestion[]>((get) => {
         const query = get(actualQueryAtom)
         const cursorPos = get(cursorPosAtom)
-        // An append chain's task entry (`[ ] call Bob @tom`) offers scheduled dates instead of query syntax.
-        const dates = get(chainAtom)?.mode === "append" ? dateSuggestAt(query, cursorPos, new Date()) : []
-        if (dates.length > 0) return dates
         const filterHits = filterSuggestionsAt(query, cursorPos, get(searchFiltersAtom))
         return filterHits.length > 0 ? filterHits : suggestAt(query, cursorPos)
     })
@@ -757,7 +794,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         else set(openActionPanelAtom)
     })
 
-    // ── Chains: append (`>`) and reparent (`<`) ────────────────────────────
+    // ── Reparent chain (`<`) ────────────────────────────────────────────────
     const setQuery = (set: Setter, query: string) => {
         set(searchQueryAtom, {query})
         set(lastSearchAtom, {query})
@@ -765,10 +802,8 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     const refreshChainResultsAtom = atom(null, (get, set) => {
         const chain = get(chainAtom)
         if (!chain) return
-        const query = get(actualQueryAtom)
         const options = get(GlobalAtoms.indexAtom)?.searchOptions() ?? {}
-        const results = chainResults(get(GlobalAtoms.graphAtom), chain, query, get(searchTextAtom), get(separatorAtom), options, dailyNameOf(get))
-        set(updateSearchResultsAtom, results)
+        set(updateSearchResultsAtom, chainResults(get(GlobalAtoms.graphAtom), chain, get(searchTextAtom), get(separatorAtom), options))
     })
 
     /** The selected row as a chip: its node, label and (Tree mode) tree parent; null without a usable selection. */
@@ -781,59 +816,211 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         return {row: sel, ref: {node: sel.node, label: rowLabel(sel.node), parent: parentPos === null ? null : rows[parentPos].node}}
     }
 
-    /** Backspace in an empty input: drops the last chip (an append chain's last step, or the reparent), restoring the
-     *  query typed before it. Quick Add's last chip leaves it chip-less; with no chip there is nothing to drop. */
-    const popChainAtom = atom(null, (get, set) => {
-        const chain = get(chainAtom)
-        if (!chain) return
-        if (chain.mode === "append" && chain.quickAdd) {
-            const last = chain.steps[chain.steps.length - 1]
-            if (!last) return
-            if (!set(releaseBodiesAtom, chain.steps.slice(0, -1))) return
-            set(chainAtom, {...chain, steps: chain.steps.slice(0, -1)})
-            setQuery(set, last.prevQuery)
-            return
-        }
-        if (chain.mode === "reparent" || chain.steps.length === 1) {
-            if (chain.mode === "append" && !set(releaseBodiesAtom, null)) return
-            leaveChain(get, set, chain)
-            return
-        }
-        const last = chain.steps[chain.steps.length - 1]
-        if (!set(releaseBodiesAtom, chain.steps.slice(0, -1))) return
-        set(chainAtom, {...chain, steps: chain.steps.slice(0, -1)})
-        setQuery(set, last.prevQuery)
-    })
-
-    /** Escape: leaves the chain, back to the search it started from. */
+    /** Escape, × or Backspace in an empty input: ends the reparent chain, back to the search it started from with the
+     *  row then selected. */
     const cancelChainAtom = atom(null, (get, set) => {
         const chain = get(chainAtom)
-        if (chain?.mode !== "append") {
-            set(popChainAtom)
-            return
-        }
-        if (!set(releaseBodiesAtom, null)) return
-        leaveChain(get, set, chain)
-    })
-
-    /** Ends `chain` back in the search it started from: the query typed before it, with the row then selected. */
-    function leaveChain(get: Getter, set: Setter, chain: ChainState) {
+        if (!chain) return
         const targets = get(chainReturnAtom)
         set(chainAtom, null)
         if (targets.length > 0) set(GlobalAtoms.pendingSelectAtom, {view: scp.name, targets, flash: false})
-        setQuery(set, chainPrevQuery(chain))
+        setQuery(set, chain.prevQuery)
+    })
+
+    // ── Outline editor navigation ───────────────────────────────────────────
+    /** The outline editor's rows: the root's full tree (the search root: the results of the search it opened on),
+     *  narrowed by the filter crumbs and the input; pinned lines stay, marked `miss`. */
+    const refreshOutlineResultsAtom = atom(null, (get, set) => {
+        const o = get(outlineAtom)
+        if (!o) return
+        const graph = get(GlobalAtoms.graphAtom)
+        const separator = get(separatorAtom)
+        const root = rootOf(o)
+        let results: ResultNode[]
+        if (root === null) {
+            const text = expandFilterRefs(o.prevQuery, get(searchFiltersAtom), separator)
+            const {reveal} = extractArchiveReveal(parseQuery(text, separator))
+            results = partitionArchived(searchIndex(graph, text, separator, get(GlobalAtoms.indexAtom)?.searchOptions()), reveal).visible
+        } else {
+            results = advancedSearch(graph, rootKey(root, dailyNameOf(get)), "", separator)
+        }
+        set(updateSearchResultsAtom, filterOutline(results, get(outlineFilterStagesAtom), n => isPinned(o.pins, n)))
+    })
+
+    /** Shows the outline editor at path crumbs `path`: opens it (remembering the query and selected row to return
+     *  to), or changes its root (unless unsaved edits refuse it; filter crumbs go). Today opens the New line, filled
+     *  with `prefill`. */
+    function showOutline(get: Getter, set: Setter, path: OutlineRoot[], target: OutlineTarget): true {
+        const daily = dailyNameOf(get)
+        const o = get(outlineAtom)
+        const quickAdd = target.kind === "today" && target.quickAdd === true
+        if (o) {
+            const same = path.length === o.path.length && path.every((r, i) => crumbKey(r, daily) === crumbKey(o.path[i], daily))
+            if (!same) {
+                if (!set(releaseOutlineAtom, "all")) return true
+                set(outlineAtom, {...o, path, filters: [], quickAdd: o.quickAdd || quickAdd})
+                set(paneAtom, {...get(paneAtom), closedKey: null})
+            }
+        } else {
+            const sel = get(selectedNodeAtom)
+            set(outlineAtom, {path, filters: [], prevQuery: get(actualQueryAtom), returnTo: sel && !sel.archiveRow ? rowTargets(sel) : [], quickAdd, pins: [],
+                mode: target.kind === "today" ? "edit" : target.mode})
+            set(paneAtom, {size: "normal", closedKey: null})
+        }
+        set(closeActionPanelAtom)
+        set(searchVisibleAtom, true)
+        setQuery(set, "")
+        if (target.kind === "today") set(openNewLineAtom, target.prefill ?? "")
+        else set(focusSearchInputAtom, get(focusSearchInputAtom) + 1)
+        return true
     }
 
-    /** Quick Add (the commands, Alt+N): chip-less patch mode. The input searches; Enter on a page, header or line
-     *  makes it the anchor chip, and text that matches nothing is added to today's daily note. */
-    const startQuickAddAtom = atom(null, (get, set) => {
-        const chain = get(chainAtom)
-        if (chain?.mode === "append" && !set(releaseBodiesAtom, null)) return
-        const prevQuery = chain ? chainPrevQuery(chain) : get(actualQueryAtom)
-        set(chainAtom, {mode: "append", steps: [], quickAdd: {prevQuery}})
-        setQuery(set, "")
-        set(searchVisibleAtom, true)
+    /** Opens the outline editor (Search modal and pane only; not during a reparent): on the search, on Today, on a
+     *  row's full tree (default: the selected row) or on a note or heading link (`Name`, `Name#Heading`). A row's
+     *  crumbs follow its hierarchy (patchPath); inside the outline editor they are added after the current ones. A link
+     *  opens the row showing that note or heading when there is one, else its own crumbs (`Note`, or `Note › Heading`)
+     *  replace the path. False when it doesn't apply (no such row, a link to a file that isn't a note or to no note):
+     *  the caller then opens it in Obsidian. */
+    const openOutlineAtom = atom(null, (get, set, target: OutlineTarget): boolean => {
+        if (!scp.allowEditing || get(chainAtom) !== null) return false
+        if (target.kind === "search") return showOutline(get, set, [], target)
+        if (target.kind === "today") return showOutline(get, set, [{kind: "today"}], target)
+        const graph = get(GlobalAtoms.graphAtom)
+        const daily = dailyNameOf(get)
+        const rows = get(renderableTreeNodesAtom)
+        let pos: number
+        if (target.kind === "link") {
+            const [page, heading] = target.link.split("#").map(s => s.trim())
+            const file = get(GlobalAtoms.appAtom).metadataCache.getFirstLinkpathDest(page, "")
+            if (!page || (file ? file.extension !== "md" : /\.(?!md$)[a-z0-9]+$/i.test(page))) return false
+            // The note or heading shown as a row (the selected one first): opened as that row.
+            const sel = get(selectedNodeAtom)
+            pos = sel && !sel.archiveRow && linksTo(sel.node, page, heading)
+                ? rows.findIndex(r => r.index === sel.index)
+                : rows.findIndex(r => !r.archiveRow && linksTo(r.node, page, heading))
+            if (pos < 0) {
+                const crumbs = linkCrumbs(graph, page, heading, daily)
+                return crumbs !== null && showOutline(get, set, crumbs, target)
+            }
+        } else {
+            const row = target.row ?? get(selectedNodeAtom)
+            if (!row || row.archiveRow || !isPatchable(row.node)) return false
+            pos = rows.findIndex(r => r.index === row.index)
+            if (pos < 0) return false
+        }
+        const o = get(outlineAtom)
+        const added = patchPath(graph, rows, pos, o !== null).map(n => rootFor(n, daily))
+        return showOutline(get, set, extendPath(o?.path ?? [], added, daily), target)
+    })
+
+    /** The New line row's editor, filled with `prefill` (an item such as chainPrefill's; its bullet and checkbox are
+     *  the prefix). A changed line editor refuses it once. */
+    const openNewLineAtom = atom(null, (get, set, prefill: string = "") => {
+        if (get(lineEditAtom) && !set(releaseOutlineAtom, "line")) return
+        const m = /^- (\[.\] )?/.exec(prefill)
+        const prefix = m ? m[0] : "- "
+        const text = m ? prefill.slice(m[0].length) : prefill
+        set(lineEditAtom, {id: nextLineEditId(), row: null, prefix, text, initial: text, caret: text.length, attachments: [], saving: false})
+    })
+
+    /** The row a plain-search Add to explores first: the selected page, heading or line; null for none. */
+    const addToRow = (get: Getter): TreeNode | null => {
+        const sel = get(selectedNodeAtom)
+        return sel && !sel.archiveRow && isPatchable(sel.node) ? sel : null
+    }
+
+    /** The Add to row's (and the action panel's Add to) label: in the outline editor `Add to <root>`; in the plain
+     *  search `Add to <selected row>`, or `Add to Today` with nothing selected (the search root writes there). */
+    const addToLabelAtom = atom(get => {
+        const o = get(outlineAtom)
+        if (o) return newLineLabel(o)
+        const row = addToRow(get)
+        return `Add to ${row ? rowLabel(row.node) : TODAY_LABEL}`
+    })
+
+    /** Add to: the line editor on a new line at the end of the view. Outside the outline editor it first explores the
+     *  selected row, or with nothing selected opens the outline on the search (its new lines go to today's note). */
+    const openAddToAtom = atom(null, (get, set) => {
+        if (get(outlineAtom) === null) {
+            const row = addToRow(get)
+            if (!set(openOutlineAtom, row ? {kind: "row", row, mode: "explore"} : {kind: "search", mode: "explore"})) return
+        }
+        set(openNewLineAtom)
+    })
+
+    /** The line editor's edit (its field, caret, pasted files); an edit disarms a refused discard. */
+    const updateLineEditAtom = atom(null, (get, set, fn: (e: LineEdit) => LineEdit) => {
+        const cur = get(lineEditAtom)
+        if (!cur) return
+        const next = fn(cur)
+        if (next.text !== cur.text) set(discardArmedAtom, false)
+        set(lineEditAtom, next)
+    })
+
+    /** Leaves the outline editor (unless unsaved edits refuse it): back to the query typed before it, with the row then
+     *  selected. */
+    const exitOutlineAtom = atom(null, (get, set) => {
+        const o = get(outlineAtom)
+        if (!o || !set(releaseOutlineAtom, "all")) return
+        set(outlineAtom, null)
+        if (o.returnTo.length > 0) set(GlobalAtoms.pendingSelectAtom, {view: scp.name, targets: o.returnTo, flash: false})
+        setQuery(set, o.prevQuery)
         set(focusSearchInputAtom, get(focusSearchInputAtom) + 1)
+    })
+
+    /** Backspace in an empty input: drops the last crumb (a filter crumb's text returns to the input; a path crumb
+     *  moves the root up); with none left, leaves the outline editor. */
+    const popCrumbAtom = atom(null, (get, set) => {
+        const o = get(outlineAtom)
+        if (!o) return
+        if (o.filters.length > 0) {
+            set(outlineAtom, {...o, filters: o.filters.slice(0, -1)})
+            setQuery(set, o.filters[o.filters.length - 1])
+            return
+        }
+        if (o.path.length === 0) {
+            set(exitOutlineAtom)
+            return
+        }
+        if (!set(releaseOutlineAtom, "all")) return
+        set(outlineAtom, {...o, path: o.path.slice(0, -1)})
+        set(paneAtom, {...get(paneAtom), closedKey: null})
+    })
+
+    /** A click on path crumb `i`: makes it the root, dropping the later crumbs and every filter crumb. */
+    const openCrumbAtom = atom(null, (get, set, i: number) => {
+        const o = get(outlineAtom)
+        if (!o || i < 0 || i >= o.path.length) return
+        const rootChanges = i < o.path.length - 1
+        if (rootChanges && !set(releaseOutlineAtom, "all")) return
+        set(outlineAtom, {...o, path: o.path.slice(0, i + 1), filters: []})
+        if (rootChanges) set(paneAtom, {...get(paneAtom), closedKey: null})
+        set(focusSearchInputAtom, get(focusSearchInputAtom) + 1)
+    })
+
+    /** A click on filter crumb `i`: drops the crumbs after it. */
+    const openFilterCrumbAtom = atom(null, (get, set, i: number) => {
+        const o = get(outlineAtom)
+        if (!o || i < 0 || i >= o.filters.length) return
+        set(outlineAtom, {...o, filters: o.filters.slice(0, i + 1)})
+        set(focusSearchInputAtom, get(focusSearchInputAtom) + 1)
+    })
+
+    /** Enter with text in the input: the text becomes a filter crumb and the first row is selected. */
+    const addFilterAtom = atom(null, (get, set) => {
+        const o = get(outlineAtom)
+        const q = get(actualQueryAtom).trim()
+        if (!o || !q) return
+        set(selectFirstOnceAtom, true)
+        set(outlineAtom, {...o, filters: [...o.filters, q]})
+        setQuery(set, "")
+    })
+
+    /** Enter on a page row with no line of its own (a note's own row): shows that note in the content pane. */
+    const openRowPaneAtom = atom(null, (get, set, node: ParsedNode) => {
+        set(paneRowAtom, node)
+        const pane = get(paneAtom)
+        set(paneAtom, {size: pane.size === "collapsed" ? "normal" : pane.size, closedKey: null})
     })
 
     /** The selected row when Move under can take it (a folder note row stands for its folder); else null, with a
@@ -869,14 +1056,15 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     /** Move under (`<`, Alt+M, action panel): the selected row becomes the one to move; the query then searches its new
      *  parent (a page, header, line or folder, by the row's type). */
     const startReparentAtom = atom(null, (get, set) => {
+        if (get(outlineAtom)) return
         const child = movableSelectedRef(get)
         if (child) beginReparent(get, set, [child], get(actualQueryAtom))
     })
 
-    /** ⌘X / the panel's Cut: adds the selected row to the cut drawer, or takes it out when it is there; ignored while a
-     *  chain is active. The selection stays. */
+    /** ⌘X / the panel's Cut: adds the selected row to the cut drawer, or takes it out when it is there; ignored during
+     *  a reparent and in the outline editor. The selection stays. */
     const toggleCutAtom = atom(null, (get, set) => {
-        if (get(chainAtom)) return
+        if (get(chainAtom) || get(outlineAtom)) return
         const ref = movableSelectedRef(get)
         if (ref) set(GlobalAtoms.cutDrawerAtom, toggleCut(get(GlobalAtoms.cutDrawerAtom), ref))
     })
@@ -885,15 +1073,8 @@ export const SearchViewMolecule = molecule((mol, scope) => {
      *  (reparentChainAtom). */
     const startDrawerMoveAtom = atom(null, (get, set) => {
         const items = get(GlobalAtoms.cutDrawerAtom)
-        if (items.length === 0) return
-        const chain = get(chainAtom)
-        beginReparent(get, set, [...items], chain ? chainPrevQuery(chain) : get(actualQueryAtom))
-    })
-
-    const clearChainAtom = atom(null, (get, set): boolean => {
-        if (get(chainAtom)?.mode === "append" && !set(releaseBodiesAtom, null)) return false
-        set(chainAtom, null)
-        return true
+        if (items.length === 0 || get(outlineAtom)) return
+        beginReparent(get, set, [...items], get(chainAtom)?.prevQuery ?? get(actualQueryAtom))
     })
 
     // ── The editor shown in place (Search modal / pane) ─────────────────────
@@ -903,7 +1084,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     const editorOpenAtom = atom(get => scp.allowEditing && get(GlobalAtoms.editorHostAtom) === scp.name)
     /** The Search modal's title (searchModalTitle); null in the other views. */
     const searchModalTitleAtom = atom(get => scp.isModal && scp.allowEditing
-        ? searchModalTitle(get(editorOpenAtom) ? get(GlobalAtoms.editSessionAtom) : null, get(chainAtom))
+        ? searchModalTitle(get(editorOpenAtom) ? get(GlobalAtoms.editSessionAtom) : null, get(outlineAtom))
         : null)
 
     /** Switches this view to the editor, remembering the query and selected row to return to. A prose or Alt-Edit
@@ -955,7 +1136,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             decExpandAtom,
             incExpandAtom,
             resetCollapseAtom,
-            selectedNodeAtom, enterRowAtom, selectEnterRowAtom,
+            selectedNodeAtom, enterRowAtom, selectEnterRowAtom, newLineSelectedAtom, newLineShownAtom, addToLabelAtom, openAddToAtom,
             searchPlaceholderAtom,
             setDefaultExpandLevelAtom,
             expandNodeAtom, selectedLineAtom, updateHoveredLineAtom, hoveredLineAtom,
@@ -970,10 +1151,12 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             allowTimeline: scp.allowTimeline,
             allowEditing: scp.allowEditing,
             flashLineAtom,
-            chainAtom, chainWriteAtom, chainPatchRowAtom, refreshChainResultsAtom, popChainAtom, cancelChainAtom, startReparentAtom, clearChainAtom,
-            chainBodiesAtom, bodyDiscardArmedAtom, chainBodyPathAtom, loadChainBodyAtom, setChainBodyTextAtom, releaseBodiesAtom,
+            chainAtom, refreshChainResultsAtom, cancelChainAtom, startReparentAtom,
             toggleCutAtom, startDrawerMoveAtom,
-            startQuickAddAtom,
+            outlineAtom, lineEditAtom, outlineBodiesAtom, bodyAttachmentsAtom, discardArmedAtom, paneAtom, paneRowAtom,
+            paneRefAtom, loadBodyAtom, setBodyTextAtom, releaseOutlineAtom, outlineDirtyAtom, discardBodiesAtom, outlineFilterStagesAtom,
+            refreshOutlineResultsAtom, openOutlineAtom, openNewLineAtom, exitOutlineAtom, popCrumbAtom, openCrumbAtom,
+            openFilterCrumbAtom, addFilterAtom, openRowPaneAtom, updateLineEditAtom,
             editorOpenAtom, enterEditorAtom, leaveEditorAtom, searchModalTitleAtom,
     }
 })

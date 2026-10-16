@@ -5,7 +5,7 @@ import {useAtom, useAtomValue, useSetAtom} from "jotai";
 import {useMolecule} from "bunshi/react";
 import {Platform, Scope} from "obsidian";
 import {
-    Archive, ArrowRightLeft, BookmarkPlus, BookmarkX, CalendarArrowUp, CalendarClock, CalendarX, ChevronLeft, ChevronRight, ChevronsDownUp,
+    Archive, ArrowRightLeft, BookmarkPlus, BookmarkX, CalendarArrowUp, CalendarClock, CalendarX, ChevronLeft, ChevronsDownUp,
     ChevronsUpDown, CirclePlus, Combine, Copy, CornerDownRight, ExternalLink, FileSearch, ListTree, ListX, Pencil,
     RefreshCw, Scissors, SquareCheck, SquarePen, TextCursorInput, Trash2,
     type LucideIcon,
@@ -28,12 +28,13 @@ const ICONS: Record<PanelIcon, LucideIcon> = {
     link: ExternalLink, reveal: FileSearch, copy: Copy, insert: CornerDownRight,
     archive: Archive, consolidate: Combine, done: SquareCheck, schedule: CalendarArrowUp, unschedule: CalendarX, append: CirclePlus, edit: Pencil,
     moveUnder: ArrowRightLeft, cut: Scissors, quickAdd: SquarePen, tree: ListTree, timeline: CalendarClock, expand: ChevronsUpDown,
-    collapse: ChevronsDownUp, refresh: RefreshCw, patch: ChevronRight, rename: TextCursorInput, delete: Trash2,
+    collapse: ChevronsDownUp, refresh: RefreshCw, rename: TextCursorInput, delete: Trash2,
     saveFilter: BookmarkPlus, deleteFilter: BookmarkX, clearDrawer: ListX,
 }
 
-/** Panel items that open the inline editor, which takes focus; after any other item focus returns to the search. */
-const OPENS_EDITOR: Partial<Record<ShortcutId, true>> = {append: true, edit: true}
+/** Panel items that open an editor (the inline editor, the outline editor's line editor or search), which takes focus;
+ *  after any other item focus returns to the search. */
+const OPENS_EDITOR: Partial<Record<ShortcutId, true>> = {append: true, edit: true, quickAdd: true}
 
 /** Keycaps for a key (hidden on mobile, which has no keyboard shortcuts). */
 export const Keycaps = ({k}: {k?: KeySpec}) => {
@@ -59,10 +60,11 @@ export const ActionPanel = ({dockRef}: {dockRef: React.RefObject<HTMLDivElement 
 const PanelBody = ({page, dockRef}: {page: ActionPanelPage; dockRef: React.RefObject<HTMLDivElement | null>}) => {
     const {
         renderableTreeNodesAtom, selectedLineAtom, timelineActiveAtom, actualQueryAtom, focusSearchInputAtom,
-        openActionPanelAtom, closeActionPanelAtom, chainAtom, searchVisibleAtom, allowEditing, allowTimeline, startDrawerMoveAtom,
+        openActionPanelAtom, closeActionPanelAtom, chainAtom, outlineAtom, allowEditing, allowTimeline, startDrawerMoveAtom,
+        newLineShownAtom, addToLabelAtom, openAddToAtom,
     } = useMolecule(SearchViewMolecule)
     const {selectedTreeNodeActionsAtom, executeActionAtom} = useMolecule(ActionsMolecule)
-    const {ownPathAtom, editTaskAtom, pushChainAtom, openRenameFileAtom, openSaveFilterAtom, openRenameFilterAtom, deleteRowAtom, archiveDrawerAtom} = useMolecule(EditorMolecule)
+    const {ownPathAtom, editTaskAtom, openRenameFileAtom, openSaveFilterAtom, openRenameFilterAtom, deleteRowAtom, archiveDrawerAtom} = useMolecule(EditorMolecule)
     const app = useAtomValue(GlobalAtoms.appAtom)
     const rows = useAtomValue(renderableTreeNodesAtom)
     const selectedLine = useAtomValue(selectedLineAtom)
@@ -71,13 +73,15 @@ const PanelBody = ({page, dockRef}: {page: ActionPanelPage; dockRef: React.RefOb
     const rowActions = useAtomValue(selectedTreeNodeActionsAtom)
     const ownPath = useAtomValue(ownPathAtom)
     const chain = useAtomValue(chainAtom)
+    const outline = useAtomValue(outlineAtom) !== null
     const focusSearch = useSetAtom(focusSearchInputAtom)
-    const setSearchVisible = useSetAtom(searchVisibleAtom)
     const openPanel = useSetAtom(openActionPanelAtom)
     const closePanel = useSetAtom(closeActionPanelAtom)
     const executeAction = useSetAtom(executeActionAtom)
+    const addToShown = useAtomValue(newLineShownAtom)
+    const addToLabel = useAtomValue(addToLabelAtom)
+    const openAddTo = useSetAtom(openAddToAtom)
     const editTask = useSetAtom(editTaskAtom)
-    const pushChain = useSetAtom(pushChainAtom)
     const openRenameFile = useSetAtom(openRenameFileAtom)
     const deleteRow = useSetAtom(deleteRowAtom)
     const openSaveFilter = useSetAtom(openSaveFilterAtom)
@@ -113,26 +117,22 @@ const PanelBody = ({page, dockRef}: {page: ActionPanelPage; dockRef: React.RefOb
         }
         const items = panelItems({
             rowActions, rows, selectedPos, allowEditing, allowTimeline, timelineActive, ownPath,
-            chainMode: chain?.mode ?? null, query: actualQuery, filters,
+            chainMode: chain?.mode ?? null, outline, query: actualQuery, filters,
             rowCut: selectedRow ? cutKeys.has(cutKeyOf(selectedRow.node)) : false, drawerCount: drawer.length,
+            addTo: addToShown ? addToLabel : null,
             resolveLink: (linkpath, sourcePath) => app?.metadataCache.getFirstLinkpathDest(linkpath, sourcePath)?.path ?? null,
         })
         const runItem = (item: PanelItem) => {
             if (item.run.kind === "delete") { setFilter(""); openPanel("confirmDelete"); return }
-            if (item.run.kind === "patch") {
-                setSearchVisible(true)
-                close(true)
-                void pushChain()
-                return
-            }
             // Actions that open the inline editor leave focus to it; everything else returns to the search.
-            close(!(item.run.kind === "renameFile" || item.run.kind === "saveFilter" || item.run.kind === "renameFilter" || item.run.kind === "shortcut" && OPENS_EDITOR[item.run.id]))
+            close(!(item.run.kind === "renameFile" || item.run.kind === "saveFilter" || item.run.kind === "renameFilter" || item.run.kind === "addTo" || item.run.kind === "shortcut" && OPENS_EDITOR[item.run.id]))
             if (item.run.kind === "action") void executeAction(item.run.action, item.run.inObsidian ?? false)
             else if (item.run.kind === "task") { if (selectedRow) void editTask(selectedRow.node, item.run.change) }
             else if (item.run.kind === "renameFile") openRenameFile(item.run.path)
             else if (item.run.kind === "saveFilter") openSaveFilter(actualQuery.trim())
             else if (item.run.kind === "renameFilter") { const name = item.run.name; const f = filters.find(f => f.name === name); if (f) openRenameFilter(f) }
             else if (item.run.kind === "deleteFilter") { const name = item.run.name; setFilters(filters.filter(f => f.name !== name)) }
+            else if (item.run.kind === "addTo") openAddTo()
             else if (item.run.kind === "drawer") {
                 if (item.run.op === "move") startDrawerMove()
                 else if (item.run.op === "archive") void archiveDrawer()

@@ -13,9 +13,13 @@ const ACTIONS_ONLY = SHORTCUTS.filter(s => s.id === "actions")
 const hasTextSelection = (t: EventTarget) =>
     (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) && t.selectionStart !== t.selectionEnd
 
+/** The inline editor, the outline editor's line editor and its content pane own their keys. */
+const OWN_KEYS = ".ts-inline-editor, .ts-line-editor, .ts-note-body"
+
 // Dispatches the search view's keyboard shortcuts (./shortcuts.ts) for keys that bubble up
 // from the search input, the results list and the action panel's filter. While the view
-// shows the inline editor, none of them fire: the editor owns every key.
+// shows the inline editor, none of them fire: the editor owns every key; nor do keys typed in
+// the outline editor's line editor or content pane.
 export const KeyComboWrapper = ({children}: { children: React.ReactNode }) => {
     const {allowEditing, allowTimeline, closeActionPanelAtom, toggleActionPanelAtom, editorOpenAtom} = useMolecule(SearchViewMolecule)
     const closeActionPanel = useSetAtom(closeActionPanelAtom)
@@ -31,7 +35,7 @@ export const KeyComboWrapper = ({children}: { children: React.ReactNode }) => {
     useEffect(() => {
         const onKey = (ev: KeyboardEvent) => {
             const target = ev.target as HTMLElement | null
-            if (!target || !rootRef.current?.contains(target) || target.closest(".ts-inline-editor")) return
+            if (!target || !rootRef.current?.contains(target) || target.closest(OWN_KEYS)) return
             if (matchShortcut(ev, ACTIONS_ONLY, Platform.isMacOS) === null) return
             ev.preventDefault()
             ev.stopImmediatePropagation()
@@ -42,7 +46,7 @@ export const KeyComboWrapper = ({children}: { children: React.ReactNode }) => {
     }, [])
 
     const handleKeyDown = async (event: React.KeyboardEvent<HTMLDivElement>) => {
-        if (editorOpen) return
+        if (editorOpen || (event.target as Element).closest(OWN_KEYS)) return
         const hit = matchShortcut(event, available, Platform.isMacOS)
         if (!hit) return
         if (hit.shortcut.id === "cut" && hasTextSelection(event.target)) return

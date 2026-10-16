@@ -29,6 +29,7 @@ import {
     stampNewOutlineLines,
     StaleLineError,
     type EditorHint,
+    type OutlineLine,
     type ParsedNode,
 } from "@mdtree/core"
 import {SearchViewMolecule, SearchViewScope} from "../react-context/state"
@@ -38,8 +39,7 @@ import {renamedFileTarget, rowTargets, type RowTarget} from "../search/select-ta
 import {appendDraftAtom, searchFiltersAtom, separatorAtom, settingsAtom, type SearchFilter} from "../react-context/settings"
 import type {TreeNode} from "../search/SearchViewFlatten"
 import {filterNameHints, normalizeFilterName, renameFilter, renameFilterRefs, saveFilter} from "../search/search-filter"
-import {basenameOf, dailyConfigOf, emptySession, fileRenameState, proseNameFrom, renameFilterState, saveFilterState} from "./draft"
-import type {PasteData} from "./textarea-ops"
+import {basenameOf, dailyConfigOf, emptySession, fileRenameState, renameFilterState, saveFilterState} from "./draft"
 import {
     appendToDailyNote,
     appendUnderLine,
@@ -48,7 +48,7 @@ import {
     dailyNotePath,
     deleteHeadingSection,
     deleteSubtree,
-    editLine,
+    editOutlineLines,
     editTaskLine,
     newNotePath,
     readLine,
@@ -59,64 +59,45 @@ import {
     writeNoteContents,
     writeWholeNote,
     writeNoteBody,
+    writeHeadingBody,
     type EditorAttachment,
     type ReparentPlan,
     type TaskChange,
 } from "../../editing/vault-edits"
 import {archiveLine, archivePage} from "../../obsidian-utils"
 import type {DailyNoteConfig} from "../../indexing/indexed-tree"
-import {appendTargetAt, classifyReparent, deleteTargetOf, isEditableRow, treeParentPos, type OwnPath} from "./row-editing"
+import {appendTargetAt, classifyReparent, deleteTargetOf, treeParentPos, type OwnPath} from "./row-editing"
 import {
-    chainEditorText,
-    chainOutline,
     chainPrefill,
-    chainPrevQuery,
-    dirtyBodyPaths,
-    isEntryInput,
+    dirtyBodyKeys,
     isPatchable,
-    parseChainEntry,
     planReparent,
-    rowLabel,
-    type ChainAnchor,
-    type ChainStep,
     type NewPageTarget,
     type RowRef,
 } from "../search/chain"
+import {fieldLines, newLineTarget, nextLineEditId, rootOf, shiftPins, type LineEdit, type OutlineMode} from "../search/outline"
 import {bulkNotice, currentNode, cutCarriers, cutKeyOf, removeCut, type CutFailure} from "../search/cut-drawer"
-import {appendPickFor, type AppendPick} from "./append-target"
 
-/** What a prose session writes: a whole existing note (`original` null: a note Save creates), or a new note whose
- *  link Save appends to the line it was started from. */
-export type ProseTarget =
-    | {kind: "note"; path: string; original: string | null}
-    | {kind: "new"; name: string; link: {path: string; line: number; expectedLine: string}}
+/** What a prose session writes: a whole existing note (`original` null: a note Save creates). */
+export type ProseTarget = {kind: "note"; path: string; original: string | null}
 
-/** What a prose session opens on: a whole note (`noteName` null: today's daily note), or a new note to link from
- *  `line` (an Append target's picked line). `text`: initial text (a chain's prose paste), appended to an existing
- *  note, else the whole buffer. */
-export type ProseRequest = {kind: "note"; noteName: string | null; text?: string} | {kind: "line"; line: UnderLine; text?: string}
-
-/** Append target below a picked line (Search's `>` on a text row): Save writes the outline as that line's last
- *  children in its own file, every line stamped. */
-export type UnderLine = {path: string; line: number; expectedLine: string; label: string}
+/** What a prose session opens on: a whole note (`noteName` null: today's daily note). `text`: initial text (a
+ *  chain's prose paste), appended to an existing note, else the whole buffer. */
+export type ProseRequest = {kind: "note"; noteName: string | null; text?: string}
 
 export type EditorState = {
     sessionId: number
     mode: "append" | "edit" | "prose"
     parentName?: string
-    /** Append: today's daily note path; Edit: the row's file (Rename of a file: that file). */
+    /** Append: today's daily note path; Rename of a file: that file. */
     sourcePath: string
-    line?: number
-    /** Edit: the line as read from the file; Rename of a file: its current name; Rename Filter: the filter's name. */
+    /** Rename of a file: its current name; Rename Filter: the filter's name. */
     originalLine?: string
-    linePrefix?: string
-    /** Edit: a list line or a heading (Rename); "file": Rename of an attachment, the outline holds its name without extension;
-     *  "filter": Save as Filter (or, with `originalLine`, Rename Filter), the outline holds the filter's name. */
-    editKind?: "list" | "heading" | "file" | "filter"
+    /** "file": Rename of an attachment, the outline holds its name without extension; "filter": Save as Filter (or,
+     *  with `originalLine`, Rename Filter), the outline holds the filter's name. */
+    editKind?: "file" | "filter"
     /** Save as Filter: the query the filter saves (Rename Filter: the filter's query, kept). */
     filterQuery?: string
-    /** Alt-Edit of a nested line (TextNode.nested): no default schedule. */
-    nested?: boolean
     outline: string
     contents: Record<string, string>
     contentOrder: string[]
@@ -127,8 +108,6 @@ export type EditorState = {
     saving: boolean
     /** Outline caret, kept so a reopened draft and Search picks resume where the user was. */
     caret: number
-    /** Append under a picked line instead of today's daily note. */
-    underLine?: UnderLine
     /** Prose mode (the whole-note editor Alt+Enter opens): what Save writes. */
     prose?: ProseTarget
     /** Prose mode: a first Save confirmed changes to the note's outline or frontmatter. */
@@ -161,30 +140,39 @@ export function editorHintsFor(app: App, s: EditorState, filters: readonly Searc
     const dry = resolveAttachmentEmbeds({[OUTLINE_KEY]: s.outline, ...s.contents}, s.attachments, exists)
     return editorHints({
         mode: s.mode,
-        editKind: s.editKind,
-        linePrefix: s.linePrefix,
         parentName: s.mode === "append" ? s.parentName ?? "" : basenameOf(s.sourcePath),
         outline: s.outline,
         contents: s.contents,
         contentOrder: s.contentOrder,
         noteExists: exists,
         attachmentError: dry.error,
-        proseNewName: s.prose?.kind === "new" ? s.prose.name : undefined,
         proseOutlineChanged: proseChangesOutline(s),
         proseConfirmed: s.proseConfirmed,
-        patches: s.mode === "append" ? planOutlinePatches(parseOutline(s.outline).lines, {dropPatchOnlyRoots: !s.underLine}).patches : undefined,
+        patches: s.mode === "append" ? planOutlinePatches(parseOutline(s.outline).lines, {dropPatchOnlyRoots: true}).patches : undefined,
+    })
+}
+
+/** Hints under the outline editor's line editor; blocking hints refuse its save. An edited row is checked as a line
+ *  edit (a list line or a heading), the New line as an Append outline. */
+export function lineEditHints(app: App, edit: LineEdit): EditorHint[] {
+    const exists = (name: string) => !!app.metadataCache.getFirstLinkpathDest(name, "")
+    const dry = resolveAttachmentEmbeds({[OUTLINE_KEY]: edit.text}, edit.attachments, exists)
+    return editorHints({
+        mode: edit.row ? "edit" : "append",
+        editKind: edit.row?.heading ? "heading" : "list",
+        linePrefix: edit.prefix,
+        parentName: edit.row ? basenameOf(edit.row.path) : "",
+        outline: edit.row ? edit.text : edit.prefix.trimStart() + edit.text,
+        contents: {},
+        contentOrder: [],
+        noteExists: exists,
+        attachmentError: dry.error,
     })
 }
 
 /** A prose session over an existing note whose buffer changes the note's frontmatter or leading outline. */
 function proseChangesOutline(s: EditorState): boolean {
     return s.prose?.kind === "note" && s.prose.original !== null && outlineChanged(s.prose.original, s.outline)
-}
-
-/** `line` with ` [[name]]` added before a trailing ` ^blockid`, else at the end. */
-export function withTrailingLink(line: string, name: string): string {
-    const m = line.match(/^(.*?)(\s+\^[\w-]+)?\s*$/)!
-    return `${m[1]} [[${name}]]${m[2] ?? ""}`
 }
 
 const isRowLine = (head: string | null, node: ParsedNode): head is string =>
@@ -215,13 +203,13 @@ export function isSaveBlocked(app: App, s: EditorState, filters: readonly Search
     return editorHintsFor(app, s, filters).some(h => h.blocking) || (s.mode === "append" && appendOutlineEmpty(s.outline, s.parentName))
 }
 
-/** The Append outline steps of a Save: note patches (`patch:<name>`), then the outline (daily note, or under a line).
+/** The Append outline steps of a Save: note patches (`patch:<name>`), then the outline (today's daily note).
  *  Resumable through doneSteps. Returns the first appended line, if any. */
 export async function runAppendSteps(
     app: App, cfg: DailyNoteConfig, today: string, cur: () => EditorState, commit: (patch: Partial<EditorState>) => void,
 ): Promise<{path: string; line: number} | null> {
     const s0 = cur()
-    const {lines, patches} = planOutlinePatches(parseOutline(s0.outline).lines, {dropPatchOnlyRoots: !s0.underLine})
+    const {lines, patches} = planOutlinePatches(parseOutline(s0.outline).lines, {dropPatchOnlyRoots: true})
     for (const p of patches) {
         const step = `patch:${p.name.toLowerCase()}`
         if (cur().doneSteps.includes(step)) continue
@@ -229,23 +217,16 @@ export async function runAppendSteps(
         commit({touchedPaths: [...cur().touchedPaths, file.path], doneSteps: [...cur().doneSteps, step]})
     }
     if (cur().doneSteps.includes("outline") || lines.length === 0) return null
-    if (s0.underLine) {
-        const {path, line, expectedLine} = s0.underLine
-        const r = await appendUnderLine(app, path, line, expectedLine, renderOutline(lines, 0).map(l => stampAppendedLine(l, today)))
-        commit({touchedPaths: [...cur().touchedPaths, path], doneSteps: [...cur().doneSteps, "outline"]})
-        return {path, line: r.line}
-    }
     const outline = parseOutline(stampNewOutlineLines(renderOutline(lines, 0), today).join("\n")).lines
     const {file, line} = await appendToDailyNote(app, outline, cfg)
     commit({touchedPaths: [...cur().touchedPaths, file.path], doneSteps: [...cur().doneSteps, "outline"]})
     return line === null ? null : {path: file.path, line}
 }
 
-/** Rows to select after an Append Save: the appended line, the line it went under, then the parent note. */
+/** Rows to select after an Append Save: the appended line, then the parent note. */
 export function appendTargets(s: EditorState, appended: {path: string; line: number} | null): RowTarget[] {
     return [
         ...(appended ? [appended] : []),
-        ...(s.underLine ? [{path: s.underLine.path, line: s.underLine.line}] : []),
         ...(s.parentName ? [{key: `[[${s.parentName.toLowerCase()}]]`}] : []),
     ]
 }
@@ -315,36 +296,57 @@ export const EditorMolecule = molecule((mol, scope) => {
     /** Appends under `parentName`: the draft if it already targets it, else a fresh draft prefilled under it. */
     const openAppendAtom = atom(null, (_get, set, parentName: string) => set(showEditorAtom, {kind: "link", name: parentName}))
 
-    const openEditAtom = atom(null, async (get, set, row: TreeNode) => {
-        const app = get(GlobalAtoms.appAtom)
+    /** Opens the outline editor's line editor on `row`: a line, a link line (`- [[Note]]`) or a heading. A note's own
+     *  row (no line of its own) shows its content pane instead; an attachment opens its Rename. The line must still
+     *  hold the row (else the out-of-date Notice); a changed line editor refuses it once. */
+    const editRowAtom = atom(null, async (get, set, row: TreeNode) => {
+        if (row.archiveRow) return
         const node = row.node
         if (node.nodeType === "attachment") {
             set(showEditorAtom, {kind: "session", state: fileRenameState(node.location.path, node.name)})
             return
         }
+        if (!isPatchable(node)) return
+        if (node.nodeType === "page" && get(ownPathAtom)(node) === node.location.path) {
+            set(view.openRowPaneAtom, node)
+            return
+        }
+        if (get(view.lineEditAtom) && !set(view.releaseOutlineAtom, "line")) return
+        const app = get(GlobalAtoms.appAtom)
         const path = node.location.path
         const line = node.location.position.start.line
         const text = await readLine(app, path, line)
         const isList = text !== null && LIST_ITEM_RE.test(text)
-        const split = text !== null && (isList || HEADER_RE.test(text)) && lineHasIdentity(text, row.node)
+        const split = text !== null && (isList || HEADER_RE.test(text)) && lineHasIdentity(text, node)
             ? splitEditableLine(text)
             : null
         if (text === null || !split) {
             await markOutOfDate(app, get(GlobalAtoms.indexAtom), path)
             return
         }
-        set(showEditorAtom, {kind: "session", state: {
-            ...emptySession(),
-            mode: "edit",
-            sourcePath: path,
-            line,
-            originalLine: text,
-            linePrefix: split.prefix,
-            editKind: isList ? "list" : "heading",
-            outline: split.text,
-            nested: node.nodeType === "text" && node.nested === true,
+        set(view.lineEditAtom, {
+            id: nextLineEditId(),
+            row: {node, path, line, expectedLine: text, heading: !isList, nested: node.nodeType === "text" && node.nested === true},
+            prefix: split.prefix,
+            text: split.text,
+            initial: split.text,
             caret: split.text.length,
-        }})
+            attachments: [],
+            saving: false,
+        })
+    })
+
+    /** Alt+Enter, Alt+click, the panel's Edit, Enter on a plain line (rowIntent): the line editor on `row` (default:
+     *  in the outline editor the row Enter acts on, elsewhere the selected row), in place. Outside the outline editor
+     *  it first opens the outline on the search (in `mode`), which lists the same rows; with nothing selected that
+     *  is all it does. An attachment opens its Rename. */
+    const editAtom = atom(null, async (get, set, row?: TreeNode, mode: OutlineMode = "edit") => {
+        const inOutline = get(view.outlineAtom) !== null
+        const target = row ?? (inOutline ? get(view.enterRowAtom) : get(view.selectedNodeAtom))
+        if (target?.archiveRow) return
+        if (target && !isPatchable(target.node) && target.node.nodeType !== "attachment") return
+        if (!inOutline && target?.node.nodeType !== "attachment" && !set(view.openOutlineAtom, {kind: "search", mode})) return
+        if (target) await set(editRowAtom, target)
     })
 
     /** Rename of the file at `path` (a note or an embedded file); Save renames it through Obsidian, which updates links. */
@@ -375,235 +377,127 @@ export const EditorMolecule = molecule((mol, scope) => {
         if (target) set(openAppendAtom, target.parentName)
     })
 
-    const openEditForSelectedAtom = atom(null, async (get, set) => {
-        const {rows, pos} = selectedPos(get)
-        if (pos < 0) return
-        if (isEditableRow(rows[pos], get(ownPathAtom), get(view.timelineActiveAtom))) await set(openEditAtom, rows[pos])
-    })
-
-    /** Paste for the editor to apply right after it mounts (the chain's large paste). */
-    const pendingPasteAtom = atom<PasteData | null>(null)
-
-    const dailyNameOf = (get: Getter) => basenameOf(dailyNotePath(dailyConfigOf(get(GlobalAtoms.indexAtom))))
-
-    /** The chip for a selected row or a closed `[[name]]` query (appendPickFor); null (after a notice) when refused. */
-    const anchorStepFor = async (get: Getter, pick: AppendPick, label: string, prevQuery: string): Promise<ChainStep | null> => {
-        const row = (anchor: ChainAnchor, l = label): ChainStep => ({kind: "row", anchor, label: l, prevQuery})
-        switch (pick.kind) {
-            case "refuse":
-                new Notice("Can't add under this row")
-                return null
-            case "draft":
-                return row({kind: "today"}, "Today")
-            case "link": {
-                const hash = pick.name.indexOf("#")
-                return hash < 0
-                    ? row({kind: "note", name: pick.name})
-                    : row({kind: "header", page: pick.name.slice(0, hash), header: pick.name.slice(hash + 1)})
-            }
-            case "line": {
-                const app = get(GlobalAtoms.appAtom)
-                const node = pick.node
-                const path = node.location.path
-                const line = node.location.position.start.line
-                const head = await readLine(app, path, line)
-                if (!isRowLine(head, node)) {
-                    await markOutOfDate(app, get(GlobalAtoms.indexAtom), path)
-                    return null
-                }
-                return row({kind: "line", node, target: {path, line, expectedLine: head, label: rowLabel(node)}})
-            }
-        }
-    }
-
-    /** `>` in the search input: the selected row becomes the chain's anchor chip; with no row selected, a closed
-     *  `[[name]]` query or today does, and today pre-fills the input from the search (`chainPrefill`). Once the chain
-     *  has entries, or the input is one (`[[note]]`, `|alias`, `#heading`, `(key:: value)`, `- item`), the typed text
-     *  becomes an entry chip. Nothing is written until Enter. */
-    const pushChainAtom = atom(null, async (get, set) => {
-        const chain = get(view.chainAtom)
-        if (chain?.mode === "reparent") return
-        const dailyName = dailyNameOf(get)
-        const q = get(view.actualQueryAtom)
+    /** `>` in the search input: the outline editor on the selected row (inside it: descends into the row); with
+     *  nothing selected, Today with the New line pre-filled from the search (chainPrefill). */
+    const patchAtom = atom(null, (get, set) => {
         const sel = get(view.selectedNodeAtom)
-        const row = sel && !sel.archiveRow ? sel.node : null
-        const steps = chain?.steps ?? []
-        const hasEntries = steps.some(s => s.kind === "entry")
-        let step: ChainStep | null
-        let prefill = ""
-        if (row && !hasEntries && (chain === null || !isEntryInput(q))) {
-            step = await anchorStepFor(get, appendPickFor(row, "", dailyName), rowLabel(row), q)
-        } else if (chain === null) {
-            const pick = appendPickFor(null, q, dailyName)
-            step = await anchorStepFor(get, pick, pick.kind === "link" ? pick.name : "", q)
-            if (step?.kind === "row" && step.anchor.kind === "today") prefill = chainPrefill(get(view.searchTextAtom), get(separatorAtom), get(settingsAtom).archiveTag)
-        } else {
-            const parsed = parseChainEntry(q)
-            if (parsed === null) return
-            if ("error" in parsed) {
-                new Notice(parsed.error)
-                return
-            }
-            step = {kind: "entry", entry: parsed, label: q.trim(), prevQuery: q}
-            const check = chainOutline([...steps, step], null, dailyName)
-            if ("error" in check) {
-                new Notice(check.error)
-                return
-            }
+        if (sel && !sel.archiveRow) {
+            if (!isPatchable(sel.node)) new Notice("Can't add under this row")
+            else set(view.openOutlineAtom, {kind: "row", row: sel, mode: "edit"})
+            return
         }
-        if (!step) return
-        set(view.chainAtom, {...chain, mode: "append", steps: [...steps, step]})
-        setViewQuery(set, prefill)
-        if (prefill !== "") set(view.focusSearchInputAtom, get(view.focusSearchInputAtom) + 1)
+        set(view.openOutlineAtom, {kind: "today", prefill: chainPrefill(get(view.searchTextAtom), get(separatorAtom), get(settingsAtom).archiveTag)})
     })
 
-    /** Opening a row or a link in the Search modal and pane: its Patch view (the `>` chain anchored at it, with the
-     *  content pane), as a new chain or the next chip of an append chain with only row chips whose input isn't an entry. `link`
-     *  is a note (`Name`) or heading (`Name#Heading`); null opens the selected row (a page, header or line). False when
-     *  it doesn't apply (another view, chain or input, no such row, a link to a file that isn't a note): the caller then
-     *  opens it in Obsidian. */
-    const openPatchViewAtom = atom(null, async (get, set, link: string | null): Promise<boolean> => {
-        if (!scp.allowEditing) return false
-        const chain = get(view.chainAtom)
-        const q = get(view.actualQueryAtom)
-        if (chain !== null && (chain.mode !== "append" || chain.steps.some(s => s.kind === "entry") || isEntryInput(q))) return false
-        const dailyName = dailyNameOf(get)
-        let pick: AppendPick
-        let label: string
-        if (link === null) {
-            const sel = get(view.selectedNodeAtom)
-            if (!sel || sel.archiveRow || !isPatchable(sel.node)) return false
-            pick = appendPickFor(sel.node, "", dailyName)
-            label = rowLabel(sel.node)
-        } else {
-            const page = link.split("#")[0].trim()
-            const file = get(GlobalAtoms.appAtom).metadataCache.getFirstLinkpathDest(page, "")
-            if (!page || (file ? file.extension !== "md" : /\.(?!md$)[a-z0-9]+$/i.test(page))) return false
-            pick = link.toLowerCase() === dailyName.toLowerCase() ? {kind: "draft"} : {kind: "link", name: link}
-            label = link.replace("#", " > ")
-        }
-        const step = await anchorStepFor(get, pick, label, q)
-        if (step) {
-            set(view.chainAtom, {...chain, mode: "append", steps: [...(chain?.steps ?? []), step]})
-            setViewQuery(set, "")
-            set(view.searchVisibleAtom, true)
-        }
-        return true
-    })
+    /** Outline lines with the dates an Append save gives new lines (stampNewOutlineLines). */
+    const stampLines = (lines: OutlineLine[], today: string): OutlineLine[] =>
+        lines.map(l => ({...l, text: stampNewOutlineLines([l.marker + l.text], today)[0].slice(l.marker.length)}))
+    const lineRange = (at: number, count: number) => Array.from({length: count}, (_, i) => at + i)
 
-    let committing = false
-    /** Enter in an append chain: writes the chain through the editor's append Save (note patches, then the outline),
-     *  keeps the anchor chips for the next entry, and selects the written row; and the content pane's unsaved buffers,
-     *  which are written first (a heading patch appends after them); with no pending chain write it writes only the
-     *  buffers. */
-    const commitChainAtom = atom(null, async (get, set) => {
-        if (committing) return
-        const write = get(view.chainWriteAtom)
-        const dirty = dirtyBodyPaths(get(view.chainBodiesAtom))
-        if (write === null && dirty.length === 0) return
-        if (write !== null && "error" in write) {
-            new Notice(write.error)
+    let savingOutline = false
+    /** Mod+Enter in the outline editor, and the line editor's and content pane's Save: writes every changed content
+     *  buffer (their pasted files renamed by alias), then the line editor. An edited row's line is rewritten with the
+     *  added lines (editOutlineLines); the New line is written under the root (newLineTarget). The written lines are
+     *  pinned, the files reindexed and the row flashes. An unchanged line editor just closes. */
+    const saveOutlineAtom = atom(null, async (get, set) => {
+        if (savingOutline) return
+        const edit = get(view.lineEditAtom)
+        const dirty = dirtyBodyKeys(get(view.outlineBodiesAtom))
+        const writesLine = edit !== null && (edit.row ? edit.text !== edit.initial : edit.text.trim() !== "")
+        if (!writesLine && dirty.length === 0) {
+            if (edit) set(view.releaseOutlineAtom, "line")
             return
         }
         const app = get(GlobalAtoms.appAtom)
+        if (edit !== null && writesLine && lineEditHints(app, edit).some(h => h.blocking)) return
         const index = get(GlobalAtoms.indexAtom)
         const cfg = dailyConfigOf(index)
         const today = localIsoDate(new Date())
-        const written: string[] = []
-        let s: EditorState | null = null
-        committing = true
+        const exists = (name: string) => !!app.metadataCache.getFirstLinkpathDest(name, "")
+        const touched: string[] = []
+        savingOutline = true
         try {
-            for (const path of dirty) {
-                const b = get(view.chainBodiesAtom)[path]
-                if (!b || b.text === b.original) continue
-                const saved = b.text
-                written.push((await writeNoteBody(app, path, b.original, saved)).path)
-                const now = get(view.chainBodiesAtom)
-                if (now[path]) set(view.chainBodiesAtom, {...now, [path]: {...now[path], original: saved}})
+            if (dirty.length > 0) {
+                const bodies = get(view.outlineBodiesAtom)
+                let texts: Record<string, string> = Object.fromEntries(dirty.map(k => [k, bodies[k].text]))
+                const attachments = get(view.bodyAttachmentsAtom)
+                if (attachments.length > 0) {
+                    const plan = resolveAttachmentEmbeds(texts, attachments, exists)
+                    if (plan.error) throw new Error("Attachment embeds changed — check the content and save again")
+                    await applyAttachmentPlan(app, attachments, plan)
+                    set(view.bodyAttachmentsAtom, [])
+                    texts = plan.buffers
+                }
+                for (const key of dirty) {
+                    const b = bodies[key]
+                    const saved = texts[key]
+                    const file = b.heading === null
+                        ? await writeNoteBody(app, b.path, b.original, saved)
+                        : await writeHeadingBody(app, b.path, b.heading, b.original, saved)
+                    touched.push(file.path)
+                    const now = get(view.outlineBodiesAtom)
+                    if (now[key]) set(view.outlineBodiesAtom, {...now, [key]: {...now[key], original: saved, text: now[key].text === b.text ? saved : now[key].text}})
+                }
+                set(view.discardArmedAtom, false)
             }
-            set(view.bodyDiscardArmedAtom, false)
-            if (write === null) {
-                await refreshPaths(app, index, written)
-                return
+            if (edit === null || !writesLine) return
+            set(view.lineEditAtom, {...edit, saving: true})
+            let text = edit.text
+            if (edit.attachments.length > 0) {
+                const plan = resolveAttachmentEmbeds({[OUTLINE_KEY]: text}, edit.attachments, exists)
+                if (plan.error) throw new Error("Attachment embeds changed — check the hints and save again")
+                const attachments = await applyAttachmentPlan(app, edit.attachments, plan)
+                text = plan.buffers[OUTLINE_KEY]
+                const cur = get(view.lineEditAtom)
+                if (cur?.id === edit.id) set(view.lineEditAtom, {...cur, text, attachments})
             }
-            s = {
-                ...emptySession(), mode: "append", sourcePath: dailyNotePath(cfg),
-                parentName: write.parentName, underLine: write.underLine,
-                outline: renderOutline(write.lines, 0).join("\n"), caret: 0,
+            const o = get(view.outlineAtom)
+            let pins = o?.pins ?? []
+            let targets: RowTarget[]
+            if (edit.row) {
+                const r = edit.row
+                const {first, extra} = fieldLines(text)
+                const line = edit.prefix + first
+                const {file, inserted} = await editOutlineLines(app, r.path, r.line, r.expectedLine,
+                    r.heading || r.nested ? line : scheduleUnscheduledTasks(line, today), stampLines(extra, today))
+                touched.push(file.path)
+                pins = shiftPins(pins, r.path, inserted, [r.line, ...inserted.flatMap(b => lineRange(b.at, b.count))])
+                targets = [{path: r.path, line: r.line}]
+            } else {
+                const lines = parseOutline(edit.prefix.trimStart() + text).lines
+                const target = newLineTarget(o ? rootOf(o) : null)
+                if (target.kind === "under") {
+                    const node = target.node
+                    const path = node.location.path
+                    const at = node.location.position.start.line
+                    const head = await readLine(app, path, at)
+                    if (!isRowLine(head, node)) throw new StaleLineError()
+                    const r = await appendUnderLine(app, path, at, head, renderOutline(lines, 0).map(l => stampAppendedLine(l, today)))
+                    touched.push(path)
+                    pins = shiftPins(pins, path, [{at: r.line, count: lines.length}], lineRange(r.line, lines.length))
+                    targets = [{path, line: r.line}]
+                } else {
+                    const outline = target.parentName ? [`- [[${target.parentName}]]`, ...renderOutline(lines, 1)] : renderOutline(lines, 0)
+                    let s: EditorState = {...emptySession(), mode: "append", sourcePath: dailyNotePath(cfg), parentName: target.parentName, outline: outline.join("\n"), caret: 0}
+                    const appended = await runAppendSteps(app, cfg, today, () => s, p => { s = {...s, ...p} })
+                    touched.push(...s.touchedPaths)
+                    if (appended) pins = shiftPins(pins, appended.path, [{at: appended.line, count: lines.length}], lineRange(appended.line, lines.length))
+                    targets = appendTargets(s, appended)
+                }
             }
-            const appended = await runAppendSteps(app, cfg, today, () => s!, p => { s = {...s!, ...p} })
-            const chain = get(view.chainAtom)
-            if (chain?.mode === "append") set(view.chainAtom, {...chain, steps: chain.steps.filter(st => st.kind === "row")})
-            setViewQuery(set, "")
-            set(GlobalAtoms.pendingSelectAtom, {view: scp.name, targets: appendTargets(s, appended), flash: true})
-            await refreshPaths(app, index, [...written, ...s.touchedPaths])
+            set(view.lineEditAtom, null)
+            const now = get(view.outlineAtom)
+            if (now) set(view.outlineAtom, {...now, pins})
+            set(GlobalAtoms.pendingSelectAtom, {view: scp.name, targets, flash: true})
         } catch (err) {
-            // The chain and the unsaved buffers stay for a retry; patches are idempotent and saved buffers are clean.
-            const touched = [...written, ...(s?.touchedPaths ?? [])]
-            if (err instanceof StaleLineError && s?.underLine) new Notice(`"${s.underLine.label}" changed since you picked it — pick the line again`)
+            if (err instanceof StaleLineError) new Notice(OUT_OF_DATE)
             else new Notice(`${err instanceof Error ? err.message : String(err)}\nWritten: ${touched.join(", ") || "nothing"}`)
-            await refreshPaths(app, index, touched)
+            const cur = get(view.lineEditAtom)
+            if (cur?.saving) set(view.lineEditAtom, {...cur, saving: false})
         } finally {
-            committing = false
+            savingOutline = false
+            await refreshPaths(app, index, touched)
         }
-    })
-
-    /** Alt+Enter in an append chain (or a list/file paste): opens the Outline editor on the chain's text, applying
-     *  `paste` once it mounts. Quick Add with nothing typed shows the Append draft instead. Leaving the editor restores
-     *  the query typed before the chain. */
-    const openChainEditorAtom = atom(null, (get, set, paste: PasteData | null) => {
-        const chain = get(view.chainAtom)
-        if (chain?.mode !== "append") return
-        const parsed = parseChainEntry(get(view.actualQueryAtom))
-        if (parsed !== null && "error" in parsed) {
-            new Notice(parsed.error)
-            return
-        }
-        if (chain.steps.length === 0 && parsed === null && paste === null) {
-            if (!set(view.releaseBodiesAtom, null)) return
-            set(view.chainAtom, null)
-            setViewQuery(set, chainPrevQuery(chain))
-            set(showEditorAtom, {kind: "draft"})
-            return
-        }
-        const o = chainOutline(chain.steps, parsed, dailyNameOf(get))
-        if ("error" in o) {
-            new Notice(o.error)
-            return
-        }
-        const {outline, caret} = chainEditorText(o)
-        if (!set(view.releaseBodiesAtom, null)) return
-        set(pendingPasteAtom, paste)
-        set(view.chainAtom, null)
-        setViewQuery(set, chainPrevQuery(chain))
-        set(showEditorAtom, {kind: "outline", parentName: o.parentName, underLine: o.underLine, outline, caret})
-    })
-
-    /** A multi-line or file paste in an append chain: a list, files, or a chain with entries continue in the Outline
-     *  editor; prose opens the prose editor on the anchor (a whole note, or a new note linked from the line). */
-    const pasteIntoChainAtom = atom(null, async (get, set, data: PasteData) => {
-        const chain = get(view.chainAtom)
-        if (chain?.mode !== "append") return
-        const hasEntries = chain.steps.some(s => s.kind === "entry")
-        const typed = parseChainEntry(get(view.actualQueryAtom))
-        const lines = data.plain.split(/\r?\n/).filter(l => l.trim() !== "")
-        if (hasEntries || typed !== null || data.files.length > 0 || (lines.length > 0 && lines.every(l => LIST_ITEM_RE.test(l)))) {
-            set(openChainEditorAtom, data)
-            return
-        }
-        const anchor = chain.steps[chain.steps.length - 1]
-        if (anchor && anchor.kind !== "row") return
-        const text = data.plain.replace(/\r\n?/g, "\n")
-        if (!set(view.releaseBodiesAtom, null)) return
-        set(view.chainAtom, null)
-        setViewQuery(set, chainPrevQuery(chain))
-        // Quick Add before its first chip writes into today's daily note.
-        const a: ChainAnchor = anchor?.anchor ?? {kind: "today"}
-        await set(openProseAtom,
-            a.kind === "today" ? {kind: "note", noteName: null, text}
-            : a.kind === "note" ? {kind: "note", noteName: a.name, text}
-            : a.kind === "header" ? {kind: "note", noteName: a.page, text}
-            : {kind: "line", line: a.target, text})
     })
 
     const saveEditorAtom = atom(null, async (get, set) => {
@@ -669,33 +563,11 @@ export const EditorMolecule = molecule((mol, scope) => {
                 const path = await renameVaultFile(app, s.sourcePath, s.outline)
                 commit({touchedPaths: [...s.touchedPaths, path], doneSteps: [...s.doneSteps, "rename"]})
             }
-            if (s.mode === "edit" && s.editKind !== "file" && !s.doneSteps.includes("line")) {
-                const line = (s.linePrefix ?? "") + s.outline.replace(/\r?\n/g, " ").trimEnd()
-                const newLine = s.nested ? line : scheduleUnscheduledTasks(line, today)
-                const files = await editLine(app, s.sourcePath, s.line ?? 0, s.originalLine ?? "", newLine)
-                commit({touchedPaths: [...s.touchedPaths, ...files.map(f => f.path)], doneSteps: [...s.doneSteps, "line"]})
-            }
             if (s.prose?.kind === "note" && !s.doneSteps.includes("prose")) {
                 const file = await writeWholeNote(app, s.prose.path, s.prose.original, s.outline)
                 commit({touchedPaths: [...s.touchedPaths, file.path], doneSteps: [...s.doneSteps, "prose"]})
             }
-            if (s.prose?.kind === "new") {
-                const {name, link} = s.prose
-                if (!s.doneSteps.includes("note")) {
-                    const file = await writeNoteContents(app, name.trim(), s.outline, link.path)
-                    commit({touchedPaths: [...s.touchedPaths, file.path], doneSteps: [...s.doneSteps, "note"]})
-                }
-                if (!s.doneSteps.includes("link")) {
-                    const files = await editLine(app, link.path, link.line, link.expectedLine, withTrailingLink(link.expectedLine, name.trim()))
-                    commit({touchedPaths: [...s.touchedPaths, ...files.map(f => f.path)], doneSteps: [...s.doneSteps, "link"]})
-                }
-            }
         } catch (err) {
-            if (err instanceof StaleLineError && s.underLine) {
-                new Notice(`"${s.underLine.label}" changed since you picked it — pick the line again`)
-                commit({saving: false})
-                return
-            }
             const message = err instanceof Error ? err.message : String(err)
             new Notice(`${message}\nWritten: ${s.touchedPaths.join(", ") || "nothing"}`)
             commit({saving: false})
@@ -710,9 +582,7 @@ export const EditorMolecule = molecule((mol, scope) => {
         set(editorStateAtom, null)
         const targets: RowTarget[] = s.mode === "append" ? appendTargets(s, appended)
             : s.prose?.kind === "note" ? [{key: `[[${basenameOf(s.prose.path).toLowerCase()}]]`}]
-            : s.prose?.kind === "new" ? [{path: s.prose.link.path, line: s.prose.link.line}, {key: `[[${s.prose.name.trim().toLowerCase()}]]`}]
-            : s.editKind === "file" ? [renamedFileTarget(s.touchedPaths[s.touchedPaths.length - 1])]
-            : [{path: s.sourcePath, line: s.line ?? 0}]
+            : [renamedFileTarget(s.touchedPaths[s.touchedPaths.length - 1])]
         // A renamed path isn't reindexed by refreshPage (the index has no rename handler): rebuild it.
         if (s.editKind === "file") await index?.refresh()
         else await refreshPaths(app, index, s.touchedPaths)
@@ -753,39 +623,23 @@ export const EditorMolecule = molecule((mol, scope) => {
         set(GlobalAtoms.lastSearchAtom, {query})
     }
 
-    /** Opens the prose editor on a whole note (`noteName` null: today's daily note), or on a new note to link from an
-     *  Append target's line. */
+    /** Opens the prose editor on a whole note (`noteName` null: today's daily note). */
     const openProseAtom = atom(null, async (get, set, request: ProseRequest) => {
         const app = get(GlobalAtoms.appAtom)
         const index = get(GlobalAtoms.indexAtom)
         const dailyPath = dailyNotePath(dailyConfigOf(index))
-        let prose: ProseTarget
-        let outline: string
-        if (request.kind === "note") {
-            const {noteName} = request
-            const file = noteName === null ? app.vault.getFileByPath(dailyPath) : app.metadataCache.getFirstLinkpathDest(noteName, "")
-            const path = file?.path ?? (noteName === null ? dailyPath : newNotePath(app, noteName, dailyPath))
-            const original = file ? await app.vault.read(file) : null
-            outline = original === null ? request.text ?? "" : request.text ? appendContent(original, request.text) : original
-            prose = {kind: "note", path, original}
-        } else {
-            const {path, line, expectedLine} = request.line
-            const head = await readLine(app, path, line)
-            if (head !== expectedLine) {
-                await markOutOfDate(app, index, path)
-                return
-            }
-            outline = request.text ?? ""
-            // An empty name keeps Save blocked ("Name the new note") until one is typed.
-            prose = {kind: "new", name: proseNameFrom(outline), link: {path, line, expectedLine: head}}
-        }
+        const {noteName} = request
+        const file = noteName === null ? app.vault.getFileByPath(dailyPath) : app.metadataCache.getFirstLinkpathDest(noteName, "")
+        const path = file?.path ?? (noteName === null ? dailyPath : newNotePath(app, noteName, dailyPath))
+        const original = file ? await app.vault.read(file) : null
+        const outline = original === null ? request.text ?? "" : request.text ? appendContent(original, request.text) : original
         set(showEditorAtom, {kind: "session", state: {
             ...emptySession(),
             mode: "prose",
-            sourcePath: prose.kind === "note" ? prose.path : prose.link.path,
+            sourcePath: path,
             outline,
             caret: outline.length,
-            prose,
+            prose: {kind: "note", path, original},
             proseConfirmed: false,
         }})
     })
@@ -1035,10 +889,10 @@ export const EditorMolecule = molecule((mol, scope) => {
 
     return {
         editorStateAtom, altHeldAtom, dragIndexAtom, dropTargetAtom, ownPathAtom,
-        updateEditorAtom, cancelEditorAtom, closeEditorAtom, openAppendAtom, openEditAtom, openRenameFileAtom, openSaveFilterAtom, openRenameFilterAtom,
-        openAppendForSelectedAtom, openEditForSelectedAtom, saveEditorAtom,
+        updateEditorAtom, cancelEditorAtom, closeEditorAtom, openAppendAtom, openRenameFileAtom, openSaveFilterAtom, openRenameFilterAtom,
+        openAppendForSelectedAtom, saveEditorAtom,
         clearDragAtom, reparentAtom, editTaskAtom, deleteRowAtom,
         reparentChainAtom, archiveDrawerAtom, openProseAtom,
-        pendingPasteAtom, pushChainAtom, openPatchViewAtom, commitChainAtom, openChainEditorAtom, pasteIntoChainAtom,
+        editRowAtom, editAtom, patchAtom, saveOutlineAtom,
     }
 })

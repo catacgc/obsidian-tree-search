@@ -89,8 +89,8 @@ export default class TreeSearchPlugin extends Plugin {
 
         const searchModal = new SearchModal(this.globalStore);
 
-        // Quick Add / Open editor: the Search modal in chip-less patch mode (its SearchBar starts it). With the
-        // modal already showing its editor, the editor stays.
+        // Quick Add / Open editor: the Search modal's outline editor on Today with a new line open (its SearchBar opens
+        // it). With the modal already showing its editor, the editor stays.
         const quickAdd = () => {
             const open = this.globalStore.get(GlobalAtoms.currentModalAtom) === searchModal
             if (open && this.globalStore.get(GlobalAtoms.editorHostAtom) === "modal") return

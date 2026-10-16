@@ -18,6 +18,8 @@ export type TreeNode = {
   archived: boolean
   // True when the row is hidden only because its list is compacted (a "+N more" footer reveals it).
   compacted: boolean
+  // Kept in the outline editor only because it is pinned (ResultNode.miss).
+  miss?: boolean
 }
 
 /** Lists with at least this many children show only a compact preview until expanded. */
@@ -38,15 +40,24 @@ export function compareSiblings(a: ResultNode, b: ResultNode): number {
   )
 }
 
+/** Pre-order rows of `indexed`. `fileOrder` sorts siblings by path, then line, instead of compareSiblings;
+ *  `expandAll` makes every row visible and none compacted instead of defaultVisibility. */
 export function flattenIndex(
   indexed: ResultNode[],
   defaultIndentLevel = 0,
   matchExprs: QueryExpr[] = [],
+  options: { fileOrder?: boolean; expandAll?: boolean } = {},
 ): TreeNode[] {
   const result: TreeNode[] = []
 
   function flatten(unsorted: ResultNode[], indent = 0, parentIndex = 0): number {
-    const nodes = [...unsorted].sort(compareSiblings)
+    const nodes = [...unsorted].sort(
+      options.fileOrder
+        ? (a, b) =>
+            a.node.location.path.localeCompare(b.node.location.path) ||
+            a.node.location.position.start.line - b.node.location.position.start.line
+        : compareSiblings,
+    )
     let index = parentIndex
 
     for (const node of nodes) {
@@ -60,6 +71,7 @@ export function flattenIndex(
         matched: nodeMatchesQuery(node.node, matchExprs),
         archived: node.effectiveArchived ?? false,
         compacted: false,
+        ...(node.miss ? { miss: true } : {}),
       })
       index += 1
       index = flatten(node.children, indent + 1, index)
@@ -68,6 +80,10 @@ export function flattenIndex(
   }
 
   flatten(indexed)
+  if (options.expandAll) {
+    for (const row of result) row.visible = true
+    return result
+  }
   defaultVisibility(result, defaultIndentLevel).forEach((v, i) => {
     result[i].visible = v.visible
     result[i].compacted = v.compacted

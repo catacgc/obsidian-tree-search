@@ -9,12 +9,13 @@ import {SearchBar} from "./SearchBar";
 import {ActionFooter} from "./ActionFooter";
 import {SearchHelp} from "./SearchHelp";
 import {RecencyFilterBar, TimelineRow} from "./SearchTimeline";
-import React, {useEffect, useMemo, useState} from "react";
+import React, {useEffect, useMemo, useRef, useState} from "react";
 import {EditorMolecule} from "../editor/EditorMolecule";
 import {InlineEditor} from "../editor/InlineEditor";
-import {appendTargetAt, isEditableRow, type AppendTarget} from "../editor/row-editing";
+import {isEditableRow} from "../editor/row-editing";
+import {isPatchable} from "./chain";
 import {BlockMoreFooter} from "./BlockMore";
-import {ChainPreview} from "./ChainPreview";
+import {editedRowPos, LineEditor} from "./LineEditor";
 
 export type TreeNode = {
     node: ParsedNode,
@@ -25,6 +26,8 @@ export type TreeNode = {
     index: number
     matched: boolean
     archived?: boolean
+    /** Listed in the outline editor only because it is pinned (edited or added there): the filter would hide it. */
+    miss?: boolean
     /** Hidden only because its list is compacted; a "+N more" footer reveals it. */
     compacted?: boolean
     archiveRow?: boolean
@@ -35,8 +38,8 @@ export type TreeNode = {
     outlineParent?: ParsedNode
 }
 
-/** The Search modal's / pane's body: the inline editor while this view hosts it (`>`, ⊕, Alt+A/N, Alt-Edit…), else
- *  the search with its results. */
+/** The Search modal's / pane's body: the inline editor while this view hosts it (Alt+A, prose, Rename, filters),
+ *  else the search with its results (in the outline editor: its rows, the line editor and the New line row). */
 export const SearchViewFlatten = () => {
     const {editorOpenAtom, leaveEditorAtom, scopeName, allowEditing} = useMolecule(SearchViewMolecule)
     const {editorStateAtom} = useMolecule(EditorMolecule)
@@ -54,9 +57,19 @@ export const SearchViewFlatten = () => {
 
 const SearchResultsView = () => {
     const {searchViewStateAtom, incrementPagesAtom, timelineActiveAtom, recencyWindowAtom, rebuildResultsAtom, actualQueryAtom,
-        allowEditing, allowTimeline, hoveredLineAtom, selectedLineAtom, flashLineAtom, blockFootersAtom, chainAtom} = useMolecule(SearchViewMolecule)
+        allowEditing, allowTimeline, hoveredLineAtom, selectedLineAtom, flashLineAtom, blockFootersAtom, chainAtom,
+        outlineAtom, lineEditAtom, paneAtom, paneRefAtom, openAddToAtom, addToLabelAtom, newLineShownAtom, focusSearchInputAtom, newLineSelectedAtom} = useMolecule(SearchViewMolecule)
     const {altHeldAtom, ownPathAtom} = useMolecule(EditorMolecule)
     const chainActive = useAtomValue(chainAtom) !== null
+    const outline = useAtomValue(outlineAtom)
+    const lineEdit = useAtomValue(lineEditAtom)
+    const pane = useAtomValue(paneAtom)
+    const paneRef = useAtomValue(paneRefAtom)
+    const openAddTo = useSetAtom(openAddToAtom)
+    const addToLabel = useAtomValue(addToLabelAtom)
+    const newLineShown = useAtomValue(newLineShownAtom)
+    const newLineSelected = useAtomValue(newLineSelectedAtom)
+    const focusSearch = useSetAtom(focusSearchInputAtom)
 
     const viewState = useAtomValue(searchViewStateAtom)
     const incrementPages = useSetAtom(incrementPagesAtom)
@@ -99,48 +112,55 @@ const SearchResultsView = () => {
     }, [allowEditing])
 
     const rows = viewState.searchResults.renderableNodes
+    /** The edited row's position: the line editor replaces it (-1: the New line, or a row not shown). */
+    const editPos = outline ? editedRowPos(rows, lineEdit) : -1
+    /** The expanded content pane fills the view: the rows are hidden. */
+    const paneFills = outline !== null && pane.size === "expanded" && paneRef !== null && paneRef.key !== pane.closedKey
 
-    // Append dot for the hovered group (desktop only: touch has no hover; mobile uses the action panel)
-    // and the edit-hint row.
+    // A line editor that closes hands the keys back to the search input.
+    const lineEditId = lineEdit?.id ?? null
+    const prevLineEditId = useRef(lineEditId)
+    useEffect(() => {
+        if (prevLineEditId.current !== null && lineEditId === null && outline) focusSearch(n => n + 1)
+        prevLineEditId.current = lineEditId
+    }, [lineEditId])
+
+    // Patch dot under the hovered page, heading or line (desktop only: touch has no hover; mobile uses the action
+    // panel) and the edit-hint row.
     const decorations = useMemo(() => {
         if (!allowEditing) return null
         const hoveredPos = rows.findIndex(r => r.index === hovered)
         const selectedPos = rows.findIndex(r => r.index === selected)
-        const dots = new Map<number, AppendTarget>()
-        if (!Platform.isMobile && pointerInList && hoveredPos >= 0) {
-            const target = appendTargetAt(rows, hoveredPos, timelineActive)
-            if (target) dots.set(target.dotPos, target)
-        }
+        const hoveredRow = rows[hoveredPos]
+        const dotPos = !Platform.isMobile && pointerInList && hoveredRow && !hoveredRow.archiveRow && isPatchable(hoveredRow.node) ? hoveredPos : -1
         const editHintPos = altHeld ? (pointerInList ? hoveredPos : selectedPos) : -1
-        return {dots, editHintPos}
-    }, [allowEditing, rows, hovered, selected, pointerInList, altHeld, timelineActive])
+        return {dotPos, editHintPos}
+    }, [allowEditing, rows, hovered, selected, pointerInList, altHeld])
 
     const rowProps = (row: TreeNode, pos: number) => {
         if (!decorations) return {pos}
         const editable = isEditableRow(row, ownPath, timelineActive)
-        return {pos, editable, appendDot: decorations.dots.get(pos), editHint: pos === decorations.editHintPos && editable}
+        return {pos, editable, patchDot: pos === decorations.dotPos, editHint: pos === decorations.editHintPos && editable}
     }
 
     return <>
-        {/* tw-reset (Tailwind preflight) strips list and link styles, so the chain preview's rendered markdown stays outside it. */}
         {(viewState.showSearch) && <div className="ts-search-block">
                 <div className="tw-reset"><SearchBar isQuickLink={viewState.isQuickLink}/></div>
-                <ChainPreview/>
                 {allowTimeline && <div className="tw-reset"><RecencyFilterBar/></div>}
             </div>
         }
 
-        <div className="flex-1 overflow-y-auto"
+        {!paneFills && <div className="flex-1 overflow-y-auto"
              onMouseEnter={() => setPointerInList(true)}
              onMouseLeave={() => setPointerInList(false)}
              onMouseMove={allowEditing ? (ev => { if (ev.altKey !== altHeld) setAltHeld(ev.altKey) }) : undefined}
         >
             {viewState.isLoading ? (
                 <LoadingDots />
-            ) : viewState.searchResults.renderableNodes.length === 0 ? (
+            ) : rows.length === 0 && !outline ? (
                 actualQuery.trim().length >= 3 && (timelineActive || recencyWindow !== "all")
                     ? <div className="ts-timeline-empty">No {timelineActive ? "dated " : ""}matches{recencyWindow !== "all" ? ` in the last ${recencyWindow}` : ""}</div>
-                    // Only the main search modal shows the syntax cheat sheet (not while a `>` / `<` chain
+                    // Only the main search modal shows the syntax cheat sheet (not while the `<` chain
                     // replaces the search); auxiliary panes (file context, parents, tasks, inline results) stay blank.
                     : viewState.isModal && !chainActive ? <SearchHelp /> : null
             ) : (
@@ -148,10 +168,14 @@ const SearchResultsView = () => {
                     {rows.map((tree, index) => timelineActive
                         ? <TimelineRow node={tree} key={`${index}`} {...rowProps(tree, index)}/>
                         : <React.Fragment key={`${index}`}>
-                            <SearchTreeNode node={tree} {...rowProps(tree, index)}/>
+                            {index === editPos && lineEdit
+                                ? <LineEditor key={lineEdit.id} edit={lineEdit} rows={rows}/>
+                                : <SearchTreeNode node={tree} {...rowProps(tree, index)}/>}
                             {(footers.get(tree.index) ?? []).map((f, j) => <BlockMoreFooter key={j} footer={f}/>)}
                         </React.Fragment>
                     )}
+                    {outline && lineEdit && editPos < 0 && <LineEditor key={lineEdit.id} edit={lineEdit} rows={rows}/>}
+                    {newLineShown && <NewLineRow label={addToLabel} selected={newLineSelected} onOpen={() => openAddTo()}/>}
                     {viewState.searchResults.hasMore && (
                         <div className="flex justify-center items-center py-4">
                             <button
@@ -164,11 +188,28 @@ const SearchResultsView = () => {
                     )}
                 </>
             )}
-        </div>
+        </div>}
 
         {viewState.showSearch && <ActionFooter/>}
     </>
 };
+
+/** The trailing row, `Add to <root>…` (openAddToAtom): the line editor on a new line at the end of the view (in the
+ *  plain search, after exploring the selected row). ↓ past the last row selects it (NEW_LINE_ROW); Enter opens it. */
+const NewLineRow = ({label, selected, onOpen}: {label: string; selected: boolean; onOpen: () => void}) => {
+    const ref = useRef<HTMLDivElement>(null)
+    useEffect(() => {
+        if (selected) ref.current?.scrollIntoView({behavior: "auto", block: "nearest"})
+    }, [selected])
+    return <div className="tree-node ts-new-line" onClick={onOpen}>
+        <div ref={ref} className={`ts-list-line ${selected ? "highlight" : ""}`} style={{'--indent-level': 1} as React.CSSProperties}>
+            <div className="ts-list-guides">
+                <span className="ts-formatting ts-formatting-list ts-formatting-list-ul ts-list-1"><span className="ts-list-bullet">+</span></span>
+            </div>
+            <div className="ts-list-content">{label}…</div>
+        </div>
+    </div>
+}
 
 const LoadingDots = () => {
     return <div className="flex justify-center items-center space-x-1 text-6xl font-bold text-gray-600 dark:text-gray-300">

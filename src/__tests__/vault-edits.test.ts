@@ -16,6 +16,7 @@ import {
     reparent,
     writeNoteContents,
     writeNoteBody,
+    writeHeadingBody,
     writeWholeNote,
 } from "../editing/vault-edits"
 
@@ -385,6 +386,21 @@ describe("writeNoteBody", () => {
     it("throws for a missing file", async () => {
         const { app } = makeFakeApp()
         await expect(writeNoteBody(app, "gone.md", "", "x")).rejects.toThrow(NOTE_BODY_CHANGED)
+    })
+})
+
+describe("writeHeadingBody", () => {
+    it("replaces the text under the heading when it is unchanged", async () => {
+        const { app, files } = makeFakeApp({ "P.md": "## A\nold\n## B\nkeep\n" })
+        await writeHeadingBody(app, "P.md", "A", "old", "new")
+        expect(files.get("P.md")).toBe("## A\nnew\n## B\nkeep\n")
+    })
+
+    it("throws and leaves the file when the text changed or the heading is gone", async () => {
+        const { app, files } = makeFakeApp({ "P.md": "## A\nedited\n" })
+        await expect(writeHeadingBody(app, "P.md", "A", "old", "new")).rejects.toThrow(NOTE_BODY_CHANGED)
+        await expect(writeHeadingBody(app, "P.md", "Z", "", "new")).rejects.toThrow(NOTE_BODY_CHANGED)
+        expect(files.get("P.md")).toBe("## A\nedited\n")
     })
 })
 

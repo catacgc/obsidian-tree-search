@@ -38,7 +38,7 @@ const alt = (code: string, label: string) => key(code, label, {alt: true})
 export const SHORTCUTS: Shortcut[] = [
     {id: "next", group: "Results", keys: [key("ArrowDown", "↓")], description: "Select next"},
     {id: "previous", group: "Results", keys: [key("ArrowUp", "↑")], description: "Select previous"},
-    {id: "open", group: "Results", keys: [key(ENTER, "Enter", {macLabel: "↵"})], description: "Open (default action)"},
+    {id: "open", group: "Results", keys: [key(ENTER, "Enter", {macLabel: "↵"})], description: "Open: explore a note, heading or line with children; on a leaf line open its URL, toggle its task, copy its snippet or edit it (default action)"},
     {id: "reveal", group: "Results", keys: [key(ENTER, "Enter", {macLabel: "↵", shift: true})], description: "See in Obsidian"},
     {id: "actions", group: "Results", keys: [key("KeyK", "K", {mod: true})], description: "Actions"},
 
@@ -61,8 +61,8 @@ export const SHORTCUTS: Shortcut[] = [
     {id: "consolidate", group: "Selected row", keys: [alt("KeyP", "P")], description: "Consolidate notes (pages)"},
 
     {id: "append", group: "Editor", keys: [alt("KeyA", "A")], description: "Append to the row's note", needs: "editing"},
-    {id: "edit", group: "Editor", keys: [key(ENTER, "Enter", {macLabel: "↵", alt: true})], description: "Edit the row (Rename a heading or attachment)", needs: "editing"},
-    {id: "quickAdd", group: "Editor", keys: [alt("KeyN", "N")], description: "Quick Add: search to patch, or type to add to today", needs: "editing"},
+    {id: "edit", group: "Editor", keys: [key(ENTER, "Enter", {macLabel: "↵", alt: true})], description: "Edit the row in place (nothing selected: the search in edit mode)", needs: "editing"},
+    {id: "quickAdd", group: "Editor", keys: [alt("KeyN", "N")], description: "Quick Add: a new line in Today's outline", needs: "editing"},
 ]
 
 /** Keys inside the inline editor's text fields (handled by InlineEditor; listed for help only). */

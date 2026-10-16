@@ -39,26 +39,31 @@ const ACTIONS: RaycastAction[] = [
 
 const ctx = (over: Partial<PanelContext> = {}): PanelContext => ({
     rowActions: ACTIONS, rows: tree, selectedPos: 1,
-    allowEditing: true, allowTimeline: true, timelineActive: false, ownPath, chainMode: null, resolveLink: () => null,
-    query: "", filters: [], rowCut: false, drawerCount: 0, ...over,
+    allowEditing: true, allowTimeline: true, timelineActive: false, ownPath, chainMode: null, outline: false, resolveLink: () => null,
+    query: "", filters: [], rowCut: false, drawerCount: 0, addTo: null, ...over,
 })
 const titles = (c: PanelContext, section?: string) => panelItems(c).filter(i => !section || i.section === section).map(i => i.title)
 
 describe("panelItems", () => {
-    it("lists only the View section when no row is selected", () => {
+    it("lists Add to last in the Edit section where the view shows it, with or without a selected row", () => {
+        expect(titles(ctx({addTo: "Add to loose"}), "edit").at(-1)).toBe("Add to loose")
+        expect(titles(ctx({addTo: "Add to Today", selectedPos: -1, rowActions: []}), "edit")).toEqual(["Edit search", "Add to Today"])
+        expect(titles(ctx(), "edit")).not.toContain("Add to loose")
+    })
+
+    it("lists only Edit search and the View section when no row is selected", () => {
         const items = panelItems(ctx({ rowActions: [], selectedPos: -1 }))
-        expect(new Set(items.map(i => i.section))).toEqual(new Set(["view"]))
-        expect(items.map(i => i.title)).toEqual(["Quick Add", "Show timeline", "Expand one level", "Collapse one level", "Collapse all", "Rebuild index"])
+        expect(new Set(items.map(i => i.section))).toEqual(new Set(["edit", "view"]))
+        expect(items.map(i => i.title)).toEqual(["Edit search", "Quick Add", "Show timeline", "Expand one level", "Collapse one level", "Collapse all", "Rebuild index"])
     })
 
     it("maps row actions to their shortcut keys and drops Insert after when Append exists", () => {
         const row = panelItems(ctx()).filter(i => i.section === "row")
         expect(row.map(i => i.title)).toEqual(["Browse example", "See in Obsidian", "Copy Node", "Archive", "Move under…", "Cut to drawer"])
-        // Enter opens the row's Patch view in views with editor mode: Patch shows ↵, the plain-Enter web link doesn't.
+        // Enter opens the row in the outline editor in views with editor mode, so the plain-Enter web link shows no key.
         expect(row.map(i => i.key?.label)).toEqual([undefined, "Enter", "C", "X", "M", "X"])
         expect(row[1].key?.shift).toBe(true)
-        expect(panelItems(ctx()).find(i => i.id === "patch")?.key?.label).toBe("Enter")
-        expect(panelItems(ctx({ chainMode: "append" })).find(i => i.id === "patch")?.key).toBeUndefined()
+        expect(panelItems(ctx({ chainMode: "reparent" })).find(i => i.title === "Browse example")?.key?.label).toBe("Enter")
         expect(panelItems(ctx({ allowEditing: false })).find(i => i.title === "Browse example")?.key?.label).toBe("Enter")
     })
 
@@ -112,17 +117,17 @@ describe("panelItems", () => {
         expect(titles(task("call [scheduled:: 2026-10-14]", true), "task")).toEqual([])
     })
 
-    it("Edit: Append to names the target page; Patch, Edit line and Delete only where they apply", () => {
-        expect(titles(ctx(), "edit")).toEqual(["Append to [[Project X]]", "Patch", "Edit line", "Delete"])
-        // A root page row: appendable, its own note renamed/trashed, not line-editable.
-        expect(titles(ctx({ selectedPos: 0 }), "edit")).toEqual(["Append to [[Project X]]", "Patch", "Rename [[Project X]]", "Delete"])
+    it("Edit: Edit on Alt+Enter, Append to the target page, Rename and Delete where they apply", () => {
+        expect(titles(ctx(), "edit")).toEqual(["Edit", "Append to [[Project X]]", "Delete"])
+        expect(panelItems(ctx()).find(i => i.id === "edit")?.key).toMatchObject({ label: "Enter", alt: true })
+        // A root page row: its own note renamed/trashed.
+        expect(titles(ctx({ selectedPos: 0 }), "edit")).toEqual(["Edit", "Append to [[Project X]]", "Rename [[Project X]]", "Delete"])
     })
 
-    it("a link-line page row renames its note instead of offering Edit line", () => {
+    it("a link-line page row renames its note", () => {
         const rows = rowsOf(row(page("New", "New.md"), 0), row(page("Project X", "Daily.md", 3), 1))
         const items = panelItems(ctx({ rows, selectedPos: 1 })).filter(i => i.section === "edit")
         expect(items.map(i => i.title)).toContain("Rename [[Project X]]")
-        expect(items.map(i => i.title)).not.toContain("Edit line")
         expect(items.find(i => i.title === "Rename [[Project X]]")?.run).toEqual({ kind: "renameFile", path: "Project X.md" })
     })
 
@@ -135,15 +140,25 @@ describe("panelItems", () => {
         expect(items[1].run).toEqual({ kind: "renameFile", path: "assets/img.png" })
     })
 
-    it("hides Patch during a reparent chain", () => {
-        expect(titles(ctx({ chainMode: "reparent" }), "edit")).not.toContain("Patch")
-        expect(titles(ctx({ chainMode: "append" }), "edit")).toContain("Patch")
+    it("hides Edit and Edit search during a reparent chain", () => {
+        expect(titles(ctx({ chainMode: "reparent" }), "edit")).not.toContain("Edit")
+        expect(titles(ctx({ chainMode: "reparent", rowActions: [], selectedPos: -1 }), "edit")).toEqual([])
+    })
+
+    it("offers Edit search only outside the outline editor", () => {
+        expect(titles(ctx({ outline: true, rowActions: [], selectedPos: -1 }), "edit")).toEqual([])
+    })
+
+    it("hides Append, Move under, Cut, the drawer, filters and Quick Add in the outline editor", () => {
+        const items = panelItems(ctx({ outline: true, drawerCount: 2, query: "foo is:task", filters: DEFAULT_SEARCH_FILTERS }))
+        expect(items.map(i => i.id).filter(id => /^(append|moveUnder|cut|quickAdd|saveFilter)$|^(drawer|renameFilter|deleteFilter):/.test(id))).toEqual([])
+        expect(items.filter(i => i.section === "edit").map(i => i.title)).toEqual(["Edit", "Delete"])
     })
 
     it("Cut: takes a cut row out of the drawer; hidden without editing and during a chain", () => {
         expect(titles(ctx({ rowCut: true }), "row")).toContain("Take out of drawer")
         expect(titles(ctx({ allowEditing: false }), "row")).not.toContain("Cut to drawer")
-        expect(titles(ctx({ chainMode: "append" }), "row")).not.toContain("Cut to drawer")
+        expect(titles(ctx({ chainMode: "reparent" }), "row")).not.toContain("Cut to drawer")
     })
 
     it("Drawer: bulk actions over the cut items, only with editing and no chain", () => {
@@ -154,11 +169,13 @@ describe("panelItems", () => {
         expect(titles(ctx({ drawerCount: 2, chainMode: "reparent" }), "drawer")).toEqual([])
     })
 
-    it("names Edit Rename for a heading", () => {
+    it("offers Edit for headings and attachments, not for the Archive row", () => {
         const h: ParsedNode = { ...base("Project X.md", 3), nodeType: "header", page: "Project X", header: "Plan", indent: 1 }
-        const rows = rowsOf(row(page("Project X", "Project X.md"), 0), row(h, 1))
-        expect(titles(ctx({ rows, selectedPos: 1 }), "edit")).toContain("Rename")
-        expect(titles(ctx(), "edit")).toContain("Edit line")
+        const pdf: ParsedNode = { ...base("Project X.md", 5), nodeType: "attachment", name: "plan.pdf", extension: "pdf", aliases: [] }
+        const rows = rowsOf(row(page("Project X", "Project X.md"), 0), row(h, 1), row(pdf, 1), row(text("old", "Project X.md", 9), 1, { archiveRow: true }))
+        expect(titles(ctx({ rows, selectedPos: 1 }), "edit")).toContain("Edit")
+        expect(titles(ctx({ rows, selectedPos: 2 }), "edit")).toContain("Edit")
+        expect(titles(ctx({ rows, selectedPos: 3 }), "edit")).not.toContain("Edit")
     })
 
     it("Append shows its own key", () => {
@@ -169,7 +186,7 @@ describe("panelItems", () => {
     it("Timeline: no Tree-only view items", () => {
         const tl = rowsOf(row(text("loose", "Project X.md", 7), 0, { timeline: { breadcrumb: [page("Project X", "Project X.md")], pinned: false, ageDays: 0 } }))
         const c = ctx({ rows: tl, selectedPos: 0, timelineActive: true })
-        expect(titles(c, "edit")).toEqual(["Append to [[Project X]]", "Patch", "Edit line", "Delete"])
+        expect(titles(c, "edit")).toEqual(["Edit", "Append to [[Project X]]", "Delete"])
         expect(titles(c, "view")).toEqual(["Quick Add", "Show tree", "Rebuild index"])
     })
 
@@ -195,7 +212,7 @@ describe("panelItems", () => {
 
     it("Filter: nothing over a chain or in views without editor mode", () => {
         const over = { query: "is:task", filters: DEFAULT_SEARCH_FILTERS }
-        expect(titles(ctx({ ...over, chainMode: "append" }), "filter")).toEqual([])
+        expect(titles(ctx({ ...over, chainMode: "reparent" }), "filter")).toEqual([])
         expect(titles(ctx({ ...over, allowEditing: false }), "filter")).toEqual([])
     })
 

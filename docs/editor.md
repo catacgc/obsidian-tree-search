@@ -8,9 +8,9 @@ Tree Search is not only for finding things. You can write into your vault straig
 
 ## Quick Add
 
-Select a note row and press <kbd>Alt</kbd>+<kbd>A</kbd>, or click the ⊕ on the row. The Search modal or pane switches to the editor, with a `- [[Note]]` bullet ready for you. When you save, the bullets are written into today's daily note, so the new lines show up under that note in the tree, and you are back at your search with the new line selected. <kbd>Esc</kbd> also takes you back to the search.
+Select a note row and press <kbd>Alt</kbd>+<kbd>A</kbd>. The Search modal or pane switches to the editor, with a `- [[Note]]` bullet ready for you. When you save, the bullets are written into today's daily note, so the new lines show up under that note in the tree, and you are back at your search with the new line selected. <kbd>Esc</kbd> also takes you back to the search.
 
-The **Tree Search: Quick Add** command (also **Open editor**, or <kbd>Alt</kbd>+<kbd>N</kbd> in a search) opens Search in Quick Add mode, titled **Quick Add**. Type to search: <kbd>Enter</kbd> on a note, heading or line (**Patch** and its name in the footer) picks it to add under, as <kbd>&gt;</kbd> does (see [Patch mode](#patch-mode)). When what you type matches nothing, <kbd>Enter</kbd> (**Add**) writes it into today's daily note, and the box clears for the next one. <kbd>Alt</kbd>+<kbd>Enter</kbd> with nothing typed opens your draft in the editor; <kbd>Esc</kbd> goes back to a normal search.
+The **Tree Search: Quick Add** command (also **Open editor**, <kbd>Alt</kbd>+<kbd>N</kbd> in a search, or **Quick Add** in the action panel) opens the [outline editor](#the-outline-editor) on today's daily note, titled **Quick Add**, with a new line open: type it and press <kbd>Enter</kbd> to save.
 
 ![Quick Add appending to Project Apollo](assets/screenshots/quick-add-append.webp)
 *Appending "Confirmed the launch date" under `[[Project Apollo]]`.*
@@ -24,12 +24,53 @@ Type `[[` in the editor and Tree Search suggests notes from the tree. To link a 
 ![Link suggestions while typing a link to Bob](assets/screenshots/insert-link-autocomplete.webp)
 *Typing `[[bob` suggests notes from the tree; suggestions start after three characters.*
 
-## Editing a line in place
+## The outline editor
 
-Select a row and press <kbd>Alt</kbd>+<kbd>Enter</kbd>, or <kbd>Alt</kbd>-click it, to edit that line where it was written. On a heading this renames the heading; on an attachment (an image, a PDF) it renames the file, and Obsidian updates the links to it. The Search modal's title says what you are doing: **Edit**, **Rename**, or **Patch** while you build a `>` chain.
+The outline editor turns the results in the Search modal or pane into an outline you can browse and edit in place. It opens in one of two modes.
 
-![Editing the Budget approved line in place](assets/screenshots/alt-edit.webp)
-*Editing "Budget approved" without leaving the search.*
+**Explore** (the modal's title says **Explore**) opens with:
+
+- <kbd>Enter</kbd> on a note, a heading or a line with lines under it, clicking a selected row again, clicking a note link in a row, or **Open** in the action panel: the outline opens on that row's whole tree.
+
+<kbd>Enter</kbd> in the search and in explore mode does what fits the row (the footer names it):
+
+| Row | <kbd>Enter</kbd> |
+|---|---|
+| A note or heading | Explore it: the outline opens on it, or, inside the outline, it becomes the root and joins the breadcrumb |
+| A line with a web link | Open the link (e.g. **Browse 🔗 https://…**); the Search modal closes unless you have unsaved edits |
+| A line with lines under it | Explore it |
+| A task with nothing under it | **Complete task** (on a done task: **Reopen task**) |
+| A line with a `` `snippet` `` and nothing under it | **Copy** the snippet; the Search modal closes unless you have unsaved edits |
+| Any other line with nothing under it | **Edit** it in place, as <kbd>Alt</kbd>+<kbd>Enter</kbd> does |
+
+A click works differently: clicking a selected row again explores it, whatever it is. A task is completed only by clicking its checkbox, and a snippet is copied only by clicking the snippet itself.
+
+**Edit** (the title says **Edit**) opens with:
+
+- <kbd>Alt</kbd>+<kbd>Enter</kbd>, or **Edit** in the action panel, on a selected note, heading or line: the row turns into an editor right where it is, and the outline opens on the current results around it. With nothing selected (**Edit search**), the outline opens on the current results.
+- The ⊕ that appears under the row you point at, or typing <kbd>&gt;</kbd> on a selected row.
+- <kbd>&gt;</kbd> with nothing selected: today's daily note, with a new line pre-filled from the search, so `is:task #home` gives `- [ ] #home ` (words, tags and `[[links]]` as typed; `is:completed` gives `- [x] `, `has:link` a trailing `[[`).
+- Quick Add (see above).
+
+Above the results, a breadcrumb shows where you are: `search › Project Apollo › Ship the public beta`. Every row is expanded and lines are listed in the order they are written in their notes. The Search modal's title says **Explore** or **Edit** and the root's name. Inside the editor, the ⊕, a note link or <kbd>&gt;</kbd> on a row goes one level deeper, in the same mode; click a crumb to go back up to it.
+
+**Filtering.** Typing in the search box filters the outline: a matching line stays with its parents and everything under it. <kbd>Enter</kbd> turns the text into a crumb (`search › Project Apollo › is:task`) and moves to the rows, so you can narrow further; crumbs add up. If you have picked a row (<kbd>v</kbd> / <kbd>^</kbd>), <kbd>Enter</kbd> acts on it instead (explores or edits it) and the text stays in the search box as the filter. <kbd>Backspace</kbd> in an empty search box drops the last crumb. Lines you edit or add stay listed even when they no longer match the filter, with a red outline.
+
+**Editing a line.** <kbd>Alt</kbd>+<kbd>Enter</kbd> or <kbd>Alt</kbd>-click (in edit mode also <kbd>Enter</kbd> or clicking it again) on a line, a link line or a heading replaces the row with an editor. Its bullet, checkbox or `#` stay as they are. <kbd>Alt</kbd>+<kbd>Enter</kbd> adds a line under it, <kbd>Tab</kbd> and <kbd>Shift</kbd>+<kbd>Tab</kbd> indent and outdent, and `[[`, `@`, pasting and the formatting keys work as described below. A line the filter would hide gets a red outline; you can still save it. <kbd>Enter</kbd> saves (so do <kbd>Ctrl</kbd>+<kbd>Enter</kbd> and <kbd>Shift</kbd>+<kbd>Enter</kbd>): new lines go right where you typed them, each with a `[created:: date]` (or `[scheduled:: date]` for a task). If the line changed in its note in the meantime, nothing is written. <kbd>Esc</kbd> cancels; with changes, press it twice to discard them. On an attachment (an image, a PDF), <kbd>Alt</kbd>+<kbd>Enter</kbd> renames the file, and Obsidian updates the links to it.
+
+**Adding a line.** The **Add to …** row at the end of the results (for example **Add to Project Apollo…**), or **Add to …** in the action panel, adds a line without touching an existing one. Click it, or press <kbd>↓</kbd> past the last row to select it and then <kbd>Enter</kbd>. In the search it is there too: with a row selected (for example **Add to Ship the public beta…**) it explores that row and opens a new line at its end; with nothing selected (**Add to Today…**) it opens a new line at the end of the results. The line goes:
+
+- **Under a note or heading:** into today's daily note, under a link to it.
+- **Under a line:** as that line's last child, in its own note.
+- **Under the search or today:** into today's daily note.
+
+**Leaving.** Click the `search` crumb, press <kbd>Esc</kbd> in the search box, or <kbd>Backspace</kbd> in an empty search box with no crumb left. You are back at the search you came from, with the same row selected. With unsaved changes, a notice warns you once; leaving again discards them.
+
+### The note's content
+
+A pane above the footer shows the text of the note at the root (for a heading, only the text under it, titled **Note › Heading**), or of the page, link or heading row you are editing, and you can edit it there. <kbd>Enter</kbd> on a note's own row opens just this pane. In explore mode the pane starts collapsed to its title when the note has no text besides its outline, and **Save** and **Discard** (back to the text on disk) show only while you are in the pane. Files you paste or drop into it are saved into your vault and named after the note. A dot by the title marks unsaved changes. **Save**, or <kbd>Ctrl</kbd>+<kbd>Enter</kbd> (<kbd>⌘</kbd>+<kbd>Enter</kbd> on macOS) in the pane, the line editor or the search box, saves the line and the content together. If the note changed in the meantime, nothing is written. The pane's buttons open the note in Obsidian, expand the pane to fill the view, collapse it to its title, or close it. <kbd>Esc</kbd> in the pane goes back to the search box.
+
+To open in Obsidian instead, press <kbd>Shift</kbd>+<kbd>Enter</kbd> (See in Obsidian), choose **Open … in Obsidian** in the action panel, <kbd>Ctrl</kbd>/<kbd>⌘</kbd>-click a link in a row, or click the pane's open button. Folders and attachments still open in Obsidian.
 
 ## Quick Link
 
@@ -37,45 +78,6 @@ Run the **Tree Search: Quick Link** command while you are writing a note. Search
 
 ![The Quick Link modal searching for apollo](assets/screenshots/quick-link.webp)
 *Quick Link for `apollo`.*
-
-## Patch mode
-
-Patch mode adds to your vault from the search box. In the Search modal or pane, select a row and type <kbd>&gt;</kbd>, or choose **Patch** in the action panel. The row becomes a chip in the search box, the Search modal's title becomes **Patch** and the row's name, and the search now looks under it. To go one level deeper, press <kbd>Enter</kbd> on a result (the footer shows **Patch** and the result's name) or type <kbd>&gt;</kbd> on it. Then type what to add, and press <kbd>&gt;</kbd> to make it a chip too:
-
-| Type | Adds |
-| --- | --- |
-| `- text`, `[ ] task` | a bullet or a task |
-| `[[Note]]` | a link to the note; the note is created if it doesn't exist |
-| `\|alias` | an alias on the current note |
-| `#heading` | a heading in the current note (`## heading` at its end) |
-| `(key:: value)` | a property on the current note, e.g. `(is:: project)` or `(parent:: [[Area]])` |
-
-![Patch mode adding a task under a line in Project Apollo](assets/screenshots/patch-chain.webp)
-*`Project Apollo > Ship the public beta` with a task typed: the preview shows where <kbd>Enter</kbd> writes it.*
-
-The preview under the search box shows what will be written. <kbd>Enter</kbd> (**Patch**) writes the whole chain, then clears the box and selects the new line, so you can add the next one under the same chips. Text that matches rows under the chips stays a search; start it with `- ` to add it instead.
-
-Where it goes:
-
-- **Under a note or heading:** into today's daily note, under a link to it.
-- **Under a line:** as that line's last children, in its own note.
-- **With nothing selected:** into today's daily note. The search box is pre-filled with an item that matches the search, so `is:task #home` gives `- [ ] #home ` (words, tags and `[[links]]` as typed; `is:completed` gives `- [x] `, `has:link` a trailing `[[`). A search that is just a closed link such as `[[New idea]]` adds under that note, even when it doesn't exist yet.
-
-Each new line gets a `[created:: date]` (or `[scheduled:: date]` for a task) so it is indexed; a bullet that is only a link stays as it is. For example, `Note > [[New Node]] > |new-alias > #header > [ ] task` creates *New Node* with that alias and heading, and adds the task under `[[New Node#header]]`. An alias, heading or property alone (`Note > (is:: project)`) only changes the note.
-
-<kbd>Alt</kbd>+<kbd>Enter</kbd>, or pasting a list or an image, continues in the editor. Pasting other text opens the whole note to write in. <kbd>Backspace</kbd> in an empty search box drops the last chip; <kbd>Esc</kbd> drops them all. Nothing is written before <kbd>Enter</kbd>.
-
-The editor understands the same patches on a bullet that is only a link: `- [[Note|alias]]`, `- [[Note#heading]]` and `- [[Note]] (key:: value)`.
-
-In the editor, <kbd>Alt</kbd>+<kbd>Enter</kbd> on a line without a link opens the whole note: the note you are adding to, today's daily note, or, under a line, a new note that Save links from that line.
-
-### The note's content
-
-In the Search modal and pane, opening a result opens Patch mode on it instead of opening it in Obsidian: <kbd>Enter</kbd> or **Open** in the footer on a note, heading or line, clicking a selected row again, the action panel's **Open …** items, and clicking a note link in a row (that note). Opening another result from Patch mode adds it as the next chip. <kbd>Esc</kbd> (or <kbd>Backspace</kbd> on the last chip) goes back to the search you came from, with the same row selected.
-
-While a chain has a note, heading or line chip, a pane above the footer shows that note's text after its leading outline (its headings, prose and code blocks), and you can edit it there. A dot by the note's name marks unsaved changes. **Save**, <kbd>Ctrl</kbd>+<kbd>Enter</kbd> (<kbd>⌘</kbd>+<kbd>Enter</kbd> on macOS) in the pane or the search box, or <kbd>Enter</kbd> on a pending patch writes them, together with the patch. If the note changed in the meantime, nothing is written: copy your edits and reopen the note. <kbd>Esc</kbd> in the pane goes back to the search box. Leaving Patch mode (or dropping the chip) with unsaved changes shows a notice instead; do it again to discard them. Closing the modal discards them.
-
-To open in Obsidian instead, press <kbd>Shift</kbd>+<kbd>Enter</kbd> (See in Obsidian), choose **Open … in Obsidian** in the action panel, <kbd>Ctrl</kbd>/<kbd>⌘</kbd>-click a link in a row, or click the pane's open button. Folders and attachments still open in Obsidian.
 
 ## Move under
 
@@ -111,10 +113,10 @@ Rows that moved or were archived leave the drawer. The rest stay, and a notice l
 
 ## More editing
 
-- **Patch, Rename, Delete.** The action panel's Edit section also has **Patch** (the same as typing <kbd>&gt;</kbd> on the row), **Rename [[Note]]** for each note or embedded file on the row (Obsidian updates the links to it), and **Delete**, which asks first. Delete removes a line with everything nested under it, a heading with its section, or moves a note's own row or an attachment to the trash.
+- **Edit, Rename, Delete.** The action panel's Edit section also has **Edit** (the same as <kbd>Alt</kbd>+<kbd>Enter</kbd>), **Rename [[Note]]** for each note or embedded file on the row (Obsidian updates the links to it), and **Delete**, which asks first. Delete removes a line with everything nested under it, a heading with its section, or moves a note's own row or an attachment to the trash.
 - **Note content.** Clicking a link in the editor (or pressing <kbd>Alt</kbd>+<kbd>Enter</kbd> on it) opens a content section that is appended to that note. The note is created if it doesn't exist yet.
 - **Pasting.** Pasted files are saved into your vault and named after the note. Pasted URLs become markdown links.
 - **Indenting.** Press <kbd>Tab</kbd> and <kbd>Shift</kbd>+<kbd>Tab</kbd> to indent and outdent.
-- **Scheduling.** On a task line, type `@` and pick **Today**, **Tomorrow**, **Weekend** (next Saturday) or **Later** (Tuesday next week); keep typing to filter (`@tom`). <kbd>Enter</kbd> or <kbd>Tab</kbd> replaces it with the task's `[scheduled:: date]`, <kbd>Esc</kbd> closes the list. It works in a `>` chain's task entry (`[ ] call Bob @tom`) too.
+- **Scheduling.** On a task line, type `@` and pick **Today**, **Tomorrow**, **Weekend** (next Saturday) or **Later** (Tuesday next week); keep typing to filter (`@tom`). <kbd>Enter</kbd> or <kbd>Tab</kbd> replaces it with the task's `[scheduled:: date]`, <kbd>Esc</kbd> closes the list. It works in the outline editor's line editor too.
 
 See [Shortcuts](shortcuts.md) for every key inside the editor.

@@ -122,3 +122,30 @@ describe("flattenIndex sibling order", () => {
     ])
   })
 })
+
+describe("flattenIndex options", () => {
+  const at = (key: string, path: string, line: number, children: ResultNode[] = []): ResultNode => ({
+    node: { ...text(key), location: { path, position: { start: { line, ch: 0 }, end: { line, ch: 0 } } } } as ParsedNode,
+    children,
+    parents: [],
+  })
+
+  it("fileOrder sorts siblings by path, then line", () => {
+    const tree = [at("b2", "b.md", 2), at("a9", "a.md", 9), at("b1", "b.md", 1)]
+    expect(flattenIndex(tree, 0, [], { fileOrder: true }).map(r => r.node.searchKey)).toEqual(["a9", "b1", "b2"])
+  })
+
+  it("expandAll shows every row, none compacted", () => {
+    const list: ResultNode = {
+      ...at("list", "a.md", 0, ["c1", "c2", "c3", "c4", "c5"].map(k => at(k, "a.md", 1, [at(`${k} kid`, "a.md", 2)]))),
+      node: { ...text("list"), list: true } as ParsedNode,
+    }
+    const rows = flattenIndex([list], 0, [], { expandAll: true })
+    expect(rows.every(r => r.visible && !r.compacted)).toBe(true)
+  })
+
+  it("carries a ResultNode's miss onto its row", () => {
+    const rows = flattenIndex([{ ...at("x", "a.md", 0), miss: true }, at("y", "a.md", 1)], 0, [], { fileOrder: true })
+    expect(rows.map(r => r.miss)).toEqual([true, undefined])
+  })
+})

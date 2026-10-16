@@ -7,7 +7,6 @@ import {ScopeProvider, useMolecule} from "bunshi/react";
 import {SearchViewMolecule, SearchViewScope} from "./react-context/state";
 import {GlobalAtoms} from "./react-context/global";
 import {SEARCH_ICON} from "./icons";
-import {chainReplacesSearch} from "./search/chain";
 
 type SearchPageProps = {
     sectionName: string
@@ -26,7 +25,7 @@ const SearchPage = (props: SearchPageProps) => {
 
 const _SearchPage = (props: SearchPageProps) => {
     const { actualQueryAtom, searchTextAtom, searchVisibleAtom, setDefaultExpandLevelAtom, updateSearchResultsAtom, scopeName,
-        chainAtom, refreshChainResultsAtom } = useMolecule(SearchViewMolecule)
+        chainAtom, refreshChainResultsAtom, outlineAtom, refreshOutlineResultsAtom } = useMolecule(SearchViewMolecule)
     const [pin, setPin] = useAtom(GlobalAtoms.pinAtom);
 
     const [showSearch, setShowSearch] = useAtom(searchVisibleAtom)
@@ -35,6 +34,8 @@ const _SearchPage = (props: SearchPageProps) => {
     const searchText = useAtomValue(searchTextAtom)
     const chain = useAtomValue(chainAtom)
     const refreshChainResults = useSetAtom(refreshChainResultsAtom)
+    const outline = useAtomValue(outlineAtom)
+    const refreshOutlineResults = useSetAtom(refreshOutlineResultsAtom)
     const setDefaultExpand = useSetAtom(setDefaultExpandLevelAtom)
 
     useEffect(() => {
@@ -45,8 +46,12 @@ const _SearchPage = (props: SearchPageProps) => {
     const version = useAtomValue(GlobalAtoms.graphVersionAtom)
 
     useEffect(() => {
-        if (chain && chainReplacesSearch(chain, actualQuery)) {
+        if (chain) {
             refreshChainResults()
+            return
+        }
+        if (outline) {
+            refreshOutlineResults()
             return
         }
         if (props.searchFn) {
@@ -54,7 +59,7 @@ const _SearchPage = (props: SearchPageProps) => {
             console.debug("Set results: ", version, scopeName, results)
             updateSearchResults(results)
         }
-    }, [version, activeFile, actualQuery, searchText, scopeName.instance, chain])
+    }, [version, activeFile, actualQuery, searchText, scopeName.instance, chain, outline])
 
     return <>
         <KeyComboWrapper>

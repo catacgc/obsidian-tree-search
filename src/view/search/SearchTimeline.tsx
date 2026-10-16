@@ -9,8 +9,7 @@ import {triggerLocationPreview} from "../hover-preview";
 import {BaseNodeRender, highlightText} from "../NodeRenderer";
 import {TreeNode} from "./SearchViewFlatten";
 import {resolveThumbnail, stripDateAnnotations, timelineCrumbs} from "./timeline-utils";
-import {AppendDot} from "../editor/AppendDot";
-import type {AppendTarget} from "../editor/row-editing";
+import {PatchDot} from "../editor/PatchDot";
 import {useRowGestures} from "./row-gestures";
 import {TaskCheckbox} from "./TaskCheckbox";
 import {filterActive, isFilterSuggestion} from "./search-filter";
@@ -83,11 +82,11 @@ type TimelineRowProps = {
     /** Position among the rendered rows. */
     pos: number
     editable?: boolean
-    appendDot?: AppendTarget
+    patchDot?: boolean
     editHint?: boolean
 }
 
-export const TimelineRow = ({node, editable, appendDot, editHint}: TimelineRowProps) => {
+export const TimelineRow = ({node, editable, patchDot, editHint}: TimelineRowProps) => {
     const {selectedLineAtom, flashLineAtom, updateHoveredLineAtom, matchTermsAtom, setBlockOpenAtom} = useMolecule(SearchViewMolecule)
     const {appAtom} = useMolecule(GlobalAppMolecule)
     const {selectHoveredLineAtom} = useMolecule(ActionsMolecule)
@@ -163,7 +162,7 @@ export const TimelineRow = ({node, editable, appendDot, editHint}: TimelineRowPr
             {thumb && <img className="ts-row-thumb" src={thumb} alt="" loading="lazy"/>}
             {date && <span className="ts-row-date" title={fromFile ? `${date.absolute} · file created` : date.absolute}>{date.label}</span>}
         </div>
-        {appendDot && <AppendDot target={appendDot}/>}
+        {patchDot && <PatchDot row={node}/>}
         {editHint && <Pencil size={12} className="ts-edit-hint"/>}
     </div>
 }

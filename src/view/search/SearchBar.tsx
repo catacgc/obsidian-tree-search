@@ -3,15 +3,16 @@ import {TREE_ICON, TIMELINE_ICON} from "../icons";
 import {useUrlOpener} from "./useUrlOpener";
 import {useAtom, useAtomValue, useSetAtom} from "jotai";
 import {useMolecule} from "bunshi/react";
-import {Scope} from "obsidian";
+import {Platform, Scope} from "obsidian";
 import {GlobalAppMolecule, SearchViewMolecule} from "../react-context/state";
 import {GlobalAtoms} from "../react-context/global";
 import {separatorAtom} from "../react-context/settings";
 import {applyDateSuggestion, INVALID_NAME_RE, isDateSuggestion, openLinkAt, reverseMarkdownParsing, spliceSuggestion, type Suggestion} from "@mdtree/core";
 import {SearchAutocomplete} from "./SearchAutocomplete";
 import {EditorMolecule} from "../editor/EditorMolecule";
-import {linkPasteEdit} from "../editor/clipboard";
+import {ActionsMolecule} from "../react-context/actions";
 import {canMoveUnderNewPage, reparentLabel} from "./chain";
+import {rootLabel} from "./outline";
 import {isFilterSuggestion} from "./search-filter";
 
 export type SearchBarProps = {
@@ -38,31 +39,35 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
         searchPlaceholderAtom, suggestionsAtom, suggestionIndexAtom, cursorPosAtom, dismissSuggestionsAtom,
         resetSuggestionsAtom, repositionSuggestionsAtom, focusSearchInputAtom,
         allowTimeline, timelineActiveAtom, toggleViewModeAtom, scopeName, allowEditing,
-        chainAtom, chainWriteAtom, chainPatchRowAtom, popChainAtom, cancelChainAtom, startReparentAtom, clearChainAtom,
-        startQuickAddAtom,
-        selectedNodeAtom, enterRowAtom, selectEnterRowAtom, renderableTreeNodesAtom, toggleRowAtom,
+        chainAtom, cancelChainAtom, startReparentAtom,
+        outlineAtom, openOutlineAtom, exitOutlineAtom, popCrumbAtom, openCrumbAtom, openFilterCrumbAtom, addFilterAtom,
+        selectedNodeAtom, enterRowAtom, renderableTreeNodesAtom, toggleRowAtom,
+        newLineSelectedAtom,
     } = useMolecule(SearchViewMolecule)
-    const {pushChainAtom, commitChainAtom, openChainEditorAtom, pasteIntoChainAtom, reparentChainAtom} = useMolecule(EditorMolecule)
+    const {reparentChainAtom, editAtom, patchAtom, saveOutlineAtom} = useMolecule(EditorMolecule)
+    const {handleDefaultActionAtom} = useMolecule(ActionsMolecule)
 
     const separator = useAtomValue(separatorAtom)
     const [chain, setChain] = useAtom(chainAtom)
-    const chainWrite = useAtomValue(chainWriteAtom)
-    const chainPatchRow = useAtomValue(chainPatchRowAtom)
-    const pushChain = useSetAtom(pushChainAtom)
-    const commitChain = useSetAtom(commitChainAtom)
-    const openChainEditor = useSetAtom(openChainEditorAtom)
-    const pasteIntoChain = useSetAtom(pasteIntoChainAtom)
     const cancelChain = useSetAtom(cancelChainAtom)
-    const popChain = useSetAtom(popChainAtom)
     const startReparent = useSetAtom(startReparentAtom)
-    const clearChain = useSetAtom(clearChainAtom)
-    const startQuickAdd = useSetAtom(startQuickAddAtom)
     const reparentChain = useSetAtom(reparentChainAtom)
+    const outline = useAtomValue(outlineAtom)
+    const openOutline = useSetAtom(openOutlineAtom)
+    const exitOutline = useSetAtom(exitOutlineAtom)
+    const popCrumb = useSetAtom(popCrumbAtom)
+    const openCrumb = useSetAtom(openCrumbAtom)
+    const openFilterCrumb = useSetAtom(openFilterCrumbAtom)
+    const addFilter = useSetAtom(addFilterAtom)
+    const edit = useSetAtom(editAtom)
+    const patch = useSetAtom(patchAtom)
+    const saveOutline = useSetAtom(saveOutlineAtom)
     const selectedNode = useAtomValue(selectedNodeAtom)
     const enterRow = useAtomValue(enterRowAtom)
-    const selectEnterRow = useSetAtom(selectEnterRowAtom)
     const rows = useAtomValue(renderableTreeNodesAtom)
     const toggleRow = useSetAtom(toggleRowAtom)
+    const newLineSelected = useAtomValue(newLineSelectedAtom)
+    const handleDefault = useSetAtom(handleDefaultActionAtom)
 
     const timelineActive = useAtomValue(timelineActiveAtom)
     const toggleViewMode = useSetAtom(toggleViewModeAtom)
@@ -112,33 +117,32 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
         }, 0)
     }, [selectQuery])
 
-    // Quick Add / Open editor commands: start chip-less patch mode in this view.
+    // Quick Add command: the outline editor on Today, with a new line open, in this view.
     const [quickAddRequest, setQuickAddRequest] = useAtom(GlobalAtoms.quickAddRequestAtom)
     useEffect(() => {
         if (quickAddRequest?.view !== scopeName.name) return
         setQuickAddRequest(null)
-        startQuickAdd()
+        openOutline({kind: "today", quickAdd: true})
     }, [quickAddRequest])
 
-    // During a chain (`>` append, `<` Move under), Escape leaves it (clears the chips, restores the query) instead of
-    // closing the modal, Alt+Enter opens an append chain in the editor (Obsidian's hotkeys would take it before React
-    // sees it), and Mod+Enter saves an append chain with the content pane's buffers. While the autocomplete is open,
-    // Escape closes only it. Claimed through an Obsidian Scope (like the action panel), pushed only while the input has
-    // focus and a chain or the autocomplete is open.
+    // In the outline editor and the reparent chain (`<`), Escape leaves it (restoring the query) instead of closing the
+    // modal; in the outline editor Alt+Enter edits the row Enter acts on and Mod+Enter saves (Obsidian's hotkeys would
+    // take them before React sees them). While the autocomplete is open, Escape closes only it. Claimed through an
+    // Obsidian Scope (like the action panel), pushed only while the input has focus and one of them is open.
     const app = useAtomValue(GlobalAtoms.appAtom)
     const scopeRef = useRef<Scope | null>(null)
     const escapeRef = useRef<() => void>(() => {})
-    escapeRef.current = () => suggestions.length > 0 ? dismissSuggestions() : cancelChain()
+    escapeRef.current = () => suggestions.length > 0 ? dismissSuggestions() : chain ? cancelChain() : exitOutline()
     const altEnterRef = useRef<() => boolean>(() => false)
     altEnterRef.current = () => {
-        if (chain?.mode !== "append") return false
-        void openChainEditor(null)
+        if (!outline) return false
+        void edit()
         return true
     }
     const modEnterRef = useRef<() => boolean>(() => false)
     modEnterRef.current = () => {
-        if (chain?.mode !== "append") return false
-        void commitChain()
+        if (!outline) return false
+        void saveOutline()
         return true
     }
     const pushScope = () => {
@@ -156,7 +160,7 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
         app.keymap.popScope(scopeRef.current)
         scopeRef.current = null
     }
-    const claimKeys = chain !== null || suggestions.length > 0
+    const claimKeys = chain !== null || outline !== null || suggestions.length > 0
     useEffect(() => {
         if (claimKeys && document.activeElement === inputRef.current) pushScope()
         else if (!claimKeys) popScope()
@@ -208,21 +212,24 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
         return true
     }
 
-    /** Chain keys; true when the key was handled. `>` pushes a chip onto the append chain (pushChainAtom), Enter writes
-     *  it, Alt+Enter opens the Outline editor on it; `<` starts Move under. `>` and `<` need editor mode; Move under started
-     *  from Alt+M or the action panel works in every view. */
-    const handleChainKey = (ev: React.KeyboardEvent<HTMLInputElement>): boolean => {
+    /** Outline editor and chain keys; true when the key was handled. `>` opens the outline editor on the selected row
+     *  (patchAtom; in it: descends), `<` starts Move under. In the outline editor Enter runs the row's Enter (edit or
+     *  explore: openRowAtom; an empty input: the first row's), and typed text with no row picked becomes a filter
+     *  crumb; Backspace in an empty input drops the last crumb (in the reparent chain: leaves it). `>` and `<` need
+     *  editor mode; Move under started from Alt+M or the action panel works in every view. */
+    const handleOutlineKey = (ev: React.KeyboardEvent<HTMLInputElement>): boolean => {
         if (ev.nativeEvent.isComposing || ev.metaKey || ev.ctrlKey) return false
         const q = searchQuery.query
         const input = ev.currentTarget
         const selectedRow = selectedNode && !selectedNode.archiveRow ? selectedNode : null
 
-        if (ev.key === ">" && allowEditing && !ev.altKey && separator !== ">" && chain?.mode !== "reparent") {
-            void pushChain()
-        } else if (ev.key === "<" && allowEditing && !ev.altKey && separator !== "<" && selectedRow && chain?.mode !== "append") {
+        if (ev.key === ">" && allowEditing && !ev.altKey && separator !== ">" && chain === null) {
+            patch()
+        } else if (ev.key === "<" && allowEditing && !ev.altKey && separator !== "<" && selectedRow && outline === null) {
             startReparent()
-        } else if (ev.key === "Backspace" && chain && q === "" && input.selectionStart === 0 && input.selectionEnd === 0) {
-            popChain()
+        } else if (ev.key === "Backspace" && (chain || outline) && q === "" && input.selectionStart === 0 && input.selectionEnd === 0) {
+            if (chain) cancelChain()
+            else popCrumb()
         } else if (ev.key === "Enter" && chain?.mode === "reparent" && !ev.altKey && !ev.shiftKey) {
             const name = q.trim()
             if (enterRow && !enterRow.archiveRow) void reparentChain(enterRow.node)
@@ -230,43 +237,16 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
                 if (chain.confirm === name) void reparentChain({nodeType: "newPage", name})
                 else setChain({...chain, confirm: name})
             }
-        } else if (ev.key === "Enter" && chain?.mode === "append" && !ev.altKey && !ev.shiftKey) {
-            // Nothing to write: Enter adds the selected (else first) row as the next chip (as `>` does), else opens it
-            // (KeyComboWrapper).
-            if (chainWrite !== null) void commitChain()
-            else if (chainPatchRow) { selectEnterRow(); void pushChain() }
-            else return false
-        } else if (ev.key === "Enter" && chain?.mode === "append" && ev.altKey) {
-            void openChainEditor(null)
+        } else if (ev.key === "Enter" && outline && !ev.altKey && !ev.shiftKey) {
+            // A picked row or New line, or an empty input (the first row): the row's Enter (openRowAtom: edit or
+            // explore); typed text with nothing picked becomes a filter crumb.
+            if (selectedRow || newLineSelected || q.trim() === "") void handleDefault()
+            else addFilter()
         } else {
             return false
         }
         ev.preventDefault(); ev.stopPropagation()
         return true
-    }
-
-    /** Pastes in an append chain: a single URL becomes a markdown link as in the editor (EDITOR.md §3.8: over the
-     *  selection, else `[title](url)` with the title selected, else `[](url)` with the caret inside); a multi-line or
-     *  file paste continues in the editor (pasteIntoChainAtom). */
-    const onPaste = (ev: React.ClipboardEvent<HTMLInputElement>) => {
-        if (chain?.mode !== "append") return
-        const files = Array.from(ev.clipboardData.files)
-        const plain = ev.clipboardData.getData("text/plain")
-        const html = ev.clipboardData.getData("text/html")
-        const input = ev.currentTarget
-        const start = input.selectionStart ?? input.value.length
-        const link = files.length === 0 ? linkPasteEdit(input.value, start, input.selectionEnd ?? start, {plain, html}) : null
-        if (link) {
-            ev.preventDefault()
-            pendingSelection.current = {start: link.caret, end: link.selectionEnd ?? link.caret}
-            setSearch(link.text)
-            setCursorPos(link.caret)
-            resetSuggestions()
-            return
-        }
-        if (files.length === 0 && !plain.includes("\n")) return
-        ev.preventDefault()
-        void pasteIntoChain({files, plain, html})
     }
 
     /** → with the caret at the end of the query (or an empty query): expands / collapses the selected row. */
@@ -281,7 +261,7 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
 
     /** Open `[[frag`: Enter or Tab on a note/heading row replaces it with the row's link, which then scopes the search to that tree. */
     const handleLinkKey = (ev: React.KeyboardEvent<HTMLInputElement>): boolean => {
-        if (isQuickLink || chain?.mode === "reparent") return false
+        if (isQuickLink || chain?.mode === "reparent" || outline) return false
         if ((ev.key !== "Enter" && ev.key !== "Tab") || ev.shiftKey || ev.altKey || ev.metaKey || ev.ctrlKey || ev.nativeEvent.isComposing) return false
         const open = openLinkAt(searchQuery.query)
         if (!open || !selectedNode || selectedNode.archiveRow) return false
@@ -299,15 +279,28 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
         if (handleSuggestionKey(ev)) return
         if (handleLinkKey(ev)) return
         if (handleExpandKey(ev)) return
-        handleChainKey(ev)
+        handleOutlineKey(ev)
     }
 
+    // The outline editor's crumbs read `search › Row › is:task`: a click on `search` leaves it, on a path crumb makes it
+    // the root, on a filter crumb drops the crumbs after it. The reparent chain shows its one chip instead.
+    const crumbs = outline && [
+        ...outline.path.map((root, i) => ({key: `p${i}`, label: rootLabel(root), filter: false, open: () => openCrumb(i)})),
+        ...outline.filters.map((f, i) => ({key: `f${i}`, label: f, filter: true, open: () => openFilterCrumb(i)})),
+    ]
     const chips = chain?.mode === "reparent"
-        ? [<span key="reparent" className="ts-chain-chip is-reparent">{reparentLabel(chain.children)} &lt;</span>]
-        : chain?.mode === "append"
-        ? chain.steps.map((step, i) =>
-            <span key={i} className={"ts-chain-chip" + (step.kind === "entry" ? " is-entry" : "")}>{step.label} &gt;</span>)
-        : []
+        ? <span className="ts-chain-chip is-reparent">{reparentLabel(chain.children)} &lt;</span>
+        : crumbs
+        ? <span className="ts-outline-crumbs">
+            <span role="button" title="Back to the search" className="ts-outline-crumb"
+                  onMouseDown={ev => ev.preventDefault()} onClick={() => exitOutline()}>search</span>
+            {crumbs.flatMap(c => [
+                <span key={c.key + "›"} className="ts-outline-crumb-sep">›</span>,
+                <span key={c.key} role="button" title={c.label} className={"ts-outline-crumb" + (c.filter ? " is-filter" : "")}
+                      onMouseDown={ev => ev.preventDefault()} onClick={c.open}>{c.label}</span>,
+            ])}
+        </span>
+        : null
 
     const { linkRef, tryOpenUrl } = useUrlOpener()
     const dateAt = suggestions.length > 0 && isDateSuggestion(suggestions[0]) && inputRef.current
@@ -317,10 +310,13 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
         <a style={{ display: "none" }} target="_blank" ref={linkRef} href="#"></a>
     <div className="tw-reset sticky top-0 z-30">
 
-        <div className="relative flex items-center flex-1">
-            <div className="flex items-center justify-between w-full max-w-4xl">
-                <div className="relative flex-1 flex items-center">
-                    {chips}
+        {/* On mobile the chips sit on their own row above the search field, wrapping, so the field keeps its width. */}
+        {Platform.isMobile && chips && <div className="ts-search-chips-row">{chips}</div>}
+        <div className="relative flex items-center flex-1 min-w-0">
+            <div className="flex items-center justify-between w-full max-w-4xl min-w-0">
+                {/* min-w-0: the chips' max-width doesn't bound their min-content, which would widen the view. */}
+                <div className="relative flex-1 flex items-center min-w-0">
+                    {!Platform.isMobile && chips}
                     <input
                         ref={inputRef}
                         enterKeyHint="search"
@@ -328,7 +324,6 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
                         spellCheck="false"
                         onChange={ev => { setSearch(ev.target.value); resetSuggestions(); updateCursor(ev) }}
                         onKeyDown={handleKeyDown}
-                        onPaste={onPaste}
                         onSelect={ev => { updateCursor(ev); repositionSuggestions() }}
                         onFocus={() => { if (claimKeys) pushScope() }}
                         onBlur={popScope}
@@ -352,7 +347,7 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
                         <button
                             className="text-obs-base-40 focus:outline-none hover:text-obs-accent bg-transparent border-none p-1"
                             aria-label="Clear search"
-                            onClick={() => { if (clearChain()) setSearch("") }}
+                            onClick={() => { if (chain) cancelChain(); else setSearch("") }}
                         >
                             ×
                         </button>

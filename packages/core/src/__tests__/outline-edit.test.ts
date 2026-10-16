@@ -22,6 +22,9 @@ import {
   NOTE_BODY_CHANGED,
   noteBody,
   replaceNoteBody,
+  headingBody,
+  replaceHeadingBody,
+  editOutlineBlock,
 } from "../edit/outline-edit.ts"
 import { NotesGraph } from "../graph/graph.ts"
 import { indexSinglePage, DEFAULT_SETTINGS } from "../graph/indexer.ts"
@@ -62,6 +65,29 @@ describe("noteBody / replaceNoteBody", () => {
 
   it("refuses a body that changed since it was loaded", () => {
     expect(() => replaceNoteBody("- a\n\nold\n", "older", "x")).toThrow(NOTE_BODY_CHANGED)
+  })
+})
+
+describe("headingBody / replaceHeadingBody", () => {
+  const NOTE = "---\nk: v\n---\n## Goals\n- a\n### Sub\nsub text\n\n## Notes\n\nprose\n```\n# not a heading\n```\n"
+
+  it("takes the text under a heading up to the next heading of the same or a higher level, skipping code fences", () => {
+    expect(headingBody(NOTE, "Goals")).toBe("- a\n### Sub\nsub text")
+    expect(headingBody(NOTE, "Sub")).toBe("sub text")
+    expect(headingBody(NOTE, "notes")).toBe("prose\n```\n# not a heading\n```")
+    expect(headingBody(NOTE, "not a heading")).toBeNull()
+  })
+
+  it("replaces only that text, keeping the heading, the blank lines around it and the line ending", () => {
+    expect(replaceHeadingBody(NOTE, "Sub", "sub text", "new\ntext")).toBe(NOTE.replace("sub text", "new\ntext"))
+    expect(replaceHeadingBody("## A\r\n\r\nold\r\n", "A", "old", "x")).toBe("## A\r\n\r\nx\r\n")
+    expect(replaceHeadingBody("## A\n## B\n", "A", "", "x")).toBe("## A\nx\n## B\n")
+    expect(replaceHeadingBody("## A\nold\n\n## B\n", "A", "old", "")).toBe("## A\n\n## B\n")
+  })
+
+  it("refuses a heading that is gone or whose text changed since it was loaded", () => {
+    expect(() => replaceHeadingBody(NOTE, "Sub", "older", "x")).toThrow(NOTE_BODY_CHANGED)
+    expect(() => replaceHeadingBody(NOTE, "Gone", "", "x")).toThrow(NOTE_BODY_CHANGED)
   })
 })
 
@@ -400,5 +426,52 @@ describe("splitEditableLine / lineHasIdentity", () => {
     expect(lineHasIdentity("- alice", page)).toBe(false)
     const header = { nodeType: "header", page: "A", header: "Plans" } as unknown as ParsedNode
     expect(lineHasIdentity("## plans", header)).toBe(true)
+  })
+})
+
+describe("editOutlineBlock", () => {
+  it("puts deeper lines before the line's existing children and same-depth lines after its subtree", () => {
+    const content = "- a\n    - old\n- b\n"
+    const out = editOutlineBlock(content, 0, "- a", "- A", [
+      { depth: 1, marker: "- ", text: "kid" },
+      { depth: 0, marker: "- [ ] ", text: "sib" },
+      { depth: 1, marker: "- ", text: "sib kid" },
+    ])
+    expect(out.content).toBe("- A\n    - kid\n    - old\n- [ ] sib\n    - sib kid\n- b\n")
+    expect(out.inserted).toEqual([{ at: 1, count: 1 }, { at: 3, count: 2 }])
+  })
+
+  it("indents from an indented list line's own depth", () => {
+    const out = editOutlineBlock("- p\n    - a\n", 1, "    - a", "    - a2", [{ depth: 0, marker: "- ", text: "b" }])
+    expect(out.content).toBe("- p\n    - a2\n    - b\n")
+    expect(out.inserted).toEqual([{ at: 2, count: 1 }])
+  })
+
+  it("puts every line right after a heading, depth 0 at column 0", () => {
+    const content = "# H\n- old\n"
+    const out = editOutlineBlock(content, 0, "# H", "# H2", [
+      { depth: 0, marker: "- ", text: "x" },
+      { depth: 1, marker: "- ", text: "y" },
+    ])
+    expect(out.content).toBe("# H2\n- x\n    - y\n- old\n")
+    expect(out.inserted).toEqual([{ at: 1, count: 2 }])
+  })
+
+  it("indents with tabs in a tab-indented file", () => {
+    const out = editOutlineBlock("- a\n\t- b\n", 1, "\t- b", "\t- b", [{ depth: 1, marker: "- ", text: "c" }])
+    expect(out.content).toBe("- a\n\t- b\n\t\t- c\n")
+  })
+
+  it("keeps CRLF line endings", () => {
+    const out = editOutlineBlock("- a\r\n- b\r\n", 0, "- a", "- a!", [{ depth: 1, marker: "- ", text: "c" }])
+    expect(out.content).toBe("- a!\r\n    - c\r\n- b\r\n")
+  })
+
+  it("only rewrites the line when there are no extra lines", () => {
+    expect(editOutlineBlock("- a\n", 0, "- a", "- b", [])).toEqual({ content: "- b\n", inserted: [] })
+  })
+
+  it("throws StaleLineError when the line changed", () => {
+    expect(() => editOutlineBlock("- a\n", 0, "- z", "- b", [])).toThrow(StaleLineError)
   })
 })

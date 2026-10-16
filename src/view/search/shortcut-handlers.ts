@@ -12,13 +12,13 @@ export type ShortcutHandlers = Record<ShortcutId, (keyIndex: number) => unknown>
 export function useShortcutHandlers(): ShortcutHandlers {
     const {
         arrowDownAtom, arrowUpAtom, timelineActiveAtom, toggleViewModeAtom, recencyWindowAtom,
-        incExpandAtom, decExpandAtom, resetCollapseAtom, toggleActionPanelAtom, startReparentAtom, startQuickAddAtom, toggleCutAtom,
+        incExpandAtom, decExpandAtom, resetCollapseAtom, toggleActionPanelAtom, startReparentAtom, openOutlineAtom, toggleCutAtom,
     } = useMolecule(SearchViewMolecule)
     const startReparent = useSetAtom(startReparentAtom)
     const toggleCut = useSetAtom(toggleCutAtom)
-    const startQuickAdd = useSetAtom(startQuickAddAtom)
+    const openOutline = useSetAtom(openOutlineAtom)
     const {isGraphLoadingAtom} = useMolecule(GlobalAppMolecule)
-    const {openEditForSelectedAtom, openAppendForSelectedAtom} = useMolecule(EditorMolecule)
+    const {editAtom, openAppendForSelectedAtom} = useMolecule(EditorMolecule)
     const {copyActionAtom, handleDefaultActionAtom, highlightSelectedItemAtom, runRaycastActionAtom} = useMolecule(ActionsMolecule)
 
     const timelineActive = useAtomValue(timelineActiveAtom)
@@ -35,7 +35,7 @@ export function useShortcutHandlers(): ShortcutHandlers {
     const highlightSelectedItem = useSetAtom(highlightSelectedItemAtom)
     const copyAction = useSetAtom(copyActionAtom)
     const runRaycastAction = useSetAtom(runRaycastActionAtom)
-    const openEditForSelected = useSetAtom(openEditForSelectedAtom)
+    const edit = useSetAtom(editAtom)
     const openAppendForSelected = useSetAtom(openAppendForSelectedAtom)
 
     return {
@@ -57,7 +57,7 @@ export function useShortcutHandlers(): ShortcutHandlers {
         archive: () => runRaycastAction(["archive", "unarchive", "archivePage", "unarchivePage"]),
         consolidate: () => runRaycastAction(["pullChildren"]),
         append: () => openAppendForSelected(),
-        edit: () => openEditForSelected(),
-        quickAdd: () => startQuickAdd(),
+        edit: () => edit(),
+        quickAdd: () => openOutline({kind: "today", quickAdd: true}),
     }
 }

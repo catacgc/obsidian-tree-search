@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test"
-import { prioritizeWebLinks, RaycastAction, getTreeNodeActions, openTargetOf } from "../node-actions"
+import { prioritizeWebLinks, RaycastAction, getTreeNodeActions, openTargetOf, webEnterAction } from "../node-actions"
 
 const browse = (url: string, title: string, shortcut?: RaycastAction["shortcut"]): RaycastAction => ({
     type: "browse",
@@ -84,6 +84,21 @@ describe("prioritizeWebLinks", () => {
 
     it("returns empty array unchanged", () => {
         expect(prioritizeWebLinks([])).toEqual([])
+    })
+})
+
+describe("webEnterAction", () => {
+    it("is the plain-Enter action when it opens a web URL", () => {
+        const web = browse("https://x.io", "Browse x", { key: "enter", modifiers: [] })
+        expect<RaycastAction | null>(webEnterAction([web])).toBe(web)
+    })
+
+    it("is null for an obsidian:// Enter action", () => {
+        expect(webEnterAction([browse("obsidian://tree-search-uri?raycastaction=open&filepath=P", "Open P", { key: "enter", modifiers: [] })])).toBeNull()
+    })
+
+    it("is null for a web URL on a modified Enter", () => {
+        expect(webEnterAction([browse("https://x.io", "Browse x", { key: "enter", modifiers: ["shift"] })])).toBeNull()
     })
 })
 

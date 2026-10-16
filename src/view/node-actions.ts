@@ -68,8 +68,8 @@ export const raycastActionOf = (action: RaycastAction): string | null =>
         : null
 
 /** The note (`Name`) or heading (`Name#Heading`) an `raycastaction=open` action opens, else null: a page or header
- *  row's own Open, a text row's `Open 🔹 [[link]]`, a folder's folder note. Views with editor mode show its Patch view
- *  instead of opening it in Obsidian. */
+ *  row's own Open, a text row's `Open 🔹 [[link]]`, a folder's folder note. Views with editor mode open it in the
+ *  outline editor instead of in Obsidian. */
 export function openTargetOf(action: RaycastAction): string | null {
     if (raycastActionOf(action) !== "open" || action.type !== "browse") return null
     const url = new URL(action.url)
@@ -196,6 +196,14 @@ export function prioritizeWebLinks(actions: RaycastAction[]): RaycastAction[] {
     }
 
     return reordered
+}
+
+/** The plain-Enter action when it opens a web URL (the line's first web link, given Enter by prioritizeWebLinks), else null. */
+export function webEnterAction(actions: RaycastAction[]): Browse | null {
+    for (const a of actions) {
+        if (a.type === "browse" && a.shortcut?.key === "enter" && a.shortcut.modifiers.length === 0 && !a.url.startsWith("obsidian://")) return a
+    }
+    return null
 }
 
 /** The page's own note, resolved as the link it is: a page shown as a child carries the location of

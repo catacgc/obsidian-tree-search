@@ -347,7 +347,7 @@
 	user-select: none;
 }
 
-/* Search chains, append (`>`) and reparent (`<`): the chips in the search input row and the prompt below them. */
+/* The reparent chain's (`<`) chip in the search input row. */
 .ts-chain-chip {
 	display: inline-flex;
 	align-items: center;
@@ -368,26 +368,67 @@
 	border-style: dashed;
 }
 
-.ts-chain-chip.is-entry {
-	border-style: dotted;
-}
-
-.ts-chain-preview {
-	margin: 0 4px 6px;
-	padding: 6px 10px;
-	border-radius: var(--radius-s);
-}
-
-.ts-chain-preview-dest {
+/* The outline editor's crumbs (`search › Row › is:task`) left of the search input (mobile: above it, .ts-search-chips-row). */
+.ts-outline-crumbs {
+	display: flex;
+	align-items: center;
+	flex: none;
+	max-width: 60%;
+	margin-left: 4px;
+	overflow: hidden;
 	font-size: var(--font-ui-small);
-	color: var(--text-muted);
+	white-space: nowrap;
 }
 
-.ts-chain-preview-hint {
-	font-size: var(--font-ui-smaller);
+.ts-outline-crumb {
+	flex: 0 1 auto;
+	min-width: 0;
+	padding: 2px 6px;
+	border-radius: var(--radius-s);
+	overflow: hidden;
+	text-overflow: ellipsis;
 	color: var(--text-muted);
+	cursor: pointer;
 }
 
-.ts-chain-preview.is-blocking .ts-chain-preview-dest {
-	color: var(--text-error);
+.ts-outline-crumb:last-child {
+	color: var(--text-normal);
+}
+
+.ts-outline-crumb:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.ts-outline-crumb.is-filter {
+	font-family: var(--font-monospace);
+}
+
+.ts-outline-crumb-sep {
+	flex: none;
+	color: var(--text-faint);
+}
+
+/* Mobile: the chips get their own row above the search field (SearchBar); crumbs wrap instead of shrinking. */
+.ts-search-chips-row {
+	display: flex;
+	min-width: 0;
+	padding: 6px 4px 0;
+}
+
+.ts-search-chips-row .ts-outline-crumbs {
+	flex: 1 1 auto;
+	max-width: 100%;
+	margin-left: 0;
+	flex-wrap: wrap;
+	row-gap: 2px;
+}
+
+.ts-search-chips-row .ts-outline-crumb {
+	max-width: 100%;
+}
+
+.ts-search-chips-row .ts-chain-chip {
+	max-width: 100%;
+	margin-left: 0;
 }

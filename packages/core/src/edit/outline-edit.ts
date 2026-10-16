@@ -173,7 +173,7 @@ function trimBlankLines(lines: string[]): string[] {
 }
 
 /** What follows a note's leading outline (with no outline: everything after the frontmatter), without leading and
- *  trailing blank lines, joined by "\n": the text Patch view's content pane edits. "" when there is none. */
+ *  trailing blank lines, joined by "\n": the text the outline editor's content pane edits. "" when there is none. */
 export function noteBody(content: string): string {
   const { lines } = splitLines(content)
   return trimBlankLines(lines.slice(bodyStartOf(lines))).join("\n")
@@ -191,6 +191,69 @@ export function replaceNoteBody(content: string, expected: string, body: string)
   const next = trimBlankLines(body.split(/\r\n|\r|\n/))
   const out = head.length === 0 ? next : next.length === 0 ? head : [...head, "", ...next]
   return out.length === 0 ? "" : out.join(eol) + eol
+}
+
+/** The heading `heading` (its text, as the index names it) in `lines`: its line and level, and the exclusive end of
+ *  its section (the next heading of the same or a higher level, outside code fences); null when there is none. An
+ *  exact text match wins over a case-insensitive one. */
+function headingSectionOf(lines: string[], heading: string): { line: number; end: number } | null {
+  const want = heading.trim()
+  const found: { line: number; level: number; text: string }[] = []
+  let fence: string | null = null
+  for (let i = frontmatterEnd(lines); i < lines.length; i++) {
+    const t = lines[i].trimStart()
+    const f = /^(`{3,}|~{3,})/.exec(t)?.[1]
+    if (f && (fence === null || f[0] === fence[0])) {
+      fence = fence === null ? f : null
+      continue
+    }
+    if (fence !== null) continue
+    const m = HEADER_RE.exec(lines[i])
+    if (m) found.push({ line: i, level: m[1].length, text: m[2].replace(/\s+#+\s*$/, "").trim() })
+  }
+  const pick = found.findIndex(h => h.text === want) >= 0
+    ? found.findIndex(h => h.text === want)
+    : found.findIndex(h => h.text.toLowerCase() === want.toLowerCase())
+  if (pick < 0) return null
+  const h = found[pick]
+  const next = found.slice(pick + 1).find(n => n.level <= h.level)
+  return { line: h.line, end: next ? next.line : lines.length }
+}
+
+/** `content`'s lines without the empty last element a trailing line ending leaves, and whether there was one. */
+function splitBody(content: string): { lines: string[]; eol: string; trailing: boolean } {
+  const { lines, eol } = splitLines(content)
+  const trailing = lines.length > 1 && lines[lines.length - 1] === ""
+  if (trailing) lines.pop()
+  return { lines, eol, trailing }
+}
+
+/** The text under heading `heading` (up to the next heading of the same or a higher level), without leading and
+ *  trailing blank lines, joined by "\n": what the outline editor's content pane edits for a heading root. Null when the note
+ *  has no such heading. */
+export function headingBody(content: string, heading: string): string | null {
+  const { lines } = splitBody(content)
+  const s = headingSectionOf(lines, heading)
+  return s ? trimBlankLines(lines.slice(s.line + 1, s.end)).join("\n") : null
+}
+
+/** `content` with the text under heading `heading` (headingBody) replaced by `body`; the heading line and the blank
+ *  lines around the text are kept. Throws Error(NOTE_BODY_CHANGED) when the heading is gone or its text isn't
+ *  `expected`. */
+export function replaceHeadingBody(content: string, heading: string, expected: string, body: string): string {
+  const { lines, eol, trailing } = splitBody(content)
+  const s = headingSectionOf(lines, heading)
+  if (!s) throw new Error(NOTE_BODY_CHANGED)
+  const raw = lines.slice(s.line + 1, s.end)
+  let a = 0
+  while (a < raw.length && !raw[a].trim()) a++
+  let b = raw.length
+  while (b > a && !raw[b - 1].trim()) b--
+  if (raw.slice(a, b).join("\n") !== expected) throw new Error(NOTE_BODY_CHANGED)
+  const next = trimBlankLines(body.split(/\r\n|\r|\n/))
+  const section = next.length === 0 ? raw.slice(b) : [...raw.slice(0, a), ...next, ...raw.slice(b)]
+  const out = [...lines.slice(0, s.line + 1), ...section, ...lines.slice(s.end)]
+  return out.join(eol) + (trailing ? eol : "")
 }
 
 /** Exclusive end of the subtree headed by `headLine`: inner blank lines count, trailing blank lines don't. */
@@ -303,6 +366,45 @@ export function replaceLineText(content: string, line: number, expectedLine: str
   if (lines[line] !== expectedLine) throw new StaleLineError()
   lines[line] = newText
   return lines.join(eol)
+}
+
+/** Rewrites list or heading line `line` of `content` to `first` and inserts `extra` (OutlineLine depths relative to
+ *  the line: 0 = same depth, 1 = a child, …). Throws StaleLineError when `lines[line] !== expectedLine`.
+ *  List line: the extra lines before the first depth-0 one go right after the line (before its existing children);
+ *  the rest (from the first depth-0 line, with the deeper lines after it) go after the line's subtree (findSubtreeEnd).
+ *  Heading line: every extra line goes right after the heading, depth 0 at column 0.
+ *  Rendered as `unit.repeat(base + depth) + marker + text` where base = floor(indentWidth(expectedLine) / 4) for a list
+ *  line (0 for a heading) and unit = the file's indent unit (tab-indented files use tabs).
+ *  Keeps the line ending and the trailing newline. `inserted`: the inserted blocks as line numbers in the returned
+ *  content, in file order. */
+export function editOutlineBlock(
+  content: string,
+  line: number,
+  expectedLine: string,
+  first: string,
+  extra: OutlineLine[],
+): { content: string; inserted: { at: number; count: number }[] } {
+  const { lines, eol } = splitLines(content)
+  if (lines[line] !== expectedLine) throw new StaleLineError()
+  const heading = HEADER_RE.test(expectedLine)
+  const unit = indentUnitOf(lines)
+  const base = heading ? 0 : Math.floor(indentWidth(expectedLine) / 4)
+  const end = heading ? line + 1 : findSubtreeEnd(lines, line)
+  lines[line] = first
+  if (extra.length === 0) return { content: lines.join(eol), inserted: [] }
+  if (heading) {
+    lines.splice(line + 1, 0, ...renderOutline(extra, base, unit))
+    return { content: lines.join(eol), inserted: [{ at: line + 1, count: extra.length }] }
+  }
+  const split = extra.findIndex(l => l.depth === 0)
+  const children = split < 0 ? extra : extra.slice(0, split)
+  const siblings = split < 0 ? [] : extra.slice(split)
+  lines.splice(end, 0, ...renderOutline(siblings, base, unit))
+  lines.splice(line + 1, 0, ...renderOutline(children, base, unit))
+  const inserted: { at: number; count: number }[] = []
+  if (children.length > 0) inserted.push({ at: line + 1, count: children.length })
+  if (siblings.length > 0) inserted.push({ at: end + children.length, count: siblings.length })
+  return { content: lines.join(eol), inserted }
 }
 
 // ── Reparent (cut / paste a bullet subtree) ────────────────────────────────

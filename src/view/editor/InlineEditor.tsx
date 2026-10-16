@@ -1,9 +1,9 @@
-// The inline editor shared by Append, Alt-Edit and prose (EDITOR.md §3): title, outline section, optional
+// The inline editor shared by Append, prose, Rename and filter names (EDITOR.md §3): title, outline section, optional
 // content section, live preview and footer hints. Shown at the top of Quick Add and in place by the Search modal
 // and pane, keyed by session, with its link results (LinkResults: `[[` matches, else the parent's tree, the picked
 // line's note or the daily outline) filling the view below it.
 import React, {useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
-import {useAtomValue, useSetAtom, useStore} from "jotai";
+import {useAtomValue, useSetAtom} from "jotai";
 import {useMolecule} from "bunshi/react";
 import {htmlToMarkdown, Notice, Platform, Scope} from "obsidian";
 import {Brackets, ClipboardPaste, IndentDecrease, IndentIncrease, ListTodo, Paperclip} from "lucide-react";
@@ -53,7 +53,7 @@ const bufferKey = (contents: Record<string, string>, name: string) =>
     Object.keys(contents).find(k => k.toLowerCase() === name.toLowerCase()) ?? name
 
 /** Where the `@` popup opens in the field box: under the character at `pos`. */
-function popupAt(h: MarkdownFieldHandle | null, box: HTMLElement | null, pos: number): {left: number; top: number} | undefined {
+export function popupAt(h: MarkdownFieldHandle | null, box: HTMLElement | null, pos: number): {left: number; top: number} | undefined {
     const c = h?.coordsAt(pos)
     if (!c || !box) return undefined
     const r = box.getBoundingClientRect()
@@ -93,8 +93,7 @@ async function readClipboard(): Promise<PasteData> {
 }
 
 export function InlineEditor({state}: { state: EditorState }) {
-    const {updateEditorAtom, cancelEditorAtom, saveEditorAtom, closeEditorAtom, openProseAtom, pendingPasteAtom} = useMolecule(EditorMolecule)
-    const store = useStore()
+    const {updateEditorAtom, cancelEditorAtom, saveEditorAtom, closeEditorAtom, openProseAtom} = useMolecule(EditorMolecule)
     const update = useSetAtom(updateEditorAtom)
     const cancel = useSetAtom(cancelEditorAtom)
     const save = useSetAtom(saveEditorAtom)
@@ -139,7 +138,7 @@ export function InlineEditor({state}: { state: EditorState }) {
 
     const outlineSuggest = useLinkSuggest(state.outline, state.caret, focused === "outline")
     const contentSuggest = useLinkSuggest(contentText, contentCaret, focused === "content" && active !== null)
-    const dateSuggest = useDateSuggest(state.outline, state.caret, focused === "outline", state.linePrefix ?? "")
+    const dateSuggest = useDateSuggest(state.outline, state.caret, focused === "outline", "")
     const outlineFieldRef = useRef<HTMLDivElement>(null)
 
     const filters = useAtomValue(searchFiltersAtom)
@@ -170,7 +169,7 @@ export function InlineEditor({state}: { state: EditorState }) {
         scopePushed.current = false
     }
 
-    // ── Mount: focus, Escape scope; an Alt-Edit session ends on unmount ───────
+    // ── Mount: focus, Escape scope; a Rename, filter or prose session ends on unmount ──
     useEffect(() => {
         alive.current = true
         const scope = new Scope(app.scope)
@@ -187,15 +186,9 @@ export function InlineEditor({state}: { state: EditorState }) {
             h.focus()
             h.setSelection(Math.min(state.caret, h.text().length))
         }
-        // The chain's large paste, applied once (read through the store so StrictMode's second mount sees null).
-        const paste = store.get(pendingPasteAtom)
-        if (paste) {
-            store.set(pendingPasteAtom, null)
-            if (append) pasteInto("outline", paste, false, false)
-        }
         if (rootRef.current?.contains(document.activeElement)) pushScope()
 
-        // The Append draft outlives Quick Add (until saved or discarded); Alt-Edit and prose sessions do not.
+        // The Append draft outlives Quick Add (until saved or discarded); the other sessions do not.
         const {sessionId, mode} = state
         return () => {
             popScope()
@@ -229,13 +222,13 @@ export function InlineEditor({state}: { state: EditorState }) {
     // ancestor line's), so the list follows the caret and edits to the links around it.
     const caretParent = caretNote(state.outline, state.caret) ?? undefined
     // The results list follows the open `[[query` of the focused field, else shows that note's full tree (`[[P]]`),
-    // the picked line's note, or today's daily outline.
-    useEffect(() => setQuery({query: suggest.open ? `[[${suggest.query}` : quickAddDefaultQuery(caretParent, state.underLine?.path)}),
-        [suggest.open, suggest.query, caretParent, state.underLine?.path])
+    // or today's daily outline.
+    useEffect(() => setQuery({query: suggest.open ? `[[${suggest.query}` : quickAddDefaultQuery(caretParent)}),
+        [suggest.open, suggest.query, caretParent])
 
     /** Escape / ✕ / backdrop: close the editor (Quick Add, or back to the search); the Append draft stays for next time. */
     const close = () => closeEditor({kind: "cancelled"})
-    /** Discard (Cancel for Alt-Edit): drop the session and its pasted attachments, then close. */
+    /** Discard (Cancel for Rename and filters): drop the session and its pasted attachments, then close. */
     const discard = () => {
         void cancel()
         close()
@@ -356,7 +349,7 @@ export function InlineEditor({state}: { state: EditorState }) {
     // ── Mobile toolbar ────────────────────────────────────────────────────────
     /** Section the toolbar acts on: the content field when open and last focused, else the outline. */
     const toolSection: Section = focused === "content" && active !== null ? "content" : "outline"
-    /** Task, Indent and Outdent act on the line prefix; an Alt-Edit outline holds one line without it (`linePrefix`). */
+    /** Task, Indent and Outdent act on list lines: the Append outline and the content section. */
     const canEditPrefix = toolSection === "content" || append
 
     /** Toolbar Insert link: wraps the selection in `[[…]]` (empty: `[[]]`), caret before `]]`, so the link results open on the text inside. */
@@ -464,11 +457,8 @@ export function InlineEditor({state}: { state: EditorState }) {
             if (renaming) return true
             const name = linkAt(text, start) ?? firstLinkOnLine(text, start)
             if (name) openContent(name)
-            // No link on the line: the whole-note prose editor (the parent's note, a new note linked from the picked
-            // line, or today's daily note).
-            else if (append) void openProse(state.underLine
-                ? {kind: "line", line: state.underLine}
-                : {kind: "note", noteName: state.parentName ? state.parentName.split("#")[0] : null})
+            // No link on the line: the whole-note prose editor (the parent's note, or today's daily note).
+            else if (append) void openProse({kind: "note", noteName: state.parentName ? state.parentName.split("#")[0] : null})
             return true
         }
         // In the content section Enter is Obsidian's (it continues lists).
@@ -514,7 +504,7 @@ export function InlineEditor({state}: { state: EditorState }) {
             base = active
             sourcePath = contentSourcePath(active)
         } else {
-            base = caretNote(text, caret) ?? (append ? (state.underLine ? basenameOf(state.underLine.path) : parentName) : basenameOf(state.sourcePath))
+            base = caretNote(text, caret) ?? (append ? parentName : basenameOf(state.sourcePath))
             sourcePath = state.sourcePath
         }
 
@@ -630,21 +620,8 @@ export function InlineEditor({state}: { state: EditorState }) {
         onFocus={pushScope}
         onBlur={ev => { if (!rootRef.current?.contains(ev.relatedTarget as Node | null)) popScope() }}
     >
-        {/* The Search modal's title already names an Alt-Edit session. */}
+        {/* The Search modal's title already names a Rename or filter session. */}
         {editorTitle(state) !== hostTitle && <div className="ts-editor-title">{editorTitle(state)}</div>}
-        {state.prose?.kind === "new" && <input
-            className="ts-prose-name"
-            type="text"
-            spellCheck="false"
-            placeholder="New note name"
-            aria-label="New note name"
-            value={state.prose.name}
-            disabled={state.saving}
-            onChange={ev => {
-                const name = ev.target.value
-                update(s => s.prose?.kind === "new" ? {...s, prose: {...s.prose, name}} : s)
-            }}
-        />}
         <div className="ts-editor-field" ref={outlineFieldRef}>
             <MarkdownField
                 handleRef={outlineRef}
@@ -713,7 +690,7 @@ export function InlineEditor({state}: { state: EditorState }) {
             </div>
         </div>
     </div>
-    <LinkResults open={suggest.open} query={suggest.query} parentName={caretParent ?? (state.underLine ? basenameOf(state.underLine.path) : undefined)}
+    <LinkResults open={suggest.open} query={suggest.query} parentName={caretParent}
         onPick={row => { if (!row.archiveRow) accept(focused, row) }}
         newName={newName} newSelected={newSelected}
         onPickNew={() => { if (newName !== null) insertLink(focused, `[[${newName}]]`) }}/>

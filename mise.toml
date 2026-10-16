@@ -74,3 +74,6 @@ run = [
   "bundle install --quiet",
   "bundle exec jekyll serve --livereload --destination {{config_root}}/.docs-site",
 ]
+
+[env]
+UW2_ARTIFACTORY_USER = "costache"

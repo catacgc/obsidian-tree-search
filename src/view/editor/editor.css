@@ -292,12 +292,75 @@
 	overflow: auto;
 }
 
-.ts-prose-name {
-	width: 100%;
-	margin-bottom: 6px;
+/* The outline editor's line editor (LineEditor), in place of its row: indented like the row, no box of its own. */
+.ts-inline-editor.ts-line-editor {
+    padding: 2px 8px 4px calc(var(--indent-level, 1) * 20px);
+    background: transparent;
+    border-bottom: none;
 }
 
-/* Patch view's content pane (NoteBodyPane): the anchored note's text after its outline, docked above the footer. */
+.ts-line-editor-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+}
+
+/* The row's indent, bullet, checkbox or `#…`, kept outside the field. */
+.ts-line-editor-prefix {
+    flex-shrink: 0;
+    padding-top: 7px;
+    font-family: var(--font-monospace);
+    font-size: var(--font-ui-smaller);
+    color: var(--text-muted);
+    white-space: pre;
+}
+
+.ts-line-editor-field {
+    flex: 1;
+    min-width: 0;
+}
+
+/* A field line the filter would hide (blockMisses), drawn over the line. */
+.ts-line-miss {
+    position: absolute;
+    left: 4px;
+    right: 4px;
+    pointer-events: none;
+}
+
+/* The line editor's `[[` link targets. */
+.ts-line-links {
+    max-height: 40vh;
+    overflow-y: auto;
+}
+
+.ts-line-link {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    padding: 2px 12px 2px calc(12px + var(--indent-level, 0) * 16px);
+    font-size: var(--font-ui-small);
+    border-radius: var(--radius-s);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.ts-line-link:hover {
+    background-color: var(--background-modifier-hover);
+}
+
+.ts-line-link.is-selected {
+    background-color: hsla(var(--interactive-accent-hsl), 0.1);
+}
+
+.ts-line-link-path {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-faint);
+    font-size: var(--font-ui-smaller);
+}
+
+/* The outline editor's content pane (NoteBodyPane): a note's text after its outline, docked above the footer. */
 .ts-note-body {
     display: flex;
     flex-direction: column;
@@ -305,6 +368,18 @@
     padding: 4px 8px 6px;
     background: var(--ts-surface);
     border-top: 1px solid var(--background-modifier-border);
+}
+
+.ts-note-body:focus {
+    outline: none;
+}
+
+/* Right-aligned header buttons; Close follows them. */
+.ts-note-body-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .ts-note-body-header {
@@ -328,8 +403,8 @@
 }
 
 /* Scoped to outrank Obsidian's `button:not(.clickable-icon)` styles, like .ts-editor-button. */
-.ts-note-body .ts-note-body-save {
-    margin-left: auto;
+.ts-note-body .ts-note-body-save,
+.ts-note-body .ts-note-body-discard {
     height: auto;
     padding: 0 4px;
     background: transparent;
@@ -339,7 +414,16 @@
     font-size: var(--font-ui-smaller);
 }
 
-.ts-note-body .ts-note-body-save:disabled {
+.ts-note-body .ts-note-body-header .clickable-icon {
+    padding: 2px;
+}
+
+.ts-note-body .ts-note-body-discard {
+    color: var(--text-muted);
+}
+
+.ts-note-body .ts-note-body-save:disabled,
+.ts-note-body .ts-note-body-discard:disabled {
     color: var(--text-faint);
     cursor: default;
 }
@@ -348,4 +432,15 @@
     height: 30vh;
     min-height: 0;
     max-height: none;
+}
+
+/* Expanded: the pane fills the view (SearchViewFlatten hides the results). */
+.ts-note-body.is-expanded {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.ts-note-body.is-expanded .ts-editor-text {
+    flex: 1 1 auto;
+    height: auto;
 }

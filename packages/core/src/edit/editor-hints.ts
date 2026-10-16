@@ -41,8 +41,6 @@ export function editorHints(input: {
   contentOrder: string[]
   noteExists: (name: string) => boolean
   attachmentError?: { ambiguous: string } | { invalidName: string }
-  /** Prose mode for a new note: the name field's value. */
-  proseNewName?: string
   /** Prose mode: the save would change the note's frontmatter or leading outline. */
   proseOutlineChanged?: boolean
   /** Prose mode: the outline change was confirmed by a first Save. */
@@ -63,12 +61,6 @@ export function editorHints(input: {
   let plain = false
   if (mode === "prose") {
     if (outline.trim() === "") block("Empty — nothing to save")
-    if (input.proseNewName !== undefined) {
-      const name = input.proseNewName.trim()
-      if (name === "") block("Name the new note")
-      else if (INVALID_NAME_RE.test(name)) block(NAMES_HINT)
-      else if (noteExists(name)) block(`Note "${name}" already exists`)
-    }
     if (input.proseOutlineChanged) {
       info.push(input.proseConfirmed
         ? "Outline changes confirmed — Save writes them"

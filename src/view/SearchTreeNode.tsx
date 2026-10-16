@@ -11,8 +11,8 @@ import {GlobalAppMolecule, SearchViewMolecule} from "./react-context/state";
 import {ActionsMolecule} from "./react-context/actions";
 import {triggerLocationPreview} from "./hover-preview";
 import {EditorMolecule} from "./editor/EditorMolecule";
-import {AppendDot} from "./editor/AppendDot";
-import {dragInfo, isValidDropTarget, type AppendTarget} from "./editor/row-editing";
+import {PatchDot} from "./editor/PatchDot";
+import {dragInfo, isValidDropTarget} from "./editor/row-editing";
 import {useRowGestures} from "./search/row-gestures";
 import {TaskCheckbox} from "./search/TaskCheckbox";
 import {GlobalAtoms} from "./react-context/global";
@@ -23,7 +23,7 @@ type SearchTreeNodePropsFlatten = {
     /** Position among the rendered rows. */
     pos: number;
     editable?: boolean;
-    appendDot?: AppendTarget;
+    patchDot?: boolean;
     editHint?: boolean;
     /** The editor's link list: a click picks the row instead of selecting/opening it (its links included), and the
      *  row never takes focus from the editor. */
@@ -64,6 +64,8 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
     // Archived rows (revealed via is:archived) get a distinct greyed treatment,
     // composed with — and independent of — the context-dim above.
     const archivedClass = props.node.archived ? "ts-node-archived" : "";
+    // Outline editor: a pinned row the filter would hide.
+    const missClass = props.node.miss ? "ts-outline-miss" : "";
     const className = `ts-list-line ts-list-line-${props.node.indent + 1} ${highlighted} ${expandableClass}`;
 
     const indentLevel = props.node.indent + 1;
@@ -171,7 +173,7 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
         >
             <div
                 ref={nodeRef}
-                className={`ts-list-line ${highlighted} ${flashing} ${expandableClass} ${dimClass} ${archivedClass} ${cut} ${dropTarget === props.pos ? "ts-drop-target" : ""}`}
+                className={`ts-list-line ${highlighted} ${flashing} ${expandableClass} ${dimClass} ${archivedClass} ${missClass} ${cut} ${dropTarget === props.pos ? "ts-drop-target" : ""}`}
                 dir="ltr"
                 style={{ '--indent-level': indentLevel } as React.CSSProperties}
             >
@@ -195,7 +197,7 @@ export const SearchTreeNode = (props: SearchTreeNodePropsFlatten) => {
                     {date && <span className="ts-row-date" title={fromFile ? `${date.absolute} · file created` : date.absolute}>{date.label}</span>}
                 </div>
             </div>
-            {props.appendDot && <AppendDot target={props.appendDot}/>}
+            {props.patchDot && <PatchDot row={props.node}/>}
             {props.editHint && <Pencil size={12} className="ts-edit-hint"/>}
         </div>
     );

@@ -1,22 +1,6 @@
 import { describe, it, expect } from "bun:test"
-import { buildGraphFromScanner, getKey, type ParsedNode, type ResultNode, type VaultScanner } from "@mdtree/core"
-import {
-    chainEditorText,
-    chainOutline,
-    chainPrefill,
-    chainPrevQuery,
-    chainReplacesSearch,
-    chainResults,
-    dirtyBodyPaths,
-    isEntryInput,
-    parseChainEntry,
-    planReparent,
-    type ChainAnchor,
-    type ChainEntry,
-    type ChainOutline,
-    type ChainStep,
-    type RowRef,
-} from "../view/search/chain"
+import { buildGraphFromScanner, getKey, type NotesGraph, type ParsedNode, type ResultNode, type VaultScanner } from "@mdtree/core"
+import { chainPrefill, chainResults, dirtyBodyKeys, patchPath, planReparent, type RowRef } from "../view/search/chain"
 import type { OwnPath } from "../view/editor/row-editing"
 import type { DailyNoteConfig } from "../indexing/indexed-tree"
 
@@ -33,9 +17,42 @@ const folder = (path: string): ParsedNode =>
 
 const ref = (node: ParsedNode, parent: ParsedNode | null = null, label = "label"): RowRef => ({ node, label, parent })
 
-describe("dirtyBodyPaths", () => {
+describe("dirtyBodyKeys", () => {
     it("lists only the buffers whose text differs from the loaded body", () => {
-        expect(dirtyBodyPaths({ "a.md": { original: "x", text: "x" }, "b.md": { original: "x", text: "y" } })).toEqual(["b.md"])
+        const body = (key: string, original: string, text: string) => ({ key, path: key, heading: null, label: key, original, text })
+        expect(dirtyBodyKeys({ "a.md": body("a.md", "x", "x"), "b.md": body("b.md", "x", "y") })).toEqual(["b.md"])
+    })
+})
+
+describe("patchPath", () => {
+    const files: Record<string, string> = {
+        "Note.md": "## Goals\n- parent line #p\n    - child line #c\n",
+        "Daily.md": "- talked to [[Note]]\n",
+    }
+    const scanner: VaultScanner = {
+        walkVault: async () => ({ files: Object.keys(files).map(path => ({ path, mtime: 1, type: "markdown" as const })), folders: [] }),
+        readFile: async p => ({ content: files[p], mtime: 1 }),
+    }
+    const find = (g: NotesGraph, nodeType: string, label: string) =>
+        g.getNodeAttributes(g.filterNodes((_, n) => n.nodeType === nodeType && getKey(n).includes(label))[0])
+    const rowsOf = (...rs: [ParsedNode, number][]) => rs.map(([node, indent], index) =>
+        ({ node, indent, index, hasChildren: false, visible: true, selected: false, matched: true }))
+    const labels = (ns: ParsedNode[]) => ns.map(n => n.nodeType === "page" ? n.page : n.nodeType === "header" ? `#${n.header}` : getKey(n))
+
+    it("puts a top-level row under its in-note context: its heading, parent line and note", async () => {
+        const g = await buildGraphFromScanner(scanner)
+        const child = find(g, "text", "child line")
+        expect(labels(patchPath(g, rowsOf([child, 0]), 0, false))).toEqual(["Note", "#Goals", "parent line #p", "child line #c"])
+        expect(labels(patchPath(g, rowsOf([find(g, "header", "goals"), 0]), 0, false))).toEqual(["Note", "#Goals"])
+    })
+
+    it("follows the tree's ancestors as shown, and only those under a chain", async () => {
+        const g = await buildGraphFromScanner(scanner)
+        const note = find(g, "page", "note")
+        const talked = find(g, "text", "talked")
+        const rows = rowsOf([note, 0], [talked, 1])
+        expect(labels(patchPath(g, rows, 1, false))).toEqual(["Note", "talked to [[note]]"])
+        expect(labels(patchPath(g, rowsOf([find(g, "text", "child line"), 0]), 0, true))).toEqual(["child line #c"])
     })
 })
 
@@ -117,9 +134,9 @@ describe("chainResults", () => {
         const g = await buildGraphFromScanner(scanner)
         const child = ref(page("Alpha", "Projects/Alpha.md"))
         const chain = { mode: "reparent" as const, children: [child], prevQuery: "", confirm: null }
-        expect(keys(chainResults(g, chain, "proj", "proj", ";", {}, "2026-09-30"))).toEqual(["projects"])
-        expect(keys(chainResults(g, chain, "alph", "alph", ";", {}, "2026-09-30"))).not.toContain("[[alpha]]")
-        expect(keys(chainResults(g, chain, "road", "road", ";", {}, "2026-09-30"))).toEqual(["[[roadmap]]"])
+        expect(keys(chainResults(g, chain, "proj", ";", {}))).toEqual(["projects"])
+        expect(keys(chainResults(g, chain, "alph", ";", {}))).not.toContain("[[alpha]]")
+        expect(keys(chainResults(g, chain, "road", ";", {}))).toEqual(["[[roadmap]]"])
     })
 
     it("reparent of several rows: lines and folders for the query, none of the moved rows", async () => {
@@ -127,154 +144,12 @@ describe("chainResults", () => {
         const ship = g.getNodeAttributes("ship [[alpha]]")
         const projects = g.getNodeAttributes("projects")
         const chain = { mode: "reparent" as const, children: [ref(ship), ref(projects)], prevQuery: "", confirm: null }
-        const found = keys(chainResults(g, chain, "road", "road", ";", {}, "2026-09-30"))
+        const found = keys(chainResults(g, chain, "road", ";", {}))
         expect(found).toContain("[[roadmap]]")
         expect(found).not.toContain("ship [[alpha]]")
-        const withFolders = keys(chainResults(g, { ...chain, children: [ref(ship), ref(folder("Other"))] }, "proj", "proj", ";", {}, "2026-09-30"))
+        const withFolders = keys(chainResults(g, { ...chain, children: [ref(ship), ref(folder("Other"))] }, "proj", ";", {}))
         expect(withFolders).toContain("projects")
-        expect(keys(chainResults(g, chain, "proj", "proj", ";", {}, "2026-09-30"))).not.toContain("projects")
-    })
-
-    it("append under a note: its children, filtered by the query; nothing once an entry is typed", async () => {
-        const g = await buildGraphFromScanner(scanner)
-        const chain = { mode: "append" as const, steps: [row({ kind: "note", name: "Alpha" })] }
-        expect(keys(chainResults(g, chain, "", "", ";", {}, "2026-09-30"))).toEqual(["[[roadmap]]", "ship [[alpha]]"])
-        expect(keys(chainResults(g, chain, "zzz", "zzz", ";", {}, "2026-09-30"))).toEqual([])
-        const typed = { mode: "append" as const, steps: [...chain.steps, entry({ kind: "item", marker: "- ", text: "x" })] }
-        expect(chainResults(g, typed, "", "", ";", {}, "2026-09-30")).toEqual([])
-        expect(chainResults(g, chain, "-", "-", ";", {}, "2026-09-30")).toEqual([])
-        expect(chainResults(g, chain, "[ ]", "[ ]", ";", {}, "2026-09-30")).toEqual([])
-        expect(chainResults(g, chain, "[]", "[]", ";", {}, "2026-09-30")).toEqual([])
-    })
-
-    it("append: an expanded filter reference searches, though its `(` would read as an entry", async () => {
-        const g = await buildGraphFromScanner(scanner)
-        const chain = { mode: "append" as const, steps: [row({ kind: "note", name: "Alpha" })] }
-        expect(keys(chainResults(g, chain, ":Road", "(road)", ";", {}, "2026-09-30"))).toEqual(["[[roadmap]]"])
-    })
-
-    it("append: an open [[frag anywhere in the input lists link targets, also after entry chips", async () => {
-        const g = await buildGraphFromScanner(scanner)
-        const chain = { mode: "append" as const, steps: [row({ kind: "note", name: "Alpha" })] }
-        const q = "[[Beta]] and [[Road"
-        expect(keys(chainResults(g, chain, q, q, ";", {}, "2026-09-30"))).toEqual(["[[roadmap]]"])
-        expect(keys(chainResults(g, chain, "- see [[Road", "- see [[Road", ";", {}, "2026-09-30"))).toEqual(["[[roadmap]]"])
-        const typed = { mode: "append" as const, steps: [...chain.steps, entry({ kind: "item", marker: "- ", text: "x" })] }
-        expect(keys(chainResults(g, typed, "[[Road", "[[Road", ";", {}, "2026-09-30"))).toEqual(["[[roadmap]]"])
-        expect(chainResults(g, chain, "[[Beta]] and [[", "[[Beta]] and [[", ";", {}, "2026-09-30")).toEqual([])
-    })
-})
-
-const row = (anchor: ChainAnchor): ChainStep => ({ kind: "row", anchor, label: "row", prevQuery: "" })
-const entry = (e: ChainEntry): ChainStep => ({ kind: "entry", entry: e, label: "entry", prevQuery: "" })
-const parsed = (text: string): ChainEntry => parseChainEntry(text) as ChainEntry
-const UNDER = { path: "List.md", line: 2, expectedLine: "- task list", label: "task list" }
-const lineAnchor: ChainAnchor = { kind: "line", node: text("task list", "List.md", 2), target: UNDER }
-
-describe("parseChainEntry", () => {
-    it("reads aliases, headings, fields, items and notes", () => {
-        expect(parseChainEntry("|a")).toEqual({ kind: "alias", alias: "a" })
-        expect(parseChainEntry("#header")).toEqual({ kind: "heading", text: "header" })
-        expect(parseChainEntry("## H")).toEqual({ kind: "heading", text: "H" })
-        expect(parseChainEntry("(is:: project)")).toEqual({ kind: "field", key: "is", value: "project" })
-        expect(parseChainEntry("is:: project")).toEqual({ kind: "field", key: "is", value: "project" })
-        expect(parseChainEntry("[ ] t")).toEqual({ kind: "item", marker: "- [ ] ", text: "t" })
-        expect(parseChainEntry("- plain")).toEqual({ kind: "item", marker: "- ", text: "plain" })
-        expect(parseChainEntry("[[New Node]]")).toEqual({ kind: "note", link: { name: "New Node", header: null, alias: null, fields: [] } })
-        expect(parseChainEntry("  ")).toBeNull()
-    })
-
-    it("refuses open links, empty values and meta- fields", () => {
-        expect(parseChainEntry("[[New")).toEqual({ error: "Close the link: [[name]]" })
-        expect(parseChainEntry("(k:: )")).toEqual({ error: "Type a value after ::" })
-        expect(parseChainEntry("meta-x:: y")).toEqual({ error: "meta- fields are reserved" })
-    })
-
-    it("writes nothing for a bare or partial marker and an open task for []", () => {
-        for (const t of ["-", "[", "- [", "[]", "[ ]", "- [ ]", "- [x]"]) expect(parseChainEntry(t)).toBeNull()
-        expect(parseChainEntry("[] call Bob")).toEqual({ kind: "item", marker: "- [ ] ", text: "call Bob" })
-        expect(parseChainEntry("- [x] done")).toEqual({ kind: "item", marker: "- [x] ", text: "done" })
-    })
-})
-
-describe("isEntryInput", () => {
-    it("takes a pasted markdown link as an entry, titled, untitled or with escaped brackets", () => {
-        expect(isEntryInput("[title](https://x.com)")).toBe(true)
-        expect(isEntryInput("[](https://x.com)")).toBe(true)
-        expect(isEntryInput("[a \\[b\\]](https://x.com)")).toBe(true)
-        expect(parseChainEntry("[x](https://x.com)")).toEqual({ kind: "item", marker: "- ", text: "[x](https://x.com)" })
-    })
-    it("keeps bracketed text without a destination a search", () => {
-        expect(isEntryInput("[draft] notes")).toBe(false)
-    })
-    it("takes a bare or partial bullet or task marker as an entry, not a search", () => {
-        for (const t of ["-", "*", "+", "[", "[ ", "[]", "[ ]", "[x]", "- [ ]", "[] call"]) expect(isEntryInput(t)).toBe(true)
-        for (const t of ["-foo", "[x", "apollo"]) expect(isEntryInput(t)).toBe(false)
-    })
-})
-
-describe("chainOutline", () => {
-    const daily = "2026-09-30"
-    const lines = (r: ChainOutline | { error: string }) => "error" in r ? r : r.lines.map(l => "    ".repeat(l.depth) + l.marker + l.text)
-
-    it("nests a new note with its alias and heading, then a task under it", () => {
-        const steps = [row({ kind: "note", name: "Note" }), entry(parsed("[[New Node]]")), entry(parsed("|new-alias")), entry(parsed("#header"))]
-        const r = chainOutline(steps, parsed("[ ] task"), daily)
-        expect(lines(r)).toEqual(["- [[Note]]", "    - [[New Node|new-alias]]", "        - [[New Node#header]]", "            - [ ] task"])
-        expect(r).toMatchObject({ parentName: "Note", nextDepth: 4 })
-    })
-
-    it("patches the anchor note's own link with an alias, a field or a heading", () => {
-        const steps = [row({ kind: "note", name: "Note" })]
-        expect(lines(chainOutline(steps, parsed("|alias"), daily))).toEqual(["- [[Note|alias]]"])
-        expect(lines(chainOutline(steps, parsed("(is:: project)"), daily))).toEqual(["- [[Note]] (is:: project)"])
-        expect(lines(chainOutline([...steps, entry(parsed("#h"))], parsed("[ ] t"), daily))).toEqual(["- [[Note#h]]", "    - [ ] t"])
-    })
-
-    it("nests items under a picked line", () => {
-        const r = chainOutline([row(lineAnchor), entry(parsed("[ ] add task"))], parsed("[ ] add subtask"), daily)
-        expect(lines(r)).toEqual(["- [ ] add task", "    - [ ] add subtask"])
-        expect(r).toMatchObject({ underLine: UNDER })
-    })
-
-    it("patches today's note through a root link", () => {
-        expect(lines(chainOutline([row({ kind: "today" })], parsed("|a"), daily))).toEqual([`- [[${daily}|a]]`])
-    })
-
-    it("refuses aliases under a line and headings under an item", () => {
-        expect(chainOutline([row(lineAnchor)], parsed("|a"), daily)).toEqual({ error: "Aliases and properties apply to notes — pick one or type [[name]] first" })
-        expect(chainOutline([row({ kind: "note", name: "N" }), entry(parsed("[ ] x"))], parsed("#h"), daily))
-            .toEqual({ error: "Headings go under a note — pick one or type [[name]] first" })
-    })
-})
-
-describe("chainEditorText", () => {
-    it("ends with an empty bullet under the deepest line, caret at the end", () => {
-        const o = chainOutline([row({ kind: "note", name: "P" })], null, "2026-09-30")
-        if ("error" in o) throw new Error(o.error)
-        expect(chainEditorText(o)).toEqual({ outline: "- [[P]]\n    - ", caret: 14 })
-    })
-})
-
-describe("Quick Add (chip-less append chain)", () => {
-    const quickAdd = (steps: ChainStep[] = []) => ({ mode: "append" as const, steps, quickAdd: { prevQuery: "before" } })
-
-    it("runs the view's search until a chip or entry input, then the chain's own results", () => {
-        expect(chainReplacesSearch(quickAdd(), "alpha")).toBe(false)
-        expect(chainReplacesSearch(quickAdd(), "- new item")).toBe(true)
-        expect(chainReplacesSearch(quickAdd([row({ kind: "note", name: "P" })]), "alpha")).toBe(true)
-        expect(chainReplacesSearch(quickAdd(), "-")).toBe(true)
-        expect(chainReplacesSearch(quickAdd(), "[ ]")).toBe(true)
-        expect(chainReplacesSearch(quickAdd(), "-alpha")).toBe(false)
-    })
-
-    it("writes typed text into today's daily note, with no parent", () => {
-        expect(chainOutline([], parsed("- call Bob"), "2026-09-30")).toEqual({ lines: [{ depth: 0, marker: "- ", text: "call Bob" }], nextDepth: 1 })
-    })
-
-    it("restores the query typed before Quick Add, not the first chip's", () => {
-        expect(chainPrevQuery(quickAdd([{ ...row({ kind: "note", name: "P" }), prevQuery: "chip" }]))).toBe("before")
-        expect(chainPrevQuery({ mode: "append", steps: [{ ...row({ kind: "note", name: "P" }), prevQuery: "chip" }] })).toBe("chip")
+        expect(keys(chainResults(g, chain, "proj", ";", {}))).not.toContain("projects")
     })
 })
 

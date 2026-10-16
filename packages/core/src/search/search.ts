@@ -12,6 +12,8 @@ export type ResultNode = {
   // Set by `partitionArchived` when revealing: true if this node is archived or
   // sits under an archived ancestor in this result tree. Drives grey rendering.
   effectiveArchived?: boolean
+  /** Kept only because it is pinned (filterOutline): it fails a filter stage. */
+  miss?: boolean
 }
 
 /** Runtime context a query can refer to but the graph can't name. */

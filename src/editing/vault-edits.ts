@@ -10,6 +10,7 @@ import {
     applyTaskEdit,
     appendOutline,
     ensureHeading,
+    editOutlineBlock,
     firstAppendedLine,
     cutSubtree,
     cutHeadingSection,
@@ -19,6 +20,7 @@ import {
     pasteAtOutlineEnd,
     pasteUnderLine,
     pasteUnderLinkBullet,
+    replaceHeadingBody,
     replaceNoteBody,
     replaceLineText,
     rescheduleDate,
@@ -233,6 +235,15 @@ export async function writeNoteBody(app: App, path: string, original: string, bo
     return file
 }
 
+/** Replaces the text under heading `heading` of note `path` with `body` (replaceHeadingBody); throws
+ *  NOTE_BODY_CHANGED when that text is no longer `original`, or the heading or the file is gone. */
+export async function writeHeadingBody(app: App, path: string, heading: string, original: string, body: string): Promise<TFile> {
+    const file = app.vault.getFileByPath(path)
+    if (!file) throw new Error(NOTE_BODY_CHANGED)
+    await app.vault.process(file, c => replaceHeadingBody(c, heading, original, body))
+    return file
+}
+
 export async function appendToDailyNote(app: App, outline: OutlineLine[], cfg: DailyNoteConfig, now: MomentLike = nowMoment()): Promise<{ file: TFile; line: number | null }> {
     const daily = await getOrCreateDailyNote(app, cfg, now)
     let line: number | null = null
@@ -249,6 +260,20 @@ export async function editLine(app: App, path: string, line: number, expectedLin
     if (!file) throw new StaleLineError()
     await app.vault.process(file, c => replaceLineText(c, line, expectedLine, newLine))
     return [file]
+}
+
+/** The outline editor's save of one line (editOutlineBlock): line `line` of `path` becomes `first`, with `extra` added
+ *  around it; throws StaleLineError if the file is gone or the line changed. `inserted`: the added blocks' lines. */
+export async function editOutlineLines(app: App, path: string, line: number, expectedLine: string, first: string, extra: OutlineLine[]): Promise<{file: TFile; inserted: {at: number; count: number}[]}> {
+    const file = app.vault.getFileByPath(path)
+    if (!file) throw new StaleLineError()
+    let inserted: {at: number; count: number}[] = []
+    await app.vault.process(file, c => {
+        const out = editOutlineBlock(c, line, expectedLine, first, extra)
+        inserted = out.inserted
+        return out.content
+    })
+    return {file, inserted}
 }
 
 /** Deletes list line `line` of `path` with every line nested under it; throws StaleLineError if the file is gone or the line changed. */
