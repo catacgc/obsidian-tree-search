@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test"
 import type { PullDeletion, SectionWrite } from "@mdtree/core"
-import { applyOrganisePlan } from "../obsidian-utils"
+import { applyOrganisePlan, archiveLine, unarchiveLine } from "../obsidian-utils"
 
 // ── Fake vault ───────────────────────────────────────────────────────────────
 //
@@ -157,5 +157,17 @@ describe("applyOrganisePlan", () => {
 
         const lines = files.get("Notes.md")!.split("\n")
         expect(lines).toEqual(["l0", "l2", "l4"])
+    })
+})
+describe("archiveLine", () => {
+    it("writes and removes a heading archive tag on the next line, not in its heading text", async () => {
+        const { app, files } = makeFakeVault({"Notes.md": "## Magda Miu\n- Archive still appears\n"})
+        const heading = loc("Notes.md", 0)
+
+        await archiveLine(app, heading, "archive")
+        expect(files.get("Notes.md")).toBe("## Magda Miu\n- Archive still appears #archive\n")
+
+        await unarchiveLine(app, heading, "archive")
+        expect(files.get("Notes.md")).toBe("## Magda Miu\n- Archive still appears\n")
     })
 })

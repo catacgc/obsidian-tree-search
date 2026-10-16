@@ -6,6 +6,7 @@
   - task two #todo
 
 ## Done
+
 - [[Beta]] done #archive
   - [[SubTask]] completed
 - [[Gamma]] still relevant

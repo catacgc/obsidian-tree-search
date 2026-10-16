@@ -57,7 +57,7 @@ A few rules decide what ends up in the tree:
 Archive things you no longer need without deleting them. One tag, `#archive`, does it everywhere:
 
 - **a line:** add `#archive` to it, or use the **Archive** action. Everything nested under the line is archived with it;
-- **a heading:** add `#archive` to it (`## 2024-12-19 #archive`), or use **Archive** on the heading's row. Its subheadings and every line in its section are archived with it;
+- **a heading:** put `#archive` on the line immediately below it (for example, `## 2024-12-19\n- item #archive`), or use **Archive** on the heading's row. Its subheadings and every line in its section are archived with it; the tag is not added to the heading text;
 - **a whole note:** add `archive` to its frontmatter `tags`, or use **Archive** on the note's row.
 
 Only the whole tag counts: `#archived` or `#archive-old` don't archive anything. A line under an archived line or heading is archived itself, so it is hidden wherever it shows up, also under the notes it links to. To unarchive it, use **Unarchive** on the row that carries the tag (the line, heading or note); a row archived only through its parent has no Archive action.

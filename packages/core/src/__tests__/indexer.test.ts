@@ -404,9 +404,9 @@ describe("archive tag", () => {
     expect(marks(textAttrs(g, "live plan"))).toEqual([undefined, undefined])
   })
 
-  it("marks a tagged heading own, its subheadings and section lines inherited, a sibling heading not", () => {
-    const g = buildGraph(parse("## Old #archive\n- one #todo\n### Sub\n- two #todo\n## New\n- three #todo", "n.md"))
-    expect(marks(g.getNodeAttributes("n#old #archive"))).toEqual([true, undefined])
+  it("marks a heading archived from its next line, with descendants inherited", () => {
+    const g = buildGraph(parse("## Old\n- #archive\n- one #todo\n### Sub\n- two #todo\n## New\n- three #todo", "n.md"))
+    expect(marks(g.getNodeAttributes("n#old"))).toEqual([true, undefined])
     expect(marks(g.getNodeAttributes("n#sub"))).toEqual([true, true])
     expect(marks(g.getNodeAttributes("n#new"))).toEqual([undefined, undefined])
     expect(marks(textAttrs(g, "one"))).toEqual([true, true])
@@ -415,7 +415,7 @@ describe("archive tag", () => {
   })
 
   it("does not archive a note linked by a bare link line under an archived heading", () => {
-    const g = buildGraph(parse("## Old #archive\n- [[Project]]\n    - kickoff #todo", "n.md"))
+    const g = buildGraph(parse("## Old\n- #archive\n- [[Project]]\n    - kickoff #todo", "n.md"))
     expect(g.getNodeAttributes("[[project]]").archived).toBeUndefined()
     expect(marks(textAttrs(g, "kickoff"))).toEqual([true, true])
   })

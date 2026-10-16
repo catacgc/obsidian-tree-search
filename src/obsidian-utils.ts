@@ -1,5 +1,5 @@
 import {App, normalizePath, TFile, FuzzySuggestModal, TFolder, FuzzyMatch} from "obsidian";
-import {Location, PullDeletion, addArchiveTag, convertLegacyArchive, removeArchiveTag, renderPullLine, upsertOrganiseSections, type NotesGraph, type OrganiseHome, type SectionWrite, type PullLine, type PullNode} from "@mdtree/core";
+import {Location, PullDeletion, addArchiveTag, convertLegacyArchive, removeArchiveTag, renderPullLine, upsertOrganiseSections, HEADER_RE, type NotesGraph, type OrganiseHome, type SectionWrite, type PullLine, type PullNode} from "@mdtree/core"
 
 // Reverse engineer the Canvas api
 interface CanvasNode {
@@ -231,14 +231,15 @@ export async function insertLine(app: App, loc: Location) {
     }
 }
 
-/** Rewrites line `loc.position.start.line` of its note with `edit`, keeping a CRLF line ending. */
-async function editLine(app: App, loc: Location, edit: (line: string) => string) {
+/** Rewrites a source line, or (when `headerAware`) the line below a heading, keeping CRLF endings. */
+async function editLine(app: App, loc: Location, edit: (line: string) => string, headerAware = false) {
     const file = app.vault.getFileByPath(loc.path)
     if (!file) return
 
     const content = await app.vault.read(file)
     const lines = content.split("\n")
-    const lineIdx = loc.position.start.line
+    const sourceLine = loc.position.start.line
+    const lineIdx = sourceLine + (headerAware && HEADER_RE.test(lines[sourceLine] ?? "") ? 1 : 0)
 
     if (lineIdx >= lines.length) return
 
@@ -247,13 +248,13 @@ async function editLine(app: App, loc: Location, edit: (line: string) => string)
     await app.vault.modify(file, lines.join("\n"))
 }
 
-/** Appends `#<archiveTag>` to a line or heading, archiving it with everything under it. */
+/** Appends `#<archiveTag>` to a line, or the line immediately below a heading. */
 export async function archiveLine(app: App, loc: Location, archiveTag: string) {
-    await editLine(app, loc, line => addArchiveTag(line, archiveTag))
+    await editLine(app, loc, line => addArchiveTag(line, archiveTag), true)
 }
 
 export async function unarchiveLine(app: App, loc: Location, archiveTag: string) {
-    await editLine(app, loc, line => removeArchiveTag(line, archiveTag))
+    await editLine(app, loc, line => removeArchiveTag(line, archiveTag), true)
 }
 
 /** Rewrites every legacy `(meta-mdtree:: archive)` marker in the vault's notes to `#<archiveTag>`. Returns the notes

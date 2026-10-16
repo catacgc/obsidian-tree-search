@@ -54,14 +54,14 @@ describe("reindexFileInGraph — incremental reindex parity with full rebuild", 
     expect(isArchived(graph.getNodeAttributes("check price #todo"))).toBe(false)
   })
 
-  it("reflects unarchiving a heading on its subheadings without a full vault rebuild", async () => {
-    let content = "## Old #archive\n### Sub\n- buy milk #groceries\n"
+  it("reflects unarchiving a heading by removing the next-line marker", async () => {
+    let content = "## Old\n- #archive\n### Sub\n- buy milk #groceries\n"
     const scanner = makeScanner(() => content)
 
     const graph = await buildGraphFromScanner(scanner, DEFAULT_SETTINGS)
     expect(isArchived(graph.getNodeAttributes("note#sub"))).toBe(true)
 
-    content = "## Old\n### Sub\n- buy milk #groceries\n"
+    content = "## Old\n-\n### Sub\n- buy milk #groceries\n"
     await reindexFileInGraph("note.md", graph, scanner, DEFAULT_SETTINGS)
 
     expect(isArchived(graph.getNodeAttributes("note#old"))).toBe(false)
@@ -69,16 +69,16 @@ describe("reindexFileInGraph — incremental reindex parity with full rebuild", 
     expect(isArchived(graph.getNodeAttributes("buy milk #groceries"))).toBe(false)
   })
 
-  it("replaces a heading archived by tagging it, rather than keeping its untagged copy", async () => {
-    let content = "## Old\n- buy milk #groceries\n"
+  it("replaces a heading archived by tagging its next line", async () => {
+    let content = "## Old\n-\n- buy milk #groceries\n"
     const scanner = makeScanner(() => content)
 
     const graph = await buildGraphFromScanner(scanner, DEFAULT_SETTINGS)
-    content = "## Old #archive\n- buy milk #groceries\n"
+    content = "## Old\n- #archive\n- buy milk #groceries\n"
     await reindexFileInGraph("note.md", graph, scanner, DEFAULT_SETTINGS)
 
-    expect(graph.hasNode("note#old")).toBe(false)
-    expect(isArchived(graph.getNodeAttributes("note#old #archive"))).toBe(true)
+    expect(graph.hasNode("note#old")).toBe(true)
+    expect(isArchived(graph.getNodeAttributes("note#old"))).toBe(true)
   })
 
   it("removes a deleted line from the graph without a full vault rebuild", async () => {

@@ -135,7 +135,9 @@ export function scanMarkdown(
       while (headerStack.length > 0 && headerStack[headerStack.length - 1].level >= level) {
         headerStack.pop()
       }
-      const archived = markOf(heading, headerStack[headerStack.length - 1]?.archived)
+      const nextLine = lines[lineNum + 1] ?? ""
+      const archived = hasArchiveTag(nextLine, archiveTag) && !HEADER_RE.test(nextLine)
+        ? "own" : headerStack[headerStack.length - 1]?.archived ? "inherited" : undefined
       headers.push({ heading, level, position: pos, ...(archived ? { archived } : {}) })
       headerStack.push({ level, lineNum, text: heading, archived })
       currentSectionSubpath = `#${heading}`

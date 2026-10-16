@@ -204,16 +204,23 @@ describe("scanMarkdown", () => {
       ])
     })
 
-    it("archives a tagged heading's section, subheadings included, but not the next sibling heading", () => {
-      const md = "## Old #archive\n- [[A]]\n### Sub\n- [[B]]\n## New\n- [[C]]"
-      expect(headingMarks(md)).toEqual([["Old #archive", "own"], ["Sub", "inherited"], ["New", undefined]])
-      expect(marks(md)).toEqual([["[[A]]", "inherited"], ["[[B]]", "inherited"], ["[[C]]", undefined]])
+    it("archives a heading from the archive tag on the immediately following line, not an inline heading tag", () => {
+      expect(headingMarks("## Old\n- item #archive\n- [[A]]\n## New #archive\n- [[B]]")).toEqual([
+        ["Old", "own"], ["New #archive", undefined],
+      ])
+      expect(marks("## Old\n- item #archive\n- [[A]]")).toEqual([["item #archive", "own"], ["[[A]]", "inherited"]])
+    })
+
+    it("archives a heading's section from a tagged following line, subheadings included, but not the next sibling", () => {
+      const md = "## Old\n- marker #archive\n- [[A]]\n### Sub\n- [[B]]\n## New\n- [[C]]"
+      expect(headingMarks(md)).toEqual([["Old", "own"], ["Sub", "inherited"], ["New", undefined]])
+      expect(marks(md)).toEqual([["marker #archive", "own"], ["[[A]]", "inherited"], ["[[B]]", "inherited"], ["[[C]]", undefined]])
     })
 
     it("ends a subheading's archive at its parent level", () => {
-      const md = "## Top\n### Old #archive\n- [[A]]\n## Next\n- [[B]]"
-      expect(headingMarks(md)).toEqual([["Top", undefined], ["Old #archive", "own"], ["Next", undefined]])
-      expect(marks(md)).toEqual([["[[A]]", "inherited"], ["[[B]]", undefined]])
+      const md = "## Top\n### Old\n- #archive\n- [[A]]\n## Next\n- [[B]]"
+      expect(headingMarks(md)).toEqual([["Top", undefined], ["Old", "own"], ["Next", undefined]])
+      expect(marks(md)).toEqual([["#archive", "own"], ["[[A]]", "inherited"], ["[[B]]", undefined]])
     })
 
     it("matches the tag case-insensitively and only as a whole tag", () => {
