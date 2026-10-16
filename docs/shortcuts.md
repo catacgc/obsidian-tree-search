@@ -14,7 +14,7 @@ Alt shortcuts match the physical key, so they work on macOS even though <kbd>⌥
 | --- | --- |
 | <kbd>↓</kbd> | Select next |
 | <kbd>↑</kbd> | Select previous |
-| <kbd>Enter</kbd> | Open (default action); in the Search modal and pane a note, heading or line with lines under it is explored in the outline editor, and on a line with nothing under it a web link opens, a task is completed, a `` `snippet` `` is copied, or else the line is edited in place; with nothing selected, the search itself is explored |
+| <kbd>Enter</kbd> | Open (default action); in the Search modal and pane a note, heading or line with lines under it is explored in the outline editor, and on a line with nothing under it a web link opens, a task is completed, a `` `snippet` `` is copied, or else the line is edited in place; with nothing selected, a line is added (**Add to**), pre-filled from the search |
 | <kbd>Shift</kbd>+<kbd>Enter</kbd> | See in Obsidian |
 | <kbd>Ctrl</kbd>+<kbd>K</kbd> | Actions |
 | <kbd>→</kbd> (caret at the end of the search) | Expand / collapse the selected row, or show the rest of its list |

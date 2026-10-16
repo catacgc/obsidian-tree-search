@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test"
 import { buildGraphFromScanner, getKey, type NotesGraph, type ParsedNode, type ResultNode, type VaultScanner } from "@mdtree/core"
-import { chainPrefill, chainResults, dirtyBodyKeys, patchPath, planReparent, type RowRef } from "../view/search/chain"
+import { addToPlan, chainPrefill, chainResults, dirtyBodyKeys, patchPath, planReparent, type RowRef } from "../view/search/chain"
 import type { OwnPath } from "../view/editor/row-editing"
 import type { DailyNoteConfig } from "../indexing/indexed-tree"
 
@@ -191,5 +191,21 @@ describe("chainPrefill", () => {
 
     it("is empty for a blank query", () => {
         expect(p("  ")).toBe("")
+    })
+})
+
+describe("addToPlan", () => {
+    const plan = (q: string) => addToPlan(q, ">", "archive")
+
+    it("puts the line under a first-stage [[Note]] scope and pre-fills it from the last stage", () => {
+        expect(plan("[[new page]] > is:task home")).toEqual({ note: "new page", prefill: "- [ ] home " })
+        expect(plan("[[new page]] is:task home")).toEqual({ note: "new page", prefill: "- [ ] home " })
+        expect(plan("[[new page]]")).toEqual({ note: "new page", prefill: "- " })
+    })
+
+    it("has no note without a first-stage scope: the whole search becomes the line", () => {
+        expect(plan("is:task #home")).toEqual({ note: null, prefill: "- [ ] #home " })
+        expect(plan("apollo > [[Project X]]")).toEqual({ note: null, prefill: "- [[Project X]] " })
+        expect(plan("  ")).toEqual({ note: null, prefill: "" })
     })
 })

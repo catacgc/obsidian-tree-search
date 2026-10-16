@@ -4,7 +4,7 @@ import {atom, useAtomValue, type Getter, type Setter} from 'jotai'
 import {findTargetRow, revealRow, rowTargets, type RowTarget} from '../search/select-target'
 import {expandFilterRefs, filterSuggestionsAt, toggleFilterPill} from '../search/search-filter'
 import {buildTimelineRows, tagOutlineParents} from '../search/timeline-utils'
-import {chainResults, dirtyBodyKeys, isMovable, isPatchable, linksTo, patchPath, reparentLabel, rowLabel, type BodyRef, type ChainState, type NoteBody, type RowRef} from '../search/chain'
+import {addToPlan, chainPrefill, chainResults, dirtyBodyKeys, isMovable, isPatchable, linksTo, patchPath, reparentLabel, rowLabel, type BodyRef, type ChainState, type NoteBody, type RowRef} from '../search/chain'
 import {crumbKey, extendPath, isPinned, linkCrumbs, newLineLabel, nextLineEditId, rootFor, rootKey, rootOf, TODAY_LABEL, type LineEdit, type OutlineRoot, type OutlineState, type OutlineTarget, type PaneState} from '../search/outline'
 import {dailyNotePath, trashSessionAttachments, type EditorAttachment} from '../../editing/vault-edits'
 import {toggleCut} from '../search/cut-drawer'
@@ -15,7 +15,7 @@ type SearchQuery = { query: string; file?: string; heading?: string }
 import {createScope, molecule} from "bunshi";
 import {App, Notice, Platform} from "obsidian";
 import {GlobalAtoms} from "./global";
-import {searchFiltersAtom, searchViewModesAtom, separatorAtom, type SearchFilter, type SearchViewMode} from "./settings";
+import {searchFiltersAtom, searchViewModesAtom, separatorAtom, settingsAtom, type SearchFilter, type SearchViewMode} from "./settings";
 import {atomWithDefault} from "jotai/utils";
 import {withAtomEffect} from "jotai-effect";
 
@@ -929,28 +929,51 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         return sel && !sel.archiveRow && isPatchable(sel.node) ? sel : null
     }
 
+    /** The note and pre-filled line Add to uses when no row is selected: in the outline editor the line is built from
+     *  its filter crumbs (at the search root also from the search's query, which writes to Today); in the plain search
+     *  from the query (addToPlan: its `[[Note]]` scope is the note the line goes under). */
+    const addToPlanOf = (get: Getter): {note: string | null; prefill: string} => {
+        const separator = get(separatorAtom)
+        const archiveTag = get(settingsAtom).archiveTag
+        const o = get(outlineAtom)
+        if (!o) return addToPlan(get(searchTextAtom), separator, archiveTag)
+        const filters = get(searchFiltersAtom)
+        const text = [o.path.length === 0 ? o.prevQuery : "", ...o.filters].map(q => expandFilterRefs(q, filters, separator)).join(" ")
+        return {note: null, prefill: chainPrefill(text, separator, archiveTag)}
+    }
+
     /** The Add to row's (and the action panel's Add to) label: in the outline editor `Add to <root>`; in the plain
-     *  search `Add to <selected row>`, or `Add to Today` with nothing selected (the search root writes there). */
+     *  search `Add to <selected row>`, else `Add to <the query's [[Note]] scope>`, or `Add to Today`. */
     const addToLabelAtom = atom(get => {
         const o = get(outlineAtom)
         if (o) return newLineLabel(o)
         const row = addToRow(get)
-        return `Add to ${row ? rowLabel(row.node) : TODAY_LABEL}`
+        return `Add to ${row ? rowLabel(row.node) : addToPlanOf(get).note ?? TODAY_LABEL}`
     })
 
-    /** Add to: the line editor on a new line at the end of the view. Outside the outline editor it first explores the
-     *  selected row; with nothing selected and no search it explores Today (Quick Add); with nothing selected and a
-     *  search it opens the outline on the search (its new lines go to today's note). */
+    /** Add to: the line editor on a new line at the end of the view, pre-filled from the filters (addToPlanOf).
+     *  Outside the outline editor it first explores the selected row; with nothing selected it explores the note the
+     *  query scopes to (`[[Note]] > is:task home` adds `- [ ] home ` under Note); with no search, Today (Quick Add);
+     *  with a search and no such note, the search (its new lines go to today's note). */
     const openAddToAtom = atom(null, (get, set) => {
+        const plan = addToPlanOf(get)
+        let prefill = plan.prefill
         if (get(outlineAtom) === null) {
             const row = addToRow(get)
-            if (!row && get(actualQueryAtom).trim() === "") {
+            if (row) {
+                if (!set(openOutlineAtom, {kind: "row", row, mode: "explore"})) return
+                prefill = ""
+            } else if (plan.note !== null && set(openOutlineAtom, {kind: "link", link: plan.note, mode: "explore"})) {
+                // Under the note the query scopes to.
+            } else if (get(actualQueryAtom).trim() === "") {
                 set(openOutlineAtom, {kind: "today", quickAdd: true})
                 return
+            } else {
+                if (!set(openOutlineAtom, {kind: "search", mode: "explore"})) return
+                prefill = chainPrefill(get(searchTextAtom), get(separatorAtom), get(settingsAtom).archiveTag)
             }
-            if (!set(openOutlineAtom, row ? {kind: "row", row, mode: "explore"} : {kind: "search", mode: "explore"})) return
         }
-        set(openNewLineAtom)
+        set(openNewLineAtom, prefill)
     })
 
     /** The line editor's edit (its field, caret, pasted files); an edit disarms a refused discard. */

@@ -47,16 +47,16 @@ export const ActionFooter = () => {
     const enterAction = enterActions.find(a => a.shortcut?.key === "enter" && a.shortcut.modifiers.length === 0)
     const usable = enterRow && !enterRow.archiveRow ? enterRow : null
     const intentTitle = usable && intent ? intentLabel(intent, usable.node) : null
-    // Plain search, nothing selected: Enter explores the search itself, not its first row (handleDefaultActionAtom).
-    const exploresSearch = allowEditing && chain === null && !outline && !selected && !newLineSelected
+    // Nothing selected (and no filter text typed in the outline editor): Enter is Add to (handleDefaultActionAtom).
+    const addsTo = allowEditing && chain === null && !selected && !newLineSelected
     const main: {title: string; run: () => void} | null =
         chain?.mode === "reparent" ? usable ? {title: "Move under", run: () => void reparentChain(usable.node)} : null
         : newLineSelected ? {title: addToLabel, run: () => openAddTo()}
         : outline && query.trim() !== "" && (!selected || selected.archiveRow) ? {title: "Filter", run: () => addFilter()}
-        : exploresSearch ? {title: query.trim() ? `Explore "${truncateMiddle(query.trim(), 40)}"` : "Explore search", run: () => void openDefault()}
+        : addsTo ? {title: addToLabel, run: () => void openDefault()}
         : intentTitle ? {title: intentTitle, run: () => void openDefault()}
         : enterAction ? {title: enterAction.title, run: () => { selectEnterRow(); void execute(enterAction) }} : null
-    const title = newLineSelected ? `${addToLabel}…` : exploresSearch ? "" : enterRow ? truncateMiddle(nodeLabel(enterRow.node), 60) : ""
+    const title = newLineSelected ? `${addToLabel}…` : addsTo ? "" : enterRow ? truncateMiddle(nodeLabel(enterRow.node), 60) : ""
 
     return <div ref={dockRef} className="ts-action-dock">
         <ActionPanel dockRef={dockRef}/>

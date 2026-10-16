@@ -164,8 +164,8 @@ export function chainResults(graph: NotesGraph, chain: ChainState, searchText: s
  *  typed; `[[Note]]` as a link; `is:task`/`is:subtask` → `- [ ] `, `is:completed` → `- [x] ` (first wins), `is:archived`
  *  → `#<archiveTag>`, `has:emoji` → 🪴, `has:link`/`has:page` → a trailing open `[[` (none if a link is already there);
  *  an OR group by its first alternative. Negations, `in:`, `outline:` and other `is:` values add nothing.
- *  "" for a blank query. */
-export function chainPrefill(query: string, separator: string, archiveTag: string): string {
+ *  "" for a blank query. `skipTree`: a `[[Note]]` scope naming that note adds nothing (the line goes under the note). */
+export function chainPrefill(query: string, separator: string, archiveTag: string, skipTree?: string): string {
     if (query.trim() === "") return ""
     const stages = parseQuery(query, separator, true)
     const parts: string[] = []
@@ -180,7 +180,7 @@ export function chainPrefill(query: string, separator: string, archiveTag: strin
             case "not":
             case "empty": return
             case "modifier":
-                if (e.field === "tree") parts.push(`[[${e.value}]]`)
+                if (e.field === "tree") { if (e.value !== skipTree) parts.push(`[[${e.value}]]`) }
                 else if (e.field === "is" && (e.value === "task" || e.value === "subtask")) box ??= "- [ ] "
                 else if (e.field === "is" && e.value === "completed") box ??= "- [x] "
                 else if (e.field === "is" && e.value === "archived") parts.push(`#${archiveTag}`)
@@ -193,6 +193,18 @@ export function chainPrefill(query: string, separator: string, archiveTag: strin
     const marker = box ?? "- "
     if (openLink && !parts.some(p => p.startsWith("[["))) return marker + [...parts, "[["].join(" ")
     return marker + parts.map(p => p + " ").join("")
+}
+
+/** Where Add to writes for the search text `query`, and the line it pre-fills: a `[[Note]]` scope in the first stage
+ *  (`[[Note]] > is:task home`) is the note the line goes under, and the line is chainPrefill's of the last stage
+ *  without that scope (`- [ ] home `); otherwise no note (Today) and the whole chainPrefill. */
+export function addToPlan(query: string, separator: string, archiveTag: string): {note: string | null; prefill: string} {
+    if (query.trim() === "") return {note: null, prefill: ""}
+    const first = parseQuery(query, separator, true)[0]
+    const members = first.type === "and" ? first.exprs : [first]
+    const scope = members.find(e => e.type === "modifier" && e.field === "tree")
+    const note = scope && scope.type === "modifier" ? scope.value : null
+    return {note, prefill: chainPrefill(query, separator, archiveTag, note ?? undefined)}
 }
 
 const cut = (s: string, n = 40) => s.length > n ? s.slice(0, n - 1) + "…" : s
