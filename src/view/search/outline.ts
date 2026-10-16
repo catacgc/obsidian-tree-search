@@ -6,17 +6,12 @@ import type {RowTarget} from "./select-target"
 import type {TreeNode} from "./SearchViewFlatten"
 import {rowLabel} from "./chain"
 
-/** What openOutlineAtom opens on: the search, Today (with the New line, filled with `prefill`; `quickAdd`: by Quick
- *  Add; always in edit mode), a result row (default: the selected row), or a note or heading link (`Name`,
- *  `Name#Heading`). `mode` applies when the outline opens; one already open keeps its mode. */
+/** What openOutlineAtom opens on: search, Today (with a New line, optionally prefilled for Quick Add), a result row (default: selected), or a note/heading link (`Name`, `Name#Heading`). */
 export type OutlineTarget =
-    | {kind: "search"; mode: OutlineMode}
+    | {kind: "search"}
     | {kind: "today"; prefill?: string; quickAdd?: boolean}
-    | {kind: "row"; row?: TreeNode; mode: OutlineMode}
-    | {kind: "link"; link: string; mode: OutlineMode}
-
-/** explore: Enter opens a row's URL or explores into the row; edit: Enter opens the row's line editor. */
-export type OutlineMode = "explore" | "edit"
+    | {kind: "row"; row?: TreeNode}
+    | {kind: "link"; link: string}
 
 let lineEditIds = 0
 /** A fresh LineEdit id (a new line editor remounts its field). */
@@ -40,8 +35,6 @@ export type OutlineState = {
     /** Opened by Quick Add: titled Quick Add while its root is Today. */
     quickAdd: boolean
     pins: OutlinePin[]
-    /** explore: Enter opens a row's URL or explores into the row; edit: Enter opens the row's line editor. */
-    mode: OutlineMode
 }
 
 /** The edited row of a line editor, as read when it opened. */
@@ -137,14 +130,12 @@ export function linkCrumbs(graph: NotesGraph, page: string, heading: string | un
     return crumbs
 }
 
-/** The Search modal's title for an outline session: Quick Add at Today, `Edit "<query>"` at the search root, else
- *  `Edit <root>` (`Explore …` in explore mode). */
+/** The Search modal title for an outline session: Quick Add at Today, `Explore "<query>"` at the search root, else `Explore <root>`. */
 export function outlineTitle(o: OutlineState): string {
     const root = rootOf(o)
-    const verb = o.mode === "explore" ? "Explore" : "Edit"
-    if (root === null) return o.prevQuery.trim() ? `${verb} "${o.prevQuery.trim()}"` : `${verb} search`
+    if (root === null) return o.prevQuery.trim() ? `Explore "${o.prevQuery.trim()}"` : "Explore search"
     if (o.quickAdd && root.kind === "today") return "Quick Add"
-    return `${verb} ${rootLabel(root)}`
+    return `Explore ${rootLabel(root)}`
 }
 
 /** The New line row's label: `Add to <root>` (the search root writes to today's daily note: `Add to Today`). */

@@ -16,12 +16,12 @@ const line = (tokens: ParsedTextToken[], task?: { done: boolean }): ParsedNode =
 const folder: ParsedNode = { ...base("Work", 0), nodeType: "folder", name: "Work" } as unknown as ParsedNode
 const web: Browse = { type: "browse", url: "https://x.io", title: "Browse 🔗 https://x.io", icon: "", shortcut: { key: "enter", modifiers: [] } }
 
-const key = { mode: null, via: "key", hasChildren: false, web: null } as const
+const key = { via: "key", hasChildren: false, web: null } as const
 
-describe("rowIntent: Enter in the search and in explore mode", () => {
+describe("rowIntent: Enter in the search and outline", () => {
     it("explores notes and headings, leaves included", () => {
         expect(rowIntent(page("P"), key)).toEqual({ kind: "explore" })
-        expect(rowIntent(header("P", "H"), { ...key, mode: "explore" })).toEqual({ kind: "explore" })
+        expect(rowIntent(header("P", "H"), key)).toEqual({ kind: "explore" })
     })
 
     it("explores a line with children, even a task", () => {
@@ -61,12 +61,6 @@ describe("rowIntent: a click on the selected row", () => {
     })
 })
 
-describe("rowIntent: edit mode", () => {
-    it("edits notes, headings and lines whatever they hold", () => {
-        expect(rowIntent(line([plain("buy")], { done: false }), { ...key, mode: "edit", web })).toEqual({ kind: "edit" })
-        expect(rowIntent(page("P"), { ...key, mode: "edit", via: "pointer" })).toEqual({ kind: "edit" })
-    })
-})
 
 describe("snippetOf", () => {
     it("is the first code span, trimmed; null without one", () => {

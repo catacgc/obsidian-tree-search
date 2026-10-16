@@ -137,18 +137,17 @@ export function panelItems(ctx: PanelContext): PanelItem[] {
     const items: PanelItem[] = []
     const row = ctx.selectedPos >= 0 ? ctx.rows[ctx.selectedPos] : undefined
     const patchable = ctx.allowEditing && row !== undefined && !row.archiveRow && isPatchable(row.node)
-    // With editor mode Enter opens a page, header or line in the outline editor (in it: edits the row), not a row action.
+    // Search-view Enter handles patchable rows, so their ordinary Open action has no Enter key.
     const enterPatches = patchable && ctx.chainMode === null
 
     ctx.rowActions.forEach((action, i) => {
-        // Move To (folder picker) is replaced by Move under… below. With editor mode, Insert after opens Append, which
-        // the Edit section already offers.
+        // Move To (folder picker) is replaced by Move under… below. In editable Search views, Add to replaces Insert after.
         if (raycastActionOf(action) === "moveToFolder") return
         if (ctx.allowEditing && raycastActionOf(action) === "insert") return
         const {id, icon} = rowActionShortcut(action)
         const key = id === "open" && enterPatches ? undefined : id && keyOf(id)
         items.push({id: `row:${i}`, section: "row", title: action.title, icon, key, run: {kind: "action", action}})
-        // With editor mode an Open shows the note in the outline editor; this one opens it in Obsidian.
+        // In Search views, Open shows the note in the outline editor; this item opens it in Obsidian.
         if (patchable && openTargetOf(action) !== null) {
             items.push({id: `row:${i}:obsidian`, section: "row", title: `${action.title} in Obsidian`, icon: "link", run: {kind: "action", action, inObsidian: true}})
         }
@@ -175,11 +174,14 @@ export function panelItems(ctx: PanelContext): PanelItem[] {
         if (hasScheduledDate(row.node.searchKey) || row.node.inheritedDate !== undefined) task("unschedule", "Unschedule", "unschedule", {kind: "unschedule"})
     }
 
-    // Edit (Alt+Enter): the row's line editor, in place (an attachment: Rename; a note's own row: its content pane);
-    // with nothing selected, outside the outline editor, the outline editor on the search.
-    if (ctx.allowEditing && ctx.chainMode === null
-        && (row ? !row.archiveRow && (isPatchable(row.node) || row.node.nodeType === "attachment") : !ctx.outline)) {
-        items.push({id: "edit", section: "edit", title: row ? "Edit" : "Edit search", icon: "edit", key: keyOf("edit"), run: {kind: "shortcut", id: "edit"}})
+    // Alt+Enter edits the selected source line, or opens Rename for a page's own file or an attachment.
+    const editTarget = row && !row.archiveRow && (isPatchable(row.node) || row.node.nodeType === "attachment")
+        && !(row.node.nodeType === "page" && !row.node.isReference && ctx.ownPath(row.node) === null) ? row : undefined
+    if (ctx.allowEditing && ctx.chainMode === null && editTarget) {
+        const node = editTarget.node
+        const title = node.nodeType === "attachment" || (node.nodeType === "page" && ctx.ownPath(node) === node.location.path)
+            ? "Rename" : "Edit"
+        items.push({id: "edit", section: "edit", title, icon: "edit", key: keyOf("edit"), run: {kind: "shortcut", id: "edit"}})
     }
     if (ctx.allowEditing && row) {
         for (const t of renameTargets(row, ctx.ownPath, ctx.resolveLink, ctx.timelineActive)) {

@@ -113,7 +113,7 @@ const SearchResultsView = () => {
 
     const rows = viewState.searchResults.renderableNodes
     /** The edited row's position: the line editor replaces it (-1: the New line, or a row not shown). */
-    const editPos = outline ? editedRowPos(rows, lineEdit) : -1
+    const editPos = lineEdit ? editedRowPos(rows, lineEdit) : -1
     /** The expanded content pane fills the view: the rows are hidden. */
     const paneFills = outline !== null && pane.size === "expanded" && paneRef !== null && paneRef.key !== pane.closedKey
 
@@ -121,7 +121,7 @@ const SearchResultsView = () => {
     const lineEditId = lineEdit?.id ?? null
     const prevLineEditId = useRef(lineEditId)
     useEffect(() => {
-        if (prevLineEditId.current !== null && lineEditId === null && outline) focusSearch(n => n + 1)
+        if (prevLineEditId.current !== null && lineEditId === null) focusSearch(n => n + 1)
         prevLineEditId.current = lineEditId
     }, [lineEditId])
 
@@ -166,7 +166,9 @@ const SearchResultsView = () => {
             ) : (
                 <>
                     {rows.map((tree, index) => timelineActive
-                        ? <TimelineRow node={tree} key={`${index}`} {...rowProps(tree, index)}/>
+                        ? index === editPos && lineEdit
+                            ? <LineEditor key={lineEdit.id} edit={lineEdit} rows={rows}/>
+                            : <TimelineRow node={tree} key={`${index}`} {...rowProps(tree, index)}/>
                         : <React.Fragment key={`${index}`}>
                             {index === editPos && lineEdit
                                 ? <LineEditor key={lineEdit.id} edit={lineEdit} rows={rows}/>
@@ -174,7 +176,7 @@ const SearchResultsView = () => {
                             {(footers.get(tree.index) ?? []).map((f, j) => <BlockMoreFooter key={j} footer={f}/>)}
                         </React.Fragment>
                     )}
-                    {outline && lineEdit && editPos < 0 && <LineEditor key={lineEdit.id} edit={lineEdit} rows={rows}/>}
+                    {lineEdit && editPos < 0 && <LineEditor key={lineEdit.id} edit={lineEdit} rows={rows}/>}
                     {newLineShown && <NewLineRow label={addToLabel} selected={newLineSelected} onOpen={() => openAddTo()}/>}
                     {viewState.searchResults.hasMore && (
                         <div className="flex justify-center items-center py-4">

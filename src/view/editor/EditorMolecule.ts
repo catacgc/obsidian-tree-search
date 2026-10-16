@@ -74,7 +74,7 @@ import {
     type NewPageTarget,
     type RowRef,
 } from "../search/chain"
-import {fieldLines, newLineTarget, nextLineEditId, rootOf, shiftPins, type LineEdit, type OutlineMode} from "../search/outline"
+import {fieldLines, newLineTarget, nextLineEditId, rootOf, shiftPins, type LineEdit} from "../search/outline"
 import {bulkNotice, currentNode, cutCarriers, cutKeyOf, removeCut, type CutFailure} from "../search/cut-drawer"
 
 /** What a prose session writes: a whole existing note (`original` null: a note Save creates). */
@@ -286,8 +286,7 @@ export const EditorMolecule = molecule((mol, scope) => {
         set(view.leaveEditorAtom, {saved: exit.kind === "saved" ? exit.targets : null, focus: true})
     })
 
-    /** Opens the outline editor's line editor on `row`: a line, a link line (`- [[Note]]`) or a heading. A note's own
-     *  row (no line of its own) shows its content pane instead; an attachment opens its Rename. The line must still
+    /** Opens the line editor on a source list or heading line, or opens Rename for an attachment. The line must still
      *  hold the row (else the out-of-date Notice); a changed line editor refuses it once. */
     const editRowAtom = atom(null, async (get, set, row: TreeNode) => {
         if (row.archiveRow) return
@@ -297,10 +296,6 @@ export const EditorMolecule = molecule((mol, scope) => {
             return
         }
         if (!isPatchable(node)) return
-        if (node.nodeType === "page" && get(ownPathAtom)(node) === node.location.path) {
-            set(view.openRowPaneAtom, node)
-            return
-        }
         if (get(view.lineEditAtom) && !set(view.releaseOutlineAtom, "line")) return
         const app = get(GlobalAtoms.appAtom)
         const path = node.location.path
@@ -326,17 +321,23 @@ export const EditorMolecule = molecule((mol, scope) => {
         })
     })
 
-    /** Alt+Enter, Alt+click, the panel's Edit, Enter on a plain line (rowIntent): the line editor on `row` (default:
-     *  in the outline editor the row Enter acts on, elsewhere the selected row), in place. Outside the outline editor
-     *  it first opens the outline on the search (in `mode`), which lists the same rows; with nothing selected that
-     *  is all it does. An attachment opens its Rename. */
-    const editAtom = atom(null, async (get, set, row?: TreeNode, mode: OutlineMode = "edit") => {
+    /** Alt+Enter, Alt+click, the panel's Edit, and a plain leaf-line Enter use the selected row's concrete editor:
+     *  rename a page's own file, edit a heading or list line, or rename an attachment. A page link occurrence edits
+     *  its source line. Outside the outline, only the selected row is eligible; inside it, Enter's row fallback applies. */
+    const editAtom = atom(null, async (get, set, row?: TreeNode) => {
         const inOutline = get(view.outlineAtom) !== null
         const target = row ?? (inOutline ? get(view.enterRowAtom) : get(view.selectedNodeAtom))
-        if (target?.archiveRow) return
-        if (target && !isPatchable(target.node) && target.node.nodeType !== "attachment") return
-        if (!inOutline && target?.node.nodeType !== "attachment" && !set(view.openOutlineAtom, {kind: "search", mode})) return
-        if (target) await set(editRowAtom, target)
+        if (!target || target.archiveRow || !target.node.location.path) return
+        if (!isPatchable(target.node) && target.node.nodeType !== "attachment") return
+        if (target.node.nodeType === "page") {
+            const ownPath = get(ownPathAtom)(target.node)
+            if (ownPath === target.node.location.path) {
+                if (get(GlobalAtoms.appAtom).vault.getFileByPath(ownPath)) set(openRenameFileAtom, ownPath)
+                return
+            }
+            if (ownPath === null && !target.node.isReference) return
+        }
+        await set(editRowAtom, target)
     })
 
     /** Rename of the file at `path` (a note or an embedded file); Save renames it through Obsidian, which updates links. */
@@ -366,7 +367,7 @@ export const EditorMolecule = molecule((mol, scope) => {
         const sel = get(view.selectedNodeAtom)
         if (sel && !sel.archiveRow) {
             if (!isPatchable(sel.node)) new Notice("Can't add under this row")
-            else set(view.openOutlineAtom, {kind: "row", row: sel, mode: "edit"})
+            else set(view.openOutlineAtom, {kind: "row", row: sel})
             return
         }
         set(view.openOutlineAtom, {kind: "today", prefill: chainPrefill(get(view.searchTextAtom), get(separatorAtom), get(settingsAtom).archiveTag)})

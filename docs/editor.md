@@ -26,37 +26,28 @@ Type `[[` in the editor and Tree Search suggests notes from the tree. To link a 
 
 ## The outline editor
 
-The outline editor turns the results in the Search modal or pane into an outline you can browse and edit in place. It opens in one of two modes.
+The outline editor turns the results in the Search modal or pane into a browsable outline. It has one navigation behavior: **Explore**. The modal title is **Explore** plus the root or query; Quick Add stays titled **Quick Add** at Today.
 
-**Explore** (the modal's title says **Explore**) opens with:
+**Opening and exploring.** Enter on a note, heading or line with children, clicking a selected row again, clicking a note link in a row, or **Open** in the action panel opens that row's whole tree. The ⊕ under a hovered row, `>` on a selected row, and **Add to …** with a selected row also open the tree. Inside the outline, these actions descend another level. The outline keeps every row expanded and lists siblings in file order.
 
-- <kbd>Enter</kbd> on a note, a heading or a line with lines under it, clicking a selected row again, clicking a note link in a row, or **Open** in the action panel: the outline opens on that row's whole tree.
-
-<kbd>Enter</kbd> in the search and in explore mode does what fits the row (the footer names it):
+**Ordinary Enter** does what fits the selected row (the footer names it):
 
 | Row | <kbd>Enter</kbd> |
 |---|---|
-| A note or heading | Explore it: the outline opens on it, or, inside the outline, it becomes the root and joins the breadcrumb |
+| A note or heading | Explore it: open its tree, or inside the outline add it to the breadcrumb |
 | A line with a web link | Open the link (e.g. **Browse 🔗 https://…**); the Search modal closes unless you have unsaved edits |
 | A line with lines under it | Explore it |
 | A task with nothing under it | **Complete task** (on a done task: **Reopen task**) |
 | A line with a `` `snippet` `` and nothing under it | **Copy** the snippet; the Search modal closes unless you have unsaved edits |
-| Any other line with nothing under it | **Edit** it in place, as <kbd>Alt</kbd>+<kbd>Enter</kbd> does |
+| Any other line with nothing under it | **Edit** its source line in place |
 
-A click works differently: clicking a selected row again explores it, whatever it is. A task is completed only by clicking its checkbox, and a snippet is copied only by clicking the snippet itself.
+A second click explores a selected page, heading or line. A task is completed only by clicking its checkbox, and a snippet is copied only by clicking the snippet itself.
 
-**Edit** (the title says **Edit**) opens with:
+**Editing the selected row directly.** <kbd>Alt</kbd>+<kbd>Enter</kbd>, <kbd>Alt</kbd>-click, or the row-specific **Edit**/**Rename** action in the panel acts on the selected row without opening or changing the outline. A page's own row opens its note's **Rename** editor; a page-link row edits the source link line; a heading or text row opens its source line editor; an attachment opens **Rename**. With no selected row in plain search, Alt+Enter does nothing; inside the outline it uses Enter's row target (the first non-archive row if none is selected). The action panel has no row action without a selection.
 
-- <kbd>Alt</kbd>+<kbd>Enter</kbd>, or **Edit** in the action panel, on a selected note, heading or line: the row turns into an editor right where it is, and the outline opens on the current results around it. With nothing selected (**Edit search**), the outline opens on the current results.
-- The ⊕ that appears under the row you point at, or typing <kbd>&gt;</kbd> on a selected row.
-- <kbd>&gt;</kbd> with nothing selected: today's daily note, with a new line pre-filled from the search, so `is:task #home` gives `- [ ] #home ` (words, tags and `[[links]]` as typed; `is:completed` gives `- [x] `, `has:link` a trailing `[[`).
-- Quick Add (see above).
+Typing in the outline's search box filters its rows: a matching line stays with its parents and everything under it. With a selected row, Enter runs that row's ordinary behavior and keeps the typed text as a filter. With text but no row selected, Enter makes a filter crumb (`search › Project Apollo › is:task`); crumbs add up. Backspace in an empty search box drops the last crumb. Lines edited or added inside the outline stay listed even when they no longer match the filter, with a red outline.
 
-Above the results, a breadcrumb shows where you are: `search › Project Apollo › Ship the public beta`. Every row is expanded and lines are listed in the order they are written in their notes. The Search modal's title says **Explore** or **Edit** and the root's name. Inside the editor, the ⊕, a note link or <kbd>&gt;</kbd> on a row goes one level deeper, in the same mode; click a crumb to go back up to it.
-
-**Filtering.** Typing in the search box filters the outline: a matching line stays with its parents and everything under it. <kbd>Enter</kbd> turns the text into a crumb (`search › Project Apollo › is:task`) and moves to the rows, so you can narrow further; crumbs add up. If you have picked a row (<kbd>v</kbd> / <kbd>^</kbd>), <kbd>Enter</kbd> acts on it instead (explores or edits it) and the text stays in the search box as the filter. <kbd>Backspace</kbd> in an empty search box drops the last crumb. Lines you edit or add stay listed even when they no longer match the filter, with a red outline.
-
-**Editing a line.** <kbd>Alt</kbd>+<kbd>Enter</kbd> or <kbd>Alt</kbd>-click (in edit mode also <kbd>Enter</kbd> or clicking it again) on a line, a link line or a heading replaces the row with an editor. Its bullet, checkbox or `#` stay as they are. <kbd>Alt</kbd>+<kbd>Enter</kbd> adds a line under it, <kbd>Tab</kbd> and <kbd>Shift</kbd>+<kbd>Tab</kbd> indent and outdent, and `[[`, `@`, pasting and the formatting keys work as described below. A line the filter would hide gets a red outline; you can still save it. <kbd>Enter</kbd> saves (so do <kbd>Ctrl</kbd>+<kbd>Enter</kbd> and <kbd>Shift</kbd>+<kbd>Enter</kbd>): new lines go right where you typed them, each with a `[created:: date]` (or `[scheduled:: date]` for a task). If the line changed in its note in the meantime, nothing is written. <kbd>Esc</kbd> cancels; with changes, press it twice to discard them. On an attachment (an image, a PDF), <kbd>Alt</kbd>+<kbd>Enter</kbd> renames the file, and Obsidian updates the links to it.
+**Editing a line.** The line editor keeps the bullet, checkbox or `#` prefix outside the field. In the Search modal or pane, Alt+Enter on a heading, text row or page-link row opens the editor at that source line; Alt-click does the same. Ordinary Enter on a plain leaf line also edits it after the web-link, children, task and snippet actions above. Inside the line editor, Alt+Enter adds a line under it, Tab and Shift+Tab indent and outdent, and `[[`, `@`, pasting and formatting keys work as described below. A line the filter would hide gets a red outline; you can still save it. Enter, Ctrl+Enter or Shift+Enter saves; new lines go where typed, each with a `[created:: date]` (or `[scheduled:: date]` for a task). If the line changed in its note in the meantime, nothing is written. Esc cancels; with changes, press it twice to discard them.
 
 **Adding a line.** The **Add to …** row at the end of the results (for example **Add to Project Apollo…**), or **Add to …** in the action panel, adds a line without touching an existing one. Click it, or press <kbd>↓</kbd> past the last row to select it and then <kbd>Enter</kbd>. In the search it is there too: with a row selected (for example **Add to Ship the public beta…**) it explores that row and opens a new line at its end; with nothing selected (**Add to Today…**) it opens a new line at the end of the results. The line goes:
 
@@ -68,7 +59,7 @@ Above the results, a breadcrumb shows where you are: `search › Project Apollo 
 
 ### The note's content
 
-A pane above the footer shows the text of the note at the root (for a heading, only the text under it, titled **Note › Heading**), or of the page, link or heading row you are editing, and you can edit it there. <kbd>Enter</kbd> on a note's own row opens just this pane. In explore mode the pane starts collapsed to its title when the note has no text besides its outline, and **Save** and **Discard** (back to the text on disk) show only while you are in the pane. Files you paste or drop into it are saved into your vault and named after the note. A dot by the title marks unsaved changes. **Save**, or <kbd>Ctrl</kbd>+<kbd>Enter</kbd> (<kbd>⌘</kbd>+<kbd>Enter</kbd> on macOS) in the pane, the line editor or the search box, saves the line and the content together. If the note changed in the meantime, nothing is written. The pane's buttons open the note in Obsidian, expand the pane to fill the view, collapse it to its title, or close it. <kbd>Esc</kbd> in the pane goes back to the search box.
+A pane above the footer shows the text of the outline root's note (for a heading, only the text under it, titled **Note › Heading**) or the page/header associated with a line being edited. Enter on a page or heading explores its tree; the root's text appears in this pane. Alt+Enter on a page's own row opens its **Rename** editor instead. The pane starts collapsed to its title when the note has no text besides its outline. **Save** and **Discard** (back to the text on disk) show only while the pane is focused. Files you paste or drop into it are saved into your vault and named after the note. A dot by the title marks unsaved changes. **Save**, or <kbd>Ctrl</kbd>+<kbd>Enter</kbd> (<kbd>⌘</kbd>+<kbd>Enter</kbd> on macOS) in the pane, the line editor or the search box, saves the line and the content together. If the note changed in the meantime, nothing is written. The pane's buttons open the note in Obsidian, expand the pane to fill the view, collapse it to its title, or close it. <kbd>Esc</kbd> in the pane goes back to the search box.
 
 To open in Obsidian instead, press <kbd>Shift</kbd>+<kbd>Enter</kbd> (See in Obsidian), choose **Open … in Obsidian** in the action panel, <kbd>Ctrl</kbd>/<kbd>⌘</kbd>-click a link in a row, or click the pane's open button. Folders and attachments still open in Obsidian.
 
@@ -113,7 +104,7 @@ Rows that moved or were archived leave the drawer. The rest stay, and a notice l
 
 ## More editing
 
-- **Edit, Rename, Delete.** The action panel's Edit section also has **Edit** (the same as <kbd>Alt</kbd>+<kbd>Enter</kbd>), **Rename [[Note]]** for each note or embedded file on the row (Obsidian updates the links to it), and **Delete**, which asks first. Delete removes a line with everything nested under it, a heading with its section, or moves a note's own row or an attachment to the trash.
+- **Edit, Rename, Delete.** Alt+Enter's action-panel item is **Rename** for a page's own row or an attachment, and **Edit** for a heading, text row or page-link line. The panel also keeps explicit **Rename [[Note]]** targets for linked notes and embedded files, plus **Delete**, which asks first. Delete removes a line with everything nested under it, a heading with its section, or moves a note's own row or an attachment to the trash.
 - **Note content.** Clicking a link in the editor (or pressing <kbd>Alt</kbd>+<kbd>Enter</kbd> on it) opens a content section that is appended to that note. The note is created if it doesn't exist yet.
 - **Pasting.** Pasted files are saved into your vault and named after the note. Pasted URLs become markdown links.
 - **Indenting.** Press <kbd>Tab</kbd> and <kbd>Shift</kbd>+<kbd>Tab</kbd> to indent and outdent.

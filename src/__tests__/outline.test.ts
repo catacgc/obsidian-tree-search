@@ -25,7 +25,7 @@ const text = (key: string, path: string, line: number): ParsedNode =>
 const crumb = (node: ParsedNode, label = "label"): OutlineRoot => ({ kind: "node", node, label })
 const TODAY: OutlineRoot = { kind: "today" }
 const outline = (path: OutlineRoot[], over: Partial<OutlineState> = {}): OutlineState =>
-    ({ path, filters: [], prevQuery: "", returnTo: [], quickAdd: false, pins: [], mode: "edit", ...over })
+    ({ path, filters: [], prevQuery: "", returnTo: [], quickAdd: false, pins: [], ...over })
 
 describe("shiftPins", () => {
     it("moves pins at or after an inserted block down by its size", () => {
@@ -135,19 +135,14 @@ describe("linkCrumbs", () => {
 
 describe("outlineTitle", () => {
     it("names the root, or the query at the search root", () => {
-        expect(outlineTitle(outline([crumb(page("P"), "P"), crumb(header("P", "H"), "H")]))).toBe("Edit H")
-        expect(outlineTitle(outline([], { prevQuery: "is:task " }))).toBe('Edit "is:task"')
-        expect(outlineTitle(outline([]))).toBe("Edit search")
+        expect(outlineTitle(outline([crumb(page("P"), "P"), crumb(header("P", "H"), "H")]))).toBe("Explore H")
+        expect(outlineTitle(outline([], { prevQuery: "is:task " }))).toBe('Explore "is:task"')
+        expect(outlineTitle(outline([]))).toBe("Explore search")
     })
 
     it("is Quick Add for a Quick Add session at Today only", () => {
         expect(outlineTitle(outline([TODAY], { quickAdd: true }))).toBe("Quick Add")
-        expect(outlineTitle(outline([TODAY]))).toBe("Edit Today")
-    })
-
-    it("says Explore in explore mode", () => {
-        expect(outlineTitle(outline([crumb(page("P"), "P")], { mode: "explore" }))).toBe("Explore P")
-        expect(outlineTitle(outline([], { mode: "explore", prevQuery: "is:task" }))).toBe('Explore "is:task"')
+        expect(outlineTitle(outline([TODAY]))).toBe("Explore Today")
     })
 })
 

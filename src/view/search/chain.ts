@@ -3,8 +3,10 @@
 // chainPrefill, rowLabel. No obsidian value imports; the atoms in state.tsx / EditorMolecule.ts run the plans.
 import {
     fileParent,
+    flattenIndex,
     getKey,
     linkTargetTree,
+    matchQuery,
     parseQuery,
     partitionArchived,
     pruneResultTree,
@@ -198,13 +200,81 @@ export function chainPrefill(query: string, separator: string, archiveTag: strin
 /** Where Add to writes for the search text `query`, and the line it pre-fills: a `[[Note]]` scope in the first stage
  *  (`[[Note]] > is:task home`) is the note the line goes under, and the line is chainPrefill's of the last stage
  *  without that scope (`- [ ] home `); otherwise no note (Today) and the whole chainPrefill. */
-export function addToPlan(query: string, separator: string, archiveTag: string): {note: string | null; prefill: string} {
-    if (query.trim() === "") return {note: null, prefill: ""}
-    const first = parseQuery(query, separator, true)[0]
-    const members = first.type === "and" ? first.exprs : [first]
-    const scope = members.find(e => e.type === "modifier" && e.field === "tree")
-    const note = scope && scope.type === "modifier" ? scope.value : null
-    return {note, prefill: chainPrefill(query, separator, archiveTag, note ?? undefined)}
+export type AddToPlan = {note: string | null; parentQuery: string | null; filter: string; prefill: string}
+
+function queryOf(expr: QueryExpr, parent?: "and" | "or"): string {
+    let query: string
+    switch (expr.type) {
+        case "empty": query = ""; break
+        case "contains": query = expr.value; break
+        case "equals": query = `"${expr.value}"`; break
+        case "not": query = `-(${queryOf(expr.expr)})`; break
+        case "and": query = expr.exprs.map(e => queryOf(e, "and")).filter(Boolean).join(" "); break
+        case "or": query = expr.exprs.map(e => queryOf(e, "or")).filter(Boolean).join(" | "); break
+        case "modifier":
+            query = expr.field === "tree" ? `[[${expr.value}]]`
+                : expr.field === "outline" && expr.exact ? `outline:"${expr.value}"`
+                : `${expr.field}:${expr.value}`
+            break
+    }
+    if (parent === "and" && expr.type === "or") return `(${query})`
+    return query
+}
+
+function withoutTreeScope(expr: QueryExpr): {scope: QueryExpr | null; filter: QueryExpr} {
+    if (expr.type === "modifier" && expr.field === "tree") return {scope: expr, filter: {type: "empty"}}
+    if (expr.type !== "and") return {scope: null, filter: expr}
+    const scope = expr.exprs.find(e => e.type === "modifier" && e.field === "tree") ?? null
+    if (!scope) return {scope: null, filter: expr}
+    const rest = expr.exprs.filter(e => e !== scope)
+    return {scope, filter: rest.length === 0 ? {type: "empty"} : rest.length === 1 ? rest[0] : {type: "and", exprs: rest}}
+}
+
+function treeScopeOf(expr: QueryExpr): string | null {
+    if (expr.type === "modifier" && expr.field === "tree") return expr.value
+    if (expr.type === "and") return expr.exprs.find(e => e.type === "modifier" && e.field === "tree")?.type === "modifier"
+        ? (expr.exprs.find(e => e.type === "modifier" && e.field === "tree") as Extract<QueryExpr, {type: "modifier"}>).value
+        : null
+    return null
+}
+
+/** Splits the final filter from its parent query and pre-fills a line from that filter. */
+export function addToPlan(query: string, separator: string, archiveTag: string): AddToPlan {
+    const stages = parseQuery(query, separator, true).filter(e => e.type !== "empty")
+    if (stages.length === 0) return {note: null, parentQuery: null, filter: "", prefill: ""}
+
+    const last = stages[stages.length - 1]
+    const {scope, filter} = withoutTreeScope(last)
+    const parentStages = stages.slice(0, -1)
+    if (scope) parentStages.push(scope)
+    const filterQuery = queryOf(filter)
+    const parentQuery = parentStages.length > 0 ? parentStages.map(e => queryOf(e)).filter(Boolean).join(` ${separator} `) || null : null
+    const note = parentStages.length === 1 ? treeScopeOf(parentStages[0]) : null
+    return {note, parentQuery, filter: filterQuery, prefill: filterQuery === "" && parentQuery ? "- " : chainPrefill(filterQuery, separator, archiveTag)}
+}
+
+function needsNestedParent(query: string, separator: string): boolean {
+    const hasNestedModifier = (expr: QueryExpr): boolean => {
+        switch (expr.type) {
+            case "modifier": return expr.field === "is" && (expr.value === "subtext" || expr.value === "subtask")
+            case "and":
+            case "or": return expr.exprs.some(hasNestedModifier)
+            case "not": return false
+            default: return false
+        }
+    }
+    return parseQuery(query, separator, true).some(hasNestedModifier)
+}
+
+/** The first ranked result matching the parent's final stage that can contain the line described by `filter`. */
+export function selectCandidateParent(results: ResultNode[], parentQuery: string, separator: string, filter: string): ParsedNode | null {
+    const parentStages = parseQuery(parentQuery, separator, true).filter(e => e.type !== "empty")
+    const match = parentStages[parentStages.length - 1]
+    if (!match) return null
+    const nested = needsNestedParent(filter, separator)
+    return flattenIndex(results, 10, parentStages, {expandAll: true})
+        .find(row => matchQuery(row.node, match) && isPatchable(row.node) && (!nested || row.node.nodeType === "text"))
+        ?.node ?? null
 }
 
 const cut = (s: string, n = 40) => s.length > n ? s.slice(0, n - 1) + "…" : s

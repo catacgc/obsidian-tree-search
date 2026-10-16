@@ -1,4 +1,4 @@
-// Result-row gestures: Alt+click edits the row in the outline editor (desktop, editor mode); a long-press selects the
+// Result-row gestures: Alt+click edits the selected row directly; a long-press selects the
 // row and opens the action panel (mobile, every view with the action footer).
 import type React from "react";
 import {useRef} from "react";

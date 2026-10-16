@@ -2,19 +2,17 @@
 
 Approved 2026-10-15.
 
-The Search modal and pane (editor mode, `allowEditing`) get an **outline editor**: a mode of the results view in which the
-rows are an editable outline. It replaces the Patch view (the `>` append chain with row and entry chips, `ChainPreview`
-and the chain's own writes). The Alt+A **Append to [[P]]** editor (with its persisted `quickAddDraft`) and the prose
-whole-note editor stay as they are.
+The Search modal and pane (`allowEditing`) get an **outline editor**: a browsable outline over the search results. Outline navigation always follows Explore behavior; direct row editing is a separate Alt+Enter action that does not open or switch the outline. The outline editor replaces the Patch view (the `>` append chain with row and entry chips, `ChainPreview` and the chain's own writes). The Alt+A **Append to [[P]]** editor (with its persisted `quickAddDraft`) and the prose whole-note editor stay as they are.
 
 ## Entry and exit
 
-|Trigger|Opens on|Crumbs|
+|Trigger|Behavior|Crumbs|
 |---|---|---|
-|Alt+Enter or the panel's **Edit**, nothing selected|the current search results, fully expanded|`search`|
-|Alt+Enter or **Edit** on a selected page, header or line; Enter, the second click, the ⊕ patch dot, a note link in a row, `>` on a row|the row's full tree (`advancedSearch(graph, key, "")`)|`search › ancestors… › Row` (`patchPath`)|
+|Enter on a page, heading or line with children; the second click; a note link in a row; **Open**; the ⊕ patch dot; `>` on a row|Open the row's full tree (`advancedSearch(graph, key, "")`)|`search › ancestors… › Row` (`patchPath`)|
+|Alt+Enter, Alt-click or the row-specific panel action on a selected row|Edit directly: a page's own resolved file opens Rename; a page-link row, heading or text row opens its source-line editor; an attachment opens Rename. The outline does not change.|unchanged|
 |Quick Add command, Alt+N, the panel's **Quick Add**|Today (today's daily note outline), with a new line open|`search › Today`|
 |`>` with nothing selected|Today, the new line pre-filled from the search (`chainPrefill`)|`search › Today`|
+- Alt+Enter in the plain search requires a selection; inside the outline it uses Enter's row target (the first non-archive row when nothing is selected). The panel only exposes row-specific Edit/Rename when a row is selected.
 
 - Inside the outline editor, the patch dot, a note link and `>` on a row descend: the row (with its tree ancestors in
   the outline) is added to the crumbs. A note link with no row for it replaces the path crumbs with `Note` (or
@@ -29,7 +27,7 @@ whole-note editor stay as they are.
 - The search input filters the outline live: the root's tree narrowed as `advancedSearch` narrows (a match keeps its
   subtree; its ancestors stay).
 - Enter with text in the input and no row selected makes it a **filter crumb** (`search › Row › is:task`) and selects
-  the first row; with a row selected, Enter edits that row and the text stays in the input as the live filter.
+  the first row; with a row selected, Enter runs its ordinary row intent and keeps the text in the input as a live filter.
   Crumbs AND together (each is a query stage). A click on a filter crumb drops the crumbs after it; a click on a path
   crumb makes it the root and drops the later crumbs and every filter crumb. Backspace in an empty input drops the last
   crumb (a filter crumb's text returns to the input; a path crumb moves the root up).
@@ -40,9 +38,9 @@ whole-note editor stay as they are.
 
 ## Line editor
 
-- Enter (or the second click, Alt+Enter, Alt+click) on a line, a link line (`- [[Note]]`) or a heading row replaces the
-  row with a line editor (an outline `MarkdownField`). The line is checked as Alt-Edit did (`readLine` + list item or
-  heading + `lineHasIdentity`, else the out-of-date Notice).
+- Alt+Enter, Alt-click or the action panel's row-specific action edits the selected row directly, without opening an outline: a page's own resolved note file opens Rename, a page-link row edits its source link line, a heading or text row opens the line editor, and an attachment opens Rename. With no selected row, Alt+Enter does nothing.
+- Ordinary Enter keeps its existing row intent: page/header rows and lines with children Explore; a line's URL, task, snippet or plain-leaf action remains unchanged. In the outline, Enter on a plain leaf line opens its source line editor; a second click on a row remains an Explore action.
+- The source line is checked as before (`readLine` + list item or heading + `lineHasIdentity`, else the out-of-date Notice).
 - The field's first line is the row's text without its indent, bullet, checkbox or `#…` prefix, which are kept. Alt+Enter
   adds a line (on the first line one level deeper: a child), Tab / Shift+Tab indent, Backspace on an empty line removes
   it. `[[` lists link targets (pages and headings, plus a New note row) under the field; `@` on an open task offers
@@ -65,8 +63,7 @@ whole-note editor stay as they are.
 
 - The root's note text (a note: `noteBody`; a heading: `headingBody`; a line: its file's `noteBody`; Today: the daily
   note's), or while a page row, a link line or a heading row is edited that row's, is docked above the footer as an
-  editable buffer (`writeNoteBody` / `writeHeadingBody`, `NOTE_BODY_CHANGED` guard). Enter on a page row that has no
-  line of its own (a note's own row) opens just its content pane.
+  editable buffer (`writeNoteBody` / `writeHeadingBody`, `NOTE_BODY_CHANGED` guard). Enter on a page or heading explores its tree; the root's text appears in this pane. Alt+Enter on a page's own row opens Rename instead.
 - Files pasted or dropped into it are attachments named after the note, renamed by alias on save, trashed on discard.
 - Header buttons: Save, Open in Obsidian, expand (the pane fills the view), collapse (title bar only), close (hidden
   until another note is shown).
@@ -74,12 +71,10 @@ whole-note editor stay as they are.
 
 ## Footer, panel, shortcuts, title
 
-- Footer main item: with text in the input **Filter** (Enter); else **Edit &lt;row&gt;** for the row Enter acts on.
-- Panel: **Edit** (Alt+Enter) in the Edit section for every view with editor mode, titled **Edit** with a row and
-  **Edit search** without one. In the outline editor the panel hides Append, Move under, Cut, the drawer, filters and
-  Quick Add.
-- Shortcut `edit` (Alt+Enter): "Edit the row in the outline editor (nothing selected: the search)".
-- Modal title: `Edit <root>` (`Edit "<query>"` for the search root), `Quick Add` for a Quick Add session at Today.
+- Footer main item: with text in the input **Filter** (Enter); else the selected row's ordinary Enter action.
+- Panel: Alt+Enter's action is **Rename** for a page's own row or an attachment, and **Edit** for a heading, text row or page-link line. No Edit action appears without a selected row; explicit **Rename [[Note]]** / **Rename ![[file]]** targets remain. In the outline editor the panel hides Append, Move under, Cut, the drawer, filters and Quick Add.
+- Shortcut `edit` (Alt+Enter): renames the selected page or attachment, or edits its heading/list line directly; it does not open the outline.
+- Modal title: `Explore <root>` (`Explore "<query>"` for the search root), `Quick Add` for a Quick Add session at Today.
 
 ## Model
 

@@ -1,14 +1,13 @@
-// What Enter, or a click on the selected row, does to a result row in views with editor mode (the Search modal and
-// pane). Pure: openRowAtom runs the intent, ActionFooter names it.
+// What Enter, or a click on the selected row, does to a result row in Search views. Pure: openRowAtom runs the intent,
+// ActionFooter names it.
 import {advancedSearch, getKey, type NotesGraph, type ParsedNode} from "@mdtree/core"
 import type {Browse} from "../node-actions"
 import {isPatchable, rowLabel} from "./chain"
-import type {OutlineMode} from "./outline"
 
 export type RowIntent =
-    /** The line editor on the row (a note's own row: its content pane; an attachment: Rename). */
+    /** A plain leaf text row's source-line editor. */
     | {kind: "edit"}
-    /** The outline on the row's tree, in explore mode (inside an outline: one level deeper). */
+    /** The outline on the row's tree (inside an existing outline: one level deeper). */
     | {kind: "explore"}
     | {kind: "browse"; action: Browse}
     | {kind: "toggleTask"; done: boolean}
@@ -17,8 +16,6 @@ export type RowIntent =
     | {kind: "default"}
 
 export type RowIntentContext = {
-    /** The open outline's mode; null for the plain search. */
-    mode: OutlineMode | null
     /** Enter, or a click on the already selected row. */
     via: "key" | "pointer"
     /** Exploring the row would list rows under it (hasExploreRows). */
@@ -27,11 +24,9 @@ export type RowIntentContext = {
     web: Browse | null
 }
 
-/** Edit mode edits every note, heading and line. Otherwise notes and headings are explored, and so is any line a
- *  click opens. For Enter on a line: its web URL opens; a line with children is explored; a leaf task toggles, a leaf
- *  line with a snippet copies it, and any other leaf line is edited. */
+/** Notes and headings are explored, as is any line a click opens. For Enter on a line: its web URL opens; a line with
+ *  children is explored; a leaf task toggles, a leaf line with a snippet copies it, and any other leaf line is edited. */
 export function rowIntent(node: ParsedNode, ctx: RowIntentContext): RowIntent {
-    if (ctx.mode === "edit") return isPatchable(node) || node.nodeType === "attachment" ? {kind: "edit"} : {kind: "default"}
     if (!isPatchable(node)) return {kind: "default"}
     if (node.nodeType !== "text" || ctx.via === "pointer") return {kind: "explore"}
     if (ctx.web) return {kind: "browse", action: ctx.web}

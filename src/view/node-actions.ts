@@ -68,7 +68,7 @@ export const raycastActionOf = (action: RaycastAction): string | null =>
         : null
 
 /** The note (`Name`) or heading (`Name#Heading`) an `raycastaction=open` action opens, else null: a page or header
- *  row's own Open, a text row's `Open 🔹 [[link]]`, a folder's folder note. Views with editor mode open it in the
+ *  row's own Open, a text row's `Open 🔹 [[link]]`, a folder's folder note. Editable Search views open it in the
  *  outline editor instead of in Obsidian. */
 export function openTargetOf(action: RaycastAction): string | null {
     if (raycastActionOf(action) !== "open" || action.type !== "browse") return null

@@ -125,10 +125,10 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
         openOutline({kind: "today", quickAdd: true})
     }, [quickAddRequest])
 
-    // In the outline editor and the reparent chain (`<`), Escape leaves it (restoring the query) instead of closing the
-    // modal; in the outline editor Alt+Enter edits the row Enter acts on and Mod+Enter saves (Obsidian's hotkeys would
-    // take them before React sees them). While the autocomplete is open, Escape closes only it. Claimed through an
-    // Obsidian Scope (like the action panel), pushed only while the input has focus and one of them is open.
+    // In the outline editor and reparent chain (`<`), Escape leaves it instead of closing the modal; Alt+Enter edits
+    // the row selected for Enter using its concrete editor, and Mod+Enter saves. Obsidian's hotkeys would take them
+    // before React sees them. While autocomplete is open, Escape closes only it. Claimed through an Obsidian Scope,
+    // pushed only while the input has focus and one of them is open.
     const app = useAtomValue(GlobalAtoms.appAtom)
     const scopeRef = useRef<Scope | null>(null)
     const escapeRef = useRef<() => void>(() => {})
@@ -213,10 +213,10 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
     }
 
     /** Outline editor and chain keys; true when the key was handled. `>` opens the outline editor on the selected row
-     *  (patchAtom; in it: descends), `<` starts Move under. In the outline editor Enter runs the row's Enter (edit or
-     *  explore: openRowAtom; an empty input: the first row's), and typed text with no row picked becomes a filter
+     *  (patchAtom; in it: descends), `<` starts Move under. In the outline editor, Enter runs the row's ordinary Enter
+     *  behavior (openRowAtom; an empty input: the first row's), and typed text with no row picked becomes a filter
      *  crumb; Backspace in an empty input drops the last crumb (in the reparent chain: leaves it). `>` and `<` need
-     *  editor mode; Move under started from Alt+M or the action panel works in every view. */
+     *  editor support; Move under started from Alt+M or the action panel works in every view. */
     const handleOutlineKey = (ev: React.KeyboardEvent<HTMLInputElement>): boolean => {
         if (ev.nativeEvent.isComposing || ev.metaKey || ev.ctrlKey) return false
         const q = searchQuery.query
@@ -238,8 +238,8 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
                 else setChain({...chain, confirm: name})
             }
         } else if (ev.key === "Enter" && outline && !ev.altKey && !ev.shiftKey) {
-            // A picked row or New line, or an empty input (the first row): the row's Enter (openRowAtom: edit or
-            // explore); typed text with nothing picked becomes a filter crumb.
+            // A picked row or New line, or an empty input (the first row): the row's ordinary Enter behavior;
+            // typed text with nothing picked becomes a filter crumb.
             if (selectedRow || newLineSelected || q.trim() === "") void handleDefault()
             else addFilter()
         } else {

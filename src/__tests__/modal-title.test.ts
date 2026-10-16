@@ -11,7 +11,7 @@ const session = (over: Partial<EditorState>): EditorState => ({
 })
 
 const outline = (path: OutlineRoot[], over: Partial<OutlineState> = {}): OutlineState =>
-    ({ path, filters: [], prevQuery: "", returnTo: [], quickAdd: false, pins: [], mode: "edit", ...over })
+    ({ path, filters: [], prevQuery: "", returnTo: [], quickAdd: false, pins: [], ...over })
 const node = (label: string): OutlineRoot => ({ kind: "node", node: null as unknown as ParsedNode, label })
 
 describe("searchModalTitle", () => {
@@ -21,18 +21,18 @@ describe("searchModalTitle", () => {
     })
 
     it("names the outline editor after its root", () => {
-        expect(searchModalTitle(null, outline([node("Project X"), node("Plan")]))).toBe("Edit Plan")
-        expect(searchModalTitle(null, outline([{ kind: "today" }]))).toBe("Edit Today")
+        expect(searchModalTitle(null, outline([node("Project X"), node("Plan")]))).toBe("Explore Plan")
+        expect(searchModalTitle(null, outline([{ kind: "today" }]))).toBe("Explore Today")
     })
 
     it("names the outline editor at the search root after the query", () => {
-        expect(searchModalTitle(null, outline([], { prevQuery: " is:task " }))).toBe('Edit "is:task"')
-        expect(searchModalTitle(null, outline([], { prevQuery: "  " }))).toBe("Edit search")
+        expect(searchModalTitle(null, outline([], { prevQuery: " is:task " }))).toBe('Explore "is:task"')
+        expect(searchModalTitle(null, outline([], { prevQuery: "  " }))).toBe("Explore search")
     })
 
     it("names a Quick Add session Quick Add only while at Today", () => {
         expect(searchModalTitle(null, outline([{ kind: "today" }], { quickAdd: true }))).toBe("Quick Add")
-        expect(searchModalTitle(null, outline([{ kind: "today" }, node("call Bob")], { quickAdd: true }))).toBe("Edit call Bob")
+        expect(searchModalTitle(null, outline([{ kind: "today" }, node("call Bob")], { quickAdd: true }))).toBe("Explore call Bob")
     })
 
     it("stays Search for Append and prose editors, and plain searching", () => {

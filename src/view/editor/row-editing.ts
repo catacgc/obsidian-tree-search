@@ -1,4 +1,4 @@
-// Pure row predicates and planning for editor mode (Append dot, Alt-Edit, drag-to-reparent).
+// Pure row predicates and planning for result-row editing (Append dot, Alt-edit, drag-to-reparent).
 // No obsidian imports: callers resolve file paths and line contents.
 
 import {getKey, type ParsedNode} from "@mdtree/core"

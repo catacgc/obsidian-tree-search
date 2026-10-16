@@ -46,9 +46,9 @@ Alt shortcuts match the physical key, so they work on macOS even though <kbd>⌥
 | Keys | Action |
 | --- | --- |
 | <kbd>Alt</kbd>+<kbd>A</kbd> | Add to: a new line at the end of the view (in the plain search, after exploring the selected row) |
-| <kbd>Alt</kbd>+<kbd>Enter</kbd> | Edit the row in place (the outline opens on the current results in edit mode; nothing selected: just that); on an attachment, rename it |
+| <kbd>Alt</kbd>+<kbd>Enter</kbd> | On a selected row: rename its own page or attachment, or edit its heading, text, or page-link source line directly; in the outline with no selection, use Enter's first-row fallback; in plain search with no selection, do nothing |
 | <kbd>&gt;</kbd> | Open the outline editor on the selected row (nothing selected: today's note, with a line pre-filled from the search) |
-| <kbd>Enter</kbd> (outline editor) | The selected row's Enter as in the search (edit mode: edit it), keeping the typed filter; nothing selected: make the typed text a filter crumb, or act on the first row |
+| <kbd>Enter</kbd> (outline editor) | The selected row's ordinary Enter behavior; with no selection, make the typed text a filter crumb, or act on the first row |
 | <kbd>&lt;</kbd> | Move the selected page or line: search for its new parent |
 | <kbd>Backspace</kbd> (empty input) | Drop the last crumb, or cancel the move |
 | <kbd>Esc</kbd> | Leave the outline editor, or cancel the move |

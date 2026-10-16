@@ -14,7 +14,7 @@ import type {TreeNode} from "../search/SearchViewFlatten";
 
 export const ActionsMolecule = molecule((mol, scope) => {
     const scp = scope(SearchViewScope)
-    const {selectedNodeAtom, enterRowAtom, selectEnterRowAtom, hoveredLineAtom, selectedLineAtom, outlineAtom, openOutlineAtom, newLineSelectedAtom, openAddToAtom, chainAtom, outlineDirtyAtom} = mol(SearchViewMolecule)
+    const {selectedNodeAtom, enterRowAtom, selectEnterRowAtom, hoveredLineAtom, selectedLineAtom, openOutlineAtom, newLineSelectedAtom, openAddToAtom, chainAtom, outlineDirtyAtom} = mol(SearchViewMolecule)
     const { appAtom } = mol(GlobalAppMolecule)
     const { editAtom, editTaskAtom } = mol(EditorMolecule)
 
@@ -27,13 +27,12 @@ export const ActionsMolecule = molecule((mol, scope) => {
     })
 
     /** What Enter (`via` "key") or a click on the selected row ("pointer") does to `row` (rowIntent); null outside
-     *  views with editor mode, during a reparent, or for no row. */
+     *  the Search views, during a reparent, or for no row. */
     const intentOf = (get: Getter, row: TreeNode | null, via: "key" | "pointer"): RowIntent | null => {
         if (!scp.allowEditing || get(chainAtom) !== null || !row || row.archiveRow) return null
         const app = get(appAtom)
         const node = row.node
         return rowIntent(node, {
-            mode: get(outlineAtom)?.mode ?? null,
             via,
             hasChildren: node.nodeType === "text" && hasExploreRows(get(GlobalAtoms.graphAtom), node, get(separatorAtom)),
             web: app ? webEnterAction(getTreeNodeActions(app, row, "default")) : null,
@@ -43,12 +42,11 @@ export const ActionsMolecule = molecule((mol, scope) => {
     /** What Enter does to the row it acts on (enterRowAtom): the footer names it. */
     const enterIntentAtom = atom(get => intentOf(get, get(enterRowAtom), "key"))
 
-    /** Enter / a second click on the selected row in views with editor mode. The New line row opens a new line; any
+    /** Enter / a second click on the selected row in editable Search views. The New line row opens a new line; any
      *  other row runs its rowIntent. A web URL, and a copied snippet, close the modal unless the outline has unsaved
      *  edits. False for a row with no intent of its own (`default`): the caller runs the row's default action. */
     const openRowAtom = atom(null, async (get, set, via: "key" | "pointer" = "key"): Promise<boolean> => {
         if (!scp.allowEditing || get(chainAtom) !== null) return false
-        const o = get(outlineAtom)
         if (get(newLineSelectedAtom)) {
             set(openAddToAtom)
             return true
@@ -58,8 +56,8 @@ export const ActionsMolecule = molecule((mol, scope) => {
         if (!row || !intent) return false
         switch (intent.kind) {
             case "default": return false
-            case "edit": await set(editAtom, row, o?.mode ?? "explore"); return true
-            case "explore": return set(openOutlineAtom, {kind: "row", row, mode: "explore"})
+            case "edit": await set(editAtom, row); return true
+            case "explore": return set(openOutlineAtom, {kind: "row", row})
             case "toggleTask": await set(editTaskAtom, row.node, {kind: "done", done: intent.done}); return true
             case "browse": await executeAction(intent.action); break
             case "copy": await executeAction({type: "copy", text: intent.text, title: "", icon: ""}); break
@@ -72,8 +70,8 @@ export const ActionsMolecule = molecule((mol, scope) => {
         const newLine = get(hoveredLineAtom)
         const oldLine = get(selectedLineAtom)
 
-        // A second click opens the row: in views with editor mode, the outline editor (openRowAtom), else (or when
-        // that doesn't apply) it reveals the row in Obsidian.
+        // A second click opens the row: editable Search views run openRowAtom; elsewhere (or when it does not apply)
+        // it reveals the row in Obsidian.
         if (newLine == oldLine) {
             if (await set(openRowAtom, "pointer")) return
             await set(highlightSelectedItemAtom)
@@ -111,9 +109,8 @@ export const ActionsMolecule = molecule((mol, scope) => {
         if (action) await set(executeActionAtom, action)
     })
 
-    /** Enter: the selected row's default action. Views with editor mode open the row in the outline editor instead
-     *  (openRowAtom), and with nothing selected (the plain search or the outline editor) run Add to. Elsewhere,
-     *  nothing selected acts on the first row (enterRowAtom). */
+    /** Enter: Search views with allowEditing run openRowAtom; with nothing selected in the plain search or outline,
+     *  they run Add to. Elsewhere, nothing selected acts on the first row (enterRowAtom). */
     const handleDefaultActionAtom = atom(null, async (get, set) => {
         if (scp.allowEditing && get(chainAtom) === null && get(selectedNodeAtom) === null && !get(newLineSelectedAtom)) {
             set(openAddToAtom)
@@ -151,11 +148,10 @@ export const ActionsMolecule = molecule((mol, scope) => {
     /** Runs a row action. `inObsidian`: the action panel's "… in Obsidian" items, which open a note in Obsidian even
      *  where Open shows it in the outline editor. */
     const executeActionAtom = atom(null, async (get, set, action: RaycastAction, inObsidian: boolean = false) => {
-        // Views with editor mode open a page row's, header row's or text row's note or heading link in the outline
-        // editor instead of in Obsidian.
+        // Search views open a page, header or text row's note or heading link in the outline editor instead of Obsidian.
         const target = openTargetOf(action)
         const sel = get(selectedNodeAtom)
-        if (!inObsidian && target !== null && sel && !sel.archiveRow && isPatchable(sel.node) && set(openOutlineAtom, {kind: "link", link: target, mode: "explore"})) return
+        if (!inObsidian && target !== null && sel && !sel.archiveRow && isPatchable(sel.node) && set(openOutlineAtom, {kind: "link", link: target})) return
         if (action.type === "browse" && action.keepOpen && action.location) {
             const app = get(appAtom)
             const raycastaction = raycastActionOf(action)

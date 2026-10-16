@@ -23,7 +23,7 @@ const mod = (ev: KeyboardEvent) => Platform.isMacOS ? ev.metaKey : ev.ctrlKey
 export const NoteBodyPane = () => {
     const {
         paneRefAtom, outlineBodiesAtom, bodyAttachmentsAtom, paneAtom, loadBodyAtom, setBodyTextAtom,
-        focusSearchInputAtom, scopeName, outlineAtom, outlineDirtyAtom, discardBodiesAtom,
+        focusSearchInputAtom, scopeName, outlineDirtyAtom, discardBodiesAtom,
     } = useMolecule(SearchViewMolecule)
     const {saveOutlineAtom} = useMolecule(EditorMolecule)
     const store = useStore()
@@ -33,9 +33,8 @@ export const NoteBodyPane = () => {
     const ref = useAtomValue(paneRefAtom)
     const bodies = useAtomValue(outlineBodiesAtom)
     const canSave = useAtomValue(outlineDirtyAtom)
-    const explore = useAtomValue(outlineAtom)?.mode === "explore"
     const discardBodies = useSetAtom(discardBodiesAtom)
-    /** Focus is inside the pane: explore mode shows Save and Discard only then. */
+    /** The pane shows Save and Discard only while focused. */
     const [focused, setFocused] = useState(false)
     const [pane, setPane] = useAtom(paneAtom)
     const load = useSetAtom(loadBodyAtom)
@@ -60,15 +59,15 @@ export const NoteBodyPane = () => {
 
     useEffect(() => { if (ref) void load(ref) }, [ref?.key, version])
 
-    // Explore mode sizes the pane for each newly shown buffer, by its text on disk: collapsed when the note has no
-    // content, else normal. Typing never resizes it, and the user's own size sticks until another buffer is shown.
+    // Size the pane for each newly shown buffer by its text on disk: collapsed when empty, else normal. Typing never
+    // resizes it, and the user's own size sticks until another buffer is shown.
     const sizedKey = useRef<string | null>(null)
     const loaded = ref !== null && bodies[ref.key] !== undefined
     useEffect(() => {
-        if (!explore || !ref || !loaded || sizedKey.current === ref.key) return
+        if (!ref || !loaded || sizedKey.current === ref.key) return
         sizedKey.current = ref.key
         setPane(p => ({...p, size: bodies[ref.key].original.trim() === "" ? "collapsed" : "normal"}))
-    }, [explore, ref?.key, loaded])
+    }, [ref?.key, loaded])
 
     keyRef.current = ev => {
         if (ev.isComposing || ref === null) return false
@@ -184,9 +183,9 @@ export const NoteBodyPane = () => {
             {dirty && <span className="ts-note-body-dirty" aria-label="Unsaved changes">●</span>}
             {others.length > 0 && <span className="ts-note-body-others" title={others.map(k => bodies[k].label).join(", ")}>+{others.length} unsaved</span>}
             <div className="ts-note-body-actions">
-                {explore && focused && <button className="ts-note-body-discard" disabled={allDirty.length === 0}
+                {focused && <button className="ts-note-body-discard" disabled={allDirty.length === 0}
                         title="Discard unsaved changes in the pane" onClick={() => discardBodies()}>Discard</button>}
-                {(!explore || focused) && <button className="ts-note-body-save" disabled={!canSave}
+                {focused && <button className="ts-note-body-save" disabled={!canSave}
                         title={Platform.isMacOS ? "Save (⌘↵)" : "Save (Ctrl+Enter)"} onClick={() => void save()}>Save</button>}
                 <button className="clickable-icon" aria-label="Open in Obsidian" onClick={() => void openInObsidian()}>
                     <ExternalLink size={14}/>

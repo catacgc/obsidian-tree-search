@@ -26,7 +26,7 @@ export type Shortcut = {
     group: string
     keys: KeySpec[]
     description: string
-    /** Only offered in views with editor mode / a Tree–Timeline toggle. */
+    /** Only offered in views with `allowEditing` / a Tree–Timeline toggle. */
     needs?: "editing" | "timeline"
 }
 
@@ -60,7 +60,7 @@ export const SHORTCUTS: Shortcut[] = [
     {id: "archive", group: "Selected row", keys: [alt("KeyX", "X")], description: "Archive / unarchive"},
     {id: "consolidate", group: "Selected row", keys: [alt("KeyP", "P")], description: "Consolidate notes (pages)"},
 
-    {id: "edit", group: "Editor", keys: [key(ENTER, "Enter", {macLabel: "↵", alt: true})], description: "Edit the row in place (nothing selected: the search in edit mode)", needs: "editing"},
+    {id: "edit", group: "Editor", keys: [key(ENTER, "Enter", {macLabel: "↵", alt: true})], description: "Rename the selected page or attachment; edit its heading or list line", needs: "editing"},
     {id: "addTo", group: "Editor", keys: [alt("KeyA", "A")], description: "Add to: a new line at the end of the view (plain search: after exploring the selected row; no row or search: in Today)", needs: "editing"},
 ]
 

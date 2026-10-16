@@ -21,7 +21,7 @@ export function PatchDot({row}: { row: TreeNode }) {
         onClick={ev => {
             ev.preventDefault()
             ev.stopPropagation()
-            openOutline({kind: "row", row, mode: "edit"})
+            openOutline({kind: "row", row})
         }}
     >
         {hover && <CirclePlus size={16}/>}

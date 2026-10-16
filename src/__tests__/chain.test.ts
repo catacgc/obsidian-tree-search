@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test"
 import { buildGraphFromScanner, getKey, type NotesGraph, type ParsedNode, type ResultNode, type VaultScanner } from "@mdtree/core"
-import { addToPlan, chainPrefill, chainResults, dirtyBodyKeys, patchPath, planReparent, type RowRef } from "../view/search/chain"
+import { addToPlan, chainPrefill, chainResults, dirtyBodyKeys, patchPath, planReparent, selectCandidateParent, type RowRef } from "../view/search/chain"
 import type { OwnPath } from "../view/editor/row-editing"
 import type { DailyNoteConfig } from "../indexing/indexed-tree"
 
@@ -198,14 +198,56 @@ describe("addToPlan", () => {
     const plan = (q: string) => addToPlan(q, ">", "archive")
 
     it("puts the line under a first-stage [[Note]] scope and pre-fills it from the last stage", () => {
-        expect(plan("[[new page]] > is:task home")).toEqual({ note: "new page", prefill: "- [ ] home " })
-        expect(plan("[[new page]] is:task home")).toEqual({ note: "new page", prefill: "- [ ] home " })
-        expect(plan("[[new page]]")).toEqual({ note: "new page", prefill: "- " })
+        expect(plan("[[new page]] > is:task home")).toEqual({
+            note: "new page", parentQuery: "[[new page]]", filter: "is:task home", prefill: "- [ ] home ",
+        })
+        expect(plan("[[new page]] is:task home")).toEqual({
+            note: "new page", parentQuery: "[[new page]]", filter: "is:task home", prefill: "- [ ] home ",
+        })
+        expect(plan("[[new page]]")).toEqual({
+            note: "new page", parentQuery: "[[new page]]", filter: "", prefill: "- ",
+        })
     })
 
-    it("has no note without a first-stage scope: the whole search becomes the line", () => {
-        expect(plan("is:task #home")).toEqual({ note: null, prefill: "- [ ] #home " })
-        expect(plan("apollo > [[Project X]]")).toEqual({ note: null, prefill: "- [[Project X]] " })
-        expect(plan("  ")).toEqual({ note: null, prefill: "" })
+    describe("selectCandidateParent", () => {
+        it("chooses the first ranked parent matching the preceding filter", () => {
+            const first = page("First")
+            const second = page("Second")
+            const results: ResultNode[] = [
+                {node: first, children: [], parents: []},
+                {node: second, children: [], parents: []},
+            ]
+
+            expect(selectCandidateParent(results, "is:page", ".", "is:task")).toBe(first)
+        })
+
+        it("requires a text parent when the final filter creates a subtext or subtask", () => {
+            const parent = page("Project")
+            const line = text("list", "Project.md", 2) as ParsedNode & {list: true}
+            line.list = true
+            const results: ResultNode[] = [
+                {node: parent, children: [{node: line, children: [], parents: []}], parents: []},
+            ]
+
+            expect(selectCandidateParent(results, "is:page", ".", "is:subtext")).toBeNull()
+            expect(selectCandidateParent(results, "is:list", ".", "is:subtext")).toBe(line)
+        })
+    })
+
+    it("uses the final search stage as the line and the preceding stages as its candidate parent query", () => {
+        expect(plan("cowo > gateway is:task")).toEqual({
+            note: null, parentQuery: "cowo", filter: "gateway is:task", prefill: "- [ ] gateway ",
+        })
+        expect(plan("work > is:task")).toEqual({
+            note: null, parentQuery: "work", filter: "is:task", prefill: "- [ ] ",
+        })
+        expect(plan("[[Page]] > list > is:subtext")).toEqual({
+            note: null, parentQuery: "[[Page]] > list", filter: "is:subtext", prefill: "- ",
+        })
+    })
+
+    it("uses Today when there is no preceding search stage", () => {
+        expect(plan("is:task #home")).toEqual({ note: null, parentQuery: null, filter: "is:task #home", prefill: "- [ ] #home " })
+        expect(plan("  ")).toEqual({ note: null, parentQuery: null, filter: "", prefill: "" })
     })
 })

@@ -38,9 +38,8 @@ function renderLinkName(display: string, href: string, terms: string[]): React.R
     return display
 }
 
-/** Click on a note link in a row: in views with editor mode the note's (or heading's) outline editor (openOutlineAtom);
- *  with Mod held, elsewhere, or when that doesn't apply, the note in Obsidian. Prevents the default first, so the row's
- *  own click (select, second-click open) skips it. */
+/** Click on a note link in a row: opens the note's (or heading's) outline editor; with Mod held, elsewhere, or when
+ *  that doesn't apply, the note in Obsidian. Prevents the default first, so the row's own click skips it. */
 function useOpenNoteLink() {
     const {appAtom} = useMolecule(GlobalAppMolecule)
     const app = useAtomValue(appAtom)
@@ -48,7 +47,7 @@ function useOpenNoteLink() {
     const openOutline = useSetAtom(openOutlineAtom)
     return async (ev: React.MouseEvent, target: string, obsidianName: string = target) => {
         ev.preventDefault()
-        if (!ev.metaKey && !ev.ctrlKey && openOutline({kind: "link", link: target, mode: "explore"})) return
+        if (!ev.metaKey && !ev.ctrlKey && openOutline({kind: "link", link: target})) return
         if (app) await openFileByName(app, obsidianName)
     }
 }

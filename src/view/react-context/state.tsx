@@ -224,7 +224,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     /** The open line editor: an edited row, or the New line row. */
     const lineEditAtom = atom<LineEdit | null>(null)
     /** The view lists its trailing Add to row: in the outline editor while its line editor isn't on the new line;
-     *  in the plain search of views with editor mode, outside a reparent. */
+     *  in the plain search of an editable view, outside a reparent. */
     const newLineShown = (get: Getter) => {
         if (!scp.allowEditing) return false
         return get(outlineAtom) !== null ? get(lineEditAtom)?.row !== null : get(chainAtom) === null && !get(editorOpenAtom)
@@ -239,8 +239,6 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     /** Set when unsaved edits refused a leave; repeating it then discards them. Reset by an edit and by a save. */
     const discardArmedAtom = atom(false)
     const paneAtom = atom<PaneState>({size: "normal", closedKey: null})
-    /** A page row whose content pane Enter opened (a note's own row has no line to edit). */
-    const paneRowAtom = atom<ParsedNode | null>(null)
     /** The next results select their first row (a filter crumb was just added). */
     const selectFirstOnceAtom = atom(false)
     /** Row index that is flashing (just saved); cleared by the view after the animation. */
@@ -324,16 +322,14 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             : {key: file.path, path: file.path, heading: null, label: file.basename}
     }
 
-    /** What the outline editor's content pane edits: the page, link line or heading row being edited, else the page
-     *  row Enter opened (paneRowAtom), else the root's note (Today: the daily note; a line: its file); null at the
+    /** The content pane's page, link line or heading row being edited, else the outline root's note; null at the
      *  search root or without such a file (a reference, today's note not created yet). */
     const paneRefAtom = atom<BodyRef | null>(get => {
         const o = get(outlineAtom)
         if (!o) return null
         get(GlobalAtoms.graphVersionAtom)   // a note a save created resolves after its reindex
         const edited = get(lineEditAtom)?.row?.node
-        const node = edited && edited.nodeType !== "text" ? edited : get(paneRowAtom)
-        if (node) return bodyRefOf(get, node)
+        if (edited && edited.nodeType !== "text") return bodyRefOf(get, edited)
         const root = rootOf(o)
         return root === null ? null : bodyRefOf(get, root.kind === "today" ? null : root.node)
     })
@@ -402,7 +398,6 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             void trashSessionAttachments(app, get(bodyAttachmentsAtom))
             set(bodyAttachmentsAtom, [])
             set(outlineBodiesAtom, {})
-            set(paneRowAtom, null)
         }
         return true
     })
@@ -440,7 +435,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     // without re-running the search.
     const lastResultsAtom = atom<{ results: ResultNode[]; archivedCount: number }>({ results: [], archivedCount: 0 })
 
-    /** Whether results select their first row on their own: everywhere but the Search pane and modal (editor mode),
+    /** Whether results select their first row on their own: everywhere but the Search pane and modal (`allowEditing`),
      *  and there too while the editor shows its link list or the query has an open `[[frag` (link completion). */
     const autoSelectsFirst = (get: Getter) => !scp.allowEditing || get(editorOpenAtom) || openLinkAt(get(actualQueryAtom)) !== null
 
@@ -863,8 +858,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             }
         } else {
             const sel = get(selectedNodeAtom)
-            set(outlineAtom, {path, filters: [], prevQuery: get(actualQueryAtom), returnTo: sel && !sel.archiveRow ? rowTargets(sel) : [], quickAdd, pins: [],
-                mode: target.kind === "today" ? "edit" : target.mode})
+            set(outlineAtom, {path, filters: [], prevQuery: get(actualQueryAtom), returnTo: sel && !sel.archiveRow ? rowTargets(sel) : [], quickAdd, pins: []})
             set(paneAtom, {size: "normal", closedKey: null})
         }
         set(closeActionPanelAtom)
@@ -961,15 +955,15 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         if (get(outlineAtom) === null) {
             const row = addToRow(get)
             if (row) {
-                if (!set(openOutlineAtom, {kind: "row", row, mode: "explore"})) return
+                if (!set(openOutlineAtom, {kind: "row", row})) return
                 prefill = ""
-            } else if (plan.note !== null && set(openOutlineAtom, {kind: "link", link: plan.note, mode: "explore"})) {
+            } else if (plan.note !== null && set(openOutlineAtom, {kind: "link", link: plan.note})) {
                 // Under the note the query scopes to.
             } else if (get(actualQueryAtom).trim() === "") {
                 set(openOutlineAtom, {kind: "today", quickAdd: true})
                 return
             } else {
-                if (!set(openOutlineAtom, {kind: "search", mode: "explore"})) return
+                if (!set(openOutlineAtom, {kind: "search"})) return
                 prefill = chainPrefill(get(searchTextAtom), get(separatorAtom), get(settingsAtom).archiveTag)
             }
         }
@@ -1044,12 +1038,6 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         setQuery(set, "")
     })
 
-    /** Enter on a page row with no line of its own (a note's own row): shows that note in the content pane. */
-    const openRowPaneAtom = atom(null, (get, set, node: ParsedNode) => {
-        set(paneRowAtom, node)
-        const pane = get(paneAtom)
-        set(paneAtom, {size: pane.size === "collapsed" ? "normal" : pane.size, closedKey: null})
-    })
 
     /** The selected row when Move under can take it (a folder note row stands for its folder); else null, with a
      *  Notice for a row that can't move. */
@@ -1181,10 +1169,10 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             flashLineAtom,
             chainAtom, refreshChainResultsAtom, cancelChainAtom, startReparentAtom,
             toggleCutAtom, startDrawerMoveAtom,
-            outlineAtom, lineEditAtom, outlineBodiesAtom, bodyAttachmentsAtom, discardArmedAtom, paneAtom, paneRowAtom,
+            outlineAtom, lineEditAtom, outlineBodiesAtom, bodyAttachmentsAtom, discardArmedAtom, paneAtom,
             paneRefAtom, loadBodyAtom, setBodyTextAtom, releaseOutlineAtom, outlineDirtyAtom, discardBodiesAtom, outlineFilterStagesAtom,
             refreshOutlineResultsAtom, openOutlineAtom, openNewLineAtom, exitOutlineAtom, popCrumbAtom, openCrumbAtom,
-            openFilterCrumbAtom, addFilterAtom, openRowPaneAtom, updateLineEditAtom,
+            openFilterCrumbAtom, addFilterAtom, updateLineEditAtom,
             editorOpenAtom, enterEditorAtom, leaveEditorAtom, searchModalTitleAtom,
     }
 })
