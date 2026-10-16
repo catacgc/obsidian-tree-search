@@ -12,14 +12,13 @@ export type ShortcutHandlers = Record<ShortcutId, (keyIndex: number) => unknown>
 export function useShortcutHandlers(): ShortcutHandlers {
     const {
         arrowDownAtom, arrowUpAtom, timelineActiveAtom, toggleViewModeAtom, recencyWindowAtom,
-        incExpandAtom, decExpandAtom, resetCollapseAtom, toggleActionPanelAtom, startReparentAtom, openOutlineAtom, toggleCutAtom,
+        incExpandAtom, decExpandAtom, resetCollapseAtom, toggleActionPanelAtom, startReparentAtom, toggleCutAtom,
         newLineShownAtom, openAddToAtom,
     } = useMolecule(SearchViewMolecule)
     const newLineShown = useAtomValue(newLineShownAtom)
     const openAddTo = useSetAtom(openAddToAtom)
     const startReparent = useSetAtom(startReparentAtom)
     const toggleCut = useSetAtom(toggleCutAtom)
-    const openOutline = useSetAtom(openOutlineAtom)
     const {isGraphLoadingAtom} = useMolecule(GlobalAppMolecule)
     const {editAtom} = useMolecule(EditorMolecule)
     const {copyActionAtom, handleDefaultActionAtom, highlightSelectedItemAtom, runRaycastActionAtom} = useMolecule(ActionsMolecule)
@@ -59,7 +58,6 @@ export function useShortcutHandlers(): ShortcutHandlers {
         archive: () => runRaycastAction(["archive", "unarchive", "archivePage", "unarchivePage"]),
         consolidate: () => runRaycastAction(["pullChildren"]),
         edit: () => edit(),
-        quickAdd: () => openOutline({kind: "today", quickAdd: true}),
         addTo: () => { if (newLineShown) openAddTo() },
     }
 }

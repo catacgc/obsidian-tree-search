@@ -14,7 +14,7 @@ Alt shortcuts match the physical key, so they work on macOS even though <kbd>⌥
 | --- | --- |
 | <kbd>↓</kbd> | Select next |
 | <kbd>↑</kbd> | Select previous |
-| <kbd>Enter</kbd> | Open (default action); in the Search modal and pane a note, heading or line with lines under it is explored in the outline editor, and on a line with nothing under it a web link opens, a task is completed, a `` `snippet` `` is copied, or else the line is edited in place |
+| <kbd>Enter</kbd> | Open (default action); in the Search modal and pane a note, heading or line with lines under it is explored in the outline editor, and on a line with nothing under it a web link opens, a task is completed, a `` `snippet` `` is copied, or else the line is edited in place; with nothing selected, the search itself is explored |
 | <kbd>Shift</kbd>+<kbd>Enter</kbd> | See in Obsidian |
 | <kbd>Ctrl</kbd>+<kbd>K</kbd> | Actions |
 | <kbd>→</kbd> (caret at the end of the search) | Expand / collapse the selected row, or show the rest of its list |
@@ -47,7 +47,6 @@ Alt shortcuts match the physical key, so they work on macOS even though <kbd>⌥
 | --- | --- |
 | <kbd>Alt</kbd>+<kbd>A</kbd> | Add to: a new line at the end of the view (in the plain search, after exploring the selected row) |
 | <kbd>Alt</kbd>+<kbd>Enter</kbd> | Edit the row in place (the outline opens on the current results in edit mode; nothing selected: just that); on an attachment, rename it |
-| <kbd>Alt</kbd>+<kbd>N</kbd> | Quick Add: a new line in today's outline |
 | <kbd>&gt;</kbd> | Open the outline editor on the selected row (nothing selected: today's note, with a line pre-filled from the search) |
 | <kbd>Enter</kbd> (outline editor) | The selected row's Enter as in the search (edit mode: edit it), keeping the typed filter; nothing selected: make the typed text a filter crumb, or act on the first row |
 | <kbd>&lt;</kbd> | Move the selected page or line: search for its new parent |

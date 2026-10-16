@@ -54,7 +54,7 @@ describe("panelItems", () => {
     it("lists only Edit search and the View section when no row is selected", () => {
         const items = panelItems(ctx({ rowActions: [], selectedPos: -1 }))
         expect(new Set(items.map(i => i.section))).toEqual(new Set(["edit", "view"]))
-        expect(items.map(i => i.title)).toEqual(["Edit search", "Quick Add", "Show timeline", "Expand one level", "Collapse one level", "Collapse all", "Rebuild index"])
+        expect(items.map(i => i.title)).toEqual(["Edit search", "Show timeline", "Expand one level", "Collapse one level", "Collapse all", "Rebuild index"])
     })
 
     it("maps row actions to their shortcut keys and drops Insert after when Append exists", () => {
@@ -71,7 +71,6 @@ describe("panelItems", () => {
         const c = ctx({ allowEditing: false, allowTimeline: false })
         expect(titles(c, "row")).toContain("Insert After")
         expect(titles(c, "edit")).toEqual([])
-        expect(titles(c, "view")).not.toContain("Quick Add")
     })
 
     it("replaces the folder-picker Move To with Move under… for movable rows, in every view", () => {
@@ -149,9 +148,9 @@ describe("panelItems", () => {
         expect(titles(ctx({ outline: true, rowActions: [], selectedPos: -1 }), "edit")).toEqual([])
     })
 
-    it("hides Append, Move under, Cut, the drawer, filters and Quick Add in the outline editor", () => {
+    it("hides Append, Move under, Cut, the drawer, and filters in the outline editor", () => {
         const items = panelItems(ctx({ outline: true, drawerCount: 2, query: "foo is:task", filters: DEFAULT_SEARCH_FILTERS }))
-        expect(items.map(i => i.id).filter(id => /^(append|moveUnder|cut|quickAdd|saveFilter)$|^(drawer|renameFilter|deleteFilter):/.test(id))).toEqual([])
+        expect(items.map(i => i.id).filter(id => /^(append|moveUnder|cut|saveFilter)$|^(drawer|renameFilter|deleteFilter):/.test(id))).toEqual([])
         expect(items.filter(i => i.section === "edit").map(i => i.title)).toEqual(["Edit", "Delete"])
     })
 
@@ -186,7 +185,7 @@ describe("panelItems", () => {
         const tl = rowsOf(row(text("loose", "Project X.md", 7), 0, { timeline: { breadcrumb: [page("Project X", "Project X.md")], pinned: false, ageDays: 0 } }))
         const c = ctx({ rows: tl, selectedPos: 0, timelineActive: true })
         expect(titles(c, "edit")).toEqual(["Edit", "Delete"])
-        expect(titles(c, "view")).toEqual(["Quick Add", "Show tree", "Rebuild index"])
+        expect(titles(c, "view")).toEqual(["Show tree", "Rebuild index"])
     })
 
     it("Filter: Save as Filter for a new query, Rename and Delete Filter for each active pill", () => {

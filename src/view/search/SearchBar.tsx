@@ -282,7 +282,7 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
         handleOutlineKey(ev)
     }
 
-    // The outline editor's crumbs read `search › Row › is:task`: a click on `search` leaves it, on a path crumb makes it
+    // The outline editor's crumbs read `<query> › Row › is:task` (`search` for an empty query): a click on the first leaves it, on a path crumb makes it
     // the root, on a filter crumb drops the crumbs after it. The reparent chain shows its one chip instead.
     const crumbs = outline && [
         ...outline.path.map((root, i) => ({key: `p${i}`, label: rootLabel(root), filter: false, open: () => openCrumb(i)})),
@@ -293,7 +293,7 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
         : crumbs
         ? <span className="ts-outline-crumbs">
             <span role="button" title="Back to the search" className="ts-outline-crumb"
-                  onMouseDown={ev => ev.preventDefault()} onClick={() => exitOutline()}>search</span>
+                  onMouseDown={ev => ev.preventDefault()} onClick={() => exitOutline()}>{outline.prevQuery.trim() || "search"}</span>
             {crumbs.flatMap(c => [
                 <span key={c.key + "›"} className="ts-outline-crumb-sep">›</span>,
                 <span key={c.key} role="button" title={c.label} className={"ts-outline-crumb" + (c.filter ? " is-filter" : "")}

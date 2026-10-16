@@ -8,11 +8,11 @@ Tree Search is not only for finding things. You can write into your vault straig
 
 ## Quick Add
 
-The **Tree Search: Quick Add** command (also **Open editor**, <kbd>Alt</kbd>+<kbd>N</kbd> in a search, or **Quick Add** in the action panel) opens the [outline editor](#the-outline-editor) on today's daily note, titled **Quick Add**, with a new line open: type it and press <kbd>Enter</kbd> to save.
+The **Tree Search: Quick Add** command (also **Open editor**) opens a Search modal and, from there, <kbd>Alt</kbd>+<kbd>A</kbd> with no search and no row selected does the same (see [Add to](#add-to)): it opens the [outline editor](#the-outline-editor) on today's daily note, titled **Quick Add**, with a new line open: type it and press <kbd>Enter</kbd> to save.
 
 ## Add to
 
-Press <kbd>Alt</kbd>+<kbd>A</kbd> (or pick **Add to …** in the action panel, or the last row of the results) to add a line. With a row selected, the Search modal or pane opens that row as an [outline](#the-outline-editor) and puts a new line at its end; with nothing selected, the line goes to the end of the results, written to today's daily note. Type the line and press <kbd>Enter</kbd> to save.
+Press <kbd>Alt</kbd>+<kbd>A</kbd> (or pick **Add to …** in the action panel, or the last row of the results) to add a line. With a row selected, the Search modal or pane opens that row as an [outline](#the-outline-editor) and puts a new line at its end; with nothing selected and a search typed, the line goes to the end of the results, written to today's daily note; with nothing selected and no search, today's daily note is opened as the outline (titled **Quick Add**) with the new line open. Type the line and press <kbd>Enter</kbd> to save.
 
 ![Adding a line under Project Apollo](assets/screenshots/add-to-line.webp)
 *Adding "Confirmed the launch date" under Project Apollo.*

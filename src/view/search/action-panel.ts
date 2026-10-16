@@ -20,7 +20,7 @@ export type PanelIcon =
     | "append" | "edit" | "moveUnder" | "cut" | "rename" | "delete"
     | "clearDrawer"
     | "saveFilter" | "deleteFilter"
-    | "quickAdd" | "tree" | "timeline" | "expand" | "collapse" | "refresh"
+    | "tree" | "timeline" | "expand" | "collapse" | "refresh"
 
 export type PanelRun =
     | {kind: "shortcut"; id: ShortcutId}
@@ -216,7 +216,6 @@ export function panelItems(ctx: PanelContext): PanelItem[] {
 
     const view = (id: ShortcutId, title: string, icon: PanelIcon) =>
         items.push({id, section: "view", title, icon, key: keyOf(id), run: {kind: "shortcut", id}})
-    if (ctx.allowEditing && !ctx.outline) view("quickAdd", "Quick Add", "quickAdd")
     if (ctx.allowTimeline) view("toggleView", ctx.timelineActive ? "Show tree" : "Show timeline", ctx.timelineActive ? "tree" : "timeline")
     if (!ctx.timelineActive) {
         view("expand", "Expand one level", "expand")

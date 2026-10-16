@@ -112,8 +112,12 @@ export const ActionsMolecule = molecule((mol, scope) => {
     })
 
     /** Enter: the selected row's default action; with nothing selected, the first row's (enterRowAtom). Views with
-     *  editor mode open the row in the outline editor instead (openRowAtom). */
+     *  editor mode open the row in the outline editor instead (openRowAtom), and with nothing selected in the plain
+     *  search they explore the search itself, not its first row. */
     const handleDefaultActionAtom = atom(null, async (get, set) => {
+        if (scp.allowEditing && get(chainAtom) === null && get(outlineAtom) === null && get(selectedNodeAtom) === null && !get(newLineSelectedAtom)) {
+            if (set(openOutlineAtom, {kind: "search", mode: "explore"})) return
+        }
         set(selectEnterRowAtom)
         if (await set(openRowAtom)) return
         const actions = get(selectedTreeNodeActionsAtom)

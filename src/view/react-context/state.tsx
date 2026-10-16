@@ -939,10 +939,15 @@ export const SearchViewMolecule = molecule((mol, scope) => {
     })
 
     /** Add to: the line editor on a new line at the end of the view. Outside the outline editor it first explores the
-     *  selected row, or with nothing selected opens the outline on the search (its new lines go to today's note). */
+     *  selected row; with nothing selected and no search it explores Today (Quick Add); with nothing selected and a
+     *  search it opens the outline on the search (its new lines go to today's note). */
     const openAddToAtom = atom(null, (get, set) => {
         if (get(outlineAtom) === null) {
             const row = addToRow(get)
+            if (!row && get(actualQueryAtom).trim() === "") {
+                set(openOutlineAtom, {kind: "today", quickAdd: true})
+                return
+            }
             if (!set(openOutlineAtom, row ? {kind: "row", row, mode: "explore"} : {kind: "search", mode: "explore"})) return
         }
         set(openNewLineAtom)

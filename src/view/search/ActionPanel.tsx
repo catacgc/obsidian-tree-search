@@ -7,7 +7,7 @@ import {Platform, Scope} from "obsidian";
 import {
     Archive, ArrowRightLeft, BookmarkPlus, BookmarkX, CalendarArrowUp, CalendarClock, CalendarX, ChevronLeft, ChevronsDownUp,
     ChevronsUpDown, CirclePlus, Combine, Copy, CornerDownRight, ExternalLink, FileSearch, ListTree, ListX, Pencil,
-    RefreshCw, Scissors, SquareCheck, SquarePen, TextCursorInput, Trash2,
+    RefreshCw, Scissors, SquareCheck, TextCursorInput, Trash2,
     type LucideIcon,
 } from "lucide-react";
 import {GlobalAtoms} from "../react-context/global";
@@ -27,14 +27,14 @@ import {cutKeyOf} from "./cut-drawer";
 const ICONS: Record<PanelIcon, LucideIcon> = {
     link: ExternalLink, reveal: FileSearch, copy: Copy, insert: CornerDownRight,
     archive: Archive, consolidate: Combine, done: SquareCheck, schedule: CalendarArrowUp, unschedule: CalendarX, append: CirclePlus, edit: Pencil,
-    moveUnder: ArrowRightLeft, cut: Scissors, quickAdd: SquarePen, tree: ListTree, timeline: CalendarClock, expand: ChevronsUpDown,
+    moveUnder: ArrowRightLeft, cut: Scissors, tree: ListTree, timeline: CalendarClock, expand: ChevronsUpDown,
     collapse: ChevronsDownUp, refresh: RefreshCw, rename: TextCursorInput, delete: Trash2,
     saveFilter: BookmarkPlus, deleteFilter: BookmarkX, clearDrawer: ListX,
 }
 
 /** Panel items that open an editor (the inline editor, the outline editor's line editor or search), which takes focus;
  *  after any other item focus returns to the search. */
-const OPENS_EDITOR: Partial<Record<ShortcutId, true>> = {edit: true, quickAdd: true}
+const OPENS_EDITOR: Partial<Record<ShortcutId, true>> = {edit: true}
 
 /** Keycaps for a key (hidden on mobile, which has no keyboard shortcuts). */
 export const Keycaps = ({k}: {k?: KeySpec}) => {

@@ -219,6 +219,23 @@ export function LineEditor({edit, rows}: {edit: LineEdit; rows: readonly TreeNod
         }
     }, [])
 
+    // A new line (Add to) sits at the end of the view: focus its field and scroll the view down to it, and keep doing
+    // so for a moment while the results lay out (they arrive after the editor opens, and the view's own scroll to the
+    // selected row would otherwise pull it back up).
+    useEffect(() => {
+        const root = rootRef.current
+        if (edit.row !== null || !root) return
+        const toEnd = () => {
+            fieldRef.current?.focus()
+            root.scrollIntoView({block: "end"})
+        }
+        const frame = requestAnimationFrame(toEnd)
+        const observer = new ResizeObserver(toEnd)
+        if (root.parentElement) observer.observe(root.parentElement)
+        const stop = window.setTimeout(() => observer.disconnect(), 1000)
+        return () => { cancelAnimationFrame(frame); observer.disconnect(); window.clearTimeout(stop) }
+    }, [edit.id])
+
     // Caret and selection requested by text operations.
     useLayoutEffect(() => {
         const p = pending.current
