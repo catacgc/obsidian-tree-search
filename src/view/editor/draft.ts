@@ -4,7 +4,6 @@
 import type {EditorState} from "./EditorMolecule"
 import {outlineTitle, type OutlineState} from "../search/outline"
 import type {DailyNoteConfig} from "../../indexing/indexed-tree"
-import {appendPrefill} from "./textarea-ops"
 
 export const DEFAULT_DAILY: DailyNoteConfig = {folder: "", format: "YYYY-MM-DD", template: ""}
 
@@ -23,12 +22,6 @@ export const emptySession = () => ({
     attachments: [], doneSteps: [], touchedPaths: [], saving: false,
 })
 
-/** A new Append draft for `sourcePath`: `- [[parentName]]\n    - ` (appendPrefill) with a parent, else `- `. Caret at the end. */
-export function newAppendState(sourcePath: string, parentName?: string): EditorState {
-    const outline = parentName ? appendPrefill(parentName) : "- "
-    return {...emptySession(), mode: "append", parentName, sourcePath, outline, caret: outline.length}
-}
-
 /** A Rename session for the file at `path` named `name`: the outline holds the name without its extension. */
 export function fileRenameState(path: string, name: string): EditorState {
     const dot = name.lastIndexOf(".")
@@ -44,19 +37,6 @@ export function saveFilterState(query: string): EditorState {
 /** A Rename Filter session for `filter`: the outline holds its name, caret at the end. */
 export function renameFilterState(filter: {name: string; query: string}): EditorState {
     return {...emptySession(), mode: "edit", editKind: "filter", sourcePath: "", originalLine: filter.name, filterQuery: filter.query, outline: filter.name, caret: filter.name.length}
-}
-
-/** data.json form of the Append draft: everything but the session id, mode and in-flight flag. */
-export type PersistedDraft = Omit<EditorState, "sessionId" | "mode" | "saving">
-
-export function draftToData(s: EditorState | null): PersistedDraft | undefined {
-    if (!s) return undefined
-    const {sessionId: _id, mode: _mode, saving: _saving, ...draft} = s
-    return draft
-}
-
-export function draftFromData(d: PersistedDraft | undefined): EditorState | null {
-    return d ? {...d, mode: "append", sessionId: nextSessionId(), saving: false} : null
 }
 
 /** The editor's title (rendered by InlineEditor in every host): `Add to <daily basename>`, `Rename <file name>` for

@@ -7,7 +7,6 @@ import {molecule} from "bunshi"
 import {Notice, type App, type TFile} from "obsidian"
 import {
     appendContent,
-    appendOutlineEmpty,
     editorHints,
     getKey,
     HEADER_RE,
@@ -36,7 +35,7 @@ import {SearchViewMolecule, SearchViewScope} from "../react-context/state"
 import {GlobalAtoms} from "../react-context/global"
 import {applyEditorRequestAtom, type EditorRequest} from "../react-context/quick-add-flow"
 import {renamedFileTarget, rowTargets, type RowTarget} from "../search/select-target"
-import {appendDraftAtom, searchFiltersAtom, separatorAtom, settingsAtom, type SearchFilter} from "../react-context/settings"
+import {searchFiltersAtom, separatorAtom, settingsAtom, type SearchFilter} from "../react-context/settings"
 import type {TreeNode} from "../search/SearchViewFlatten"
 import {filterNameHints, normalizeFilterName, renameFilter, renameFilterRefs, saveFilter} from "../search/search-filter"
 import {basenameOf, dailyConfigOf, emptySession, fileRenameState, renameFilterState, saveFilterState} from "./draft"
@@ -66,7 +65,7 @@ import {
 } from "../../editing/vault-edits"
 import {archiveLine, archivePage} from "../../obsidian-utils"
 import type {DailyNoteConfig} from "../../indexing/indexed-tree"
-import {appendTargetAt, classifyReparent, deleteTargetOf, treeParentPos, type OwnPath} from "./row-editing"
+import {classifyReparent, deleteTargetOf, treeParentPos, type OwnPath} from "./row-editing"
 import {
     chainPrefill,
     dirtyBodyKeys,
@@ -140,7 +139,7 @@ export function editorHintsFor(app: App, s: EditorState, filters: readonly Searc
     const dry = resolveAttachmentEmbeds({[OUTLINE_KEY]: s.outline, ...s.contents}, s.attachments, exists)
     return editorHints({
         mode: s.mode,
-        parentName: s.mode === "append" ? s.parentName ?? "" : basenameOf(s.sourcePath),
+        parentName: basenameOf(s.sourcePath),
         outline: s.outline,
         contents: s.contents,
         contentOrder: s.contentOrder,
@@ -148,7 +147,6 @@ export function editorHintsFor(app: App, s: EditorState, filters: readonly Searc
         attachmentError: dry.error,
         proseOutlineChanged: proseChangesOutline(s),
         proseConfirmed: s.proseConfirmed,
-        patches: s.mode === "append" ? planOutlinePatches(parseOutline(s.outline).lines, {dropPatchOnlyRoots: true}).patches : undefined,
     })
 }
 
@@ -198,9 +196,9 @@ async function readCutContents(app: App, refs: readonly RowRef[]): Promise<Map<s
     return contents
 }
 
-/** Save is disabled by any blocking hint, or by an Append outline that adds nothing. */
+/** Save is disabled by any blocking hint. */
 export function isSaveBlocked(app: App, s: EditorState, filters: readonly SearchFilter[]): boolean {
-    return editorHintsFor(app, s, filters).some(h => h.blocking) || (s.mode === "append" && appendOutlineEmpty(s.outline, s.parentName))
+    return editorHintsFor(app, s, filters).some(h => h.blocking)
 }
 
 /** The Append outline steps of a Save: note patches (`patch:<name>`), then the outline (today's daily note).
@@ -235,15 +233,10 @@ export const EditorMolecule = molecule((mol, scope) => {
     const scp = scope(SearchViewScope)
     const view = mol(SearchViewMolecule)
 
-    /** The editor's state: the Alt-Edit / prose session if any, else the Append draft. Writes go to the slot
-     *  matching the state's mode; null clears the shown one. */
+    /** The editor's state: the Rename / filter / prose session, if any. */
     const editorStateAtom = atom(
-        get => get(GlobalAtoms.editSessionAtom) ?? get(appendDraftAtom),
-        (get, set, next: EditorState | null) => {
-            if (next) set(next.mode === "append" ? appendDraftAtom : GlobalAtoms.editSessionAtom, next)
-            else if (get(GlobalAtoms.editSessionAtom)) set(GlobalAtoms.editSessionAtom, null)
-            else set(appendDraftAtom, null)
-        })
+        get => get(GlobalAtoms.editSessionAtom),
+        (_get, set, next: EditorState | null) => set(GlobalAtoms.editSessionAtom, next))
 
     const altHeldAtom = atom(false)
     /** Renderable position of the row being dragged. */
@@ -292,9 +285,6 @@ export const EditorMolecule = molecule((mol, scope) => {
     const closeEditorAtom = atom(null, (_get, set, exit: {kind: "saved"; targets: RowTarget[]} | {kind: "cancelled"}) => {
         set(view.leaveEditorAtom, {saved: exit.kind === "saved" ? exit.targets : null, focus: true})
     })
-
-    /** Appends under `parentName`: the draft if it already targets it, else a fresh draft prefilled under it. */
-    const openAppendAtom = atom(null, (_get, set, parentName: string) => set(showEditorAtom, {kind: "link", name: parentName}))
 
     /** Opens the outline editor's line editor on `row`: a line, a link line (`- [[Note]]`) or a heading. A note's own
      *  row (no line of its own) shows its content pane instead; an attachment opens its Rename. The line must still
@@ -369,13 +359,6 @@ export const EditorMolecule = molecule((mol, scope) => {
         const selected = get(view.selectedLineAtom)
         return {rows, pos: rows.findIndex(r => r.index === selected)}
     }
-
-    const openAppendForSelectedAtom = atom(null, async (get, set) => {
-        const {rows, pos} = selectedPos(get)
-        if (pos < 0) return
-        const target = appendTargetAt(rows, pos, get(view.timelineActiveAtom))
-        if (target) set(openAppendAtom, target.parentName)
-    })
 
     /** `>` in the search input: the outline editor on the selected row (inside it: descends into the row); with
      *  nothing selected, Today with the New line pre-filled from the search (chainPrefill). */
@@ -539,8 +522,6 @@ export const EditorMolecule = molecule((mol, scope) => {
 
         const cfg = dailyConfigOf(index)
         const exists = (name: string) => !!app.metadataCache.getFirstLinkpathDest(name, "")
-        let appended: {path: string; line: number} | null = null
-        const today = localIsoDate(new Date())
         try {
             if (!s.doneSteps.includes("attachments")) {
                 const plan = resolveAttachmentEmbeds({[OUTLINE_KEY]: s.outline, ...s.contents}, s.attachments, exists)
@@ -558,7 +539,6 @@ export const EditorMolecule = molecule((mol, scope) => {
                 commit({touchedPaths: [...s.touchedPaths, file.path], doneSteps: [...s.doneSteps, step]})
             }
 
-            if (s.mode === "append") appended = await runAppendSteps(app, cfg, today, () => s, commit)
             if (s.mode === "edit" && s.editKind === "file" && !s.doneSteps.includes("rename")) {
                 const path = await renameVaultFile(app, s.sourcePath, s.outline)
                 commit({touchedPaths: [...s.touchedPaths, path], doneSteps: [...s.doneSteps, "rename"]})
@@ -580,8 +560,7 @@ export const EditorMolecule = molecule((mol, scope) => {
         }
         // Saved: back to the search, which selects and flashes the written row.
         set(editorStateAtom, null)
-        const targets: RowTarget[] = s.mode === "append" ? appendTargets(s, appended)
-            : s.prose?.kind === "note" ? [{key: `[[${basenameOf(s.prose.path).toLowerCase()}]]`}]
+        const targets: RowTarget[] = s.prose?.kind === "note" ? [{key: `[[${basenameOf(s.prose.path).toLowerCase()}]]`}]
             : [renamedFileTarget(s.touchedPaths[s.touchedPaths.length - 1])]
         // A renamed path isn't reindexed by refreshPage (the index has no rename handler): rebuild it.
         if (s.editKind === "file") await index?.refresh()
@@ -889,8 +868,8 @@ export const EditorMolecule = molecule((mol, scope) => {
 
     return {
         editorStateAtom, altHeldAtom, dragIndexAtom, dropTargetAtom, ownPathAtom,
-        updateEditorAtom, cancelEditorAtom, closeEditorAtom, openAppendAtom, openRenameFileAtom, openSaveFilterAtom, openRenameFilterAtom,
-        openAppendForSelectedAtom, saveEditorAtom,
+        updateEditorAtom, cancelEditorAtom, closeEditorAtom, openRenameFileAtom, openSaveFilterAtom, openRenameFilterAtom,
+        saveEditorAtom,
         clearDragAtom, reparentAtom, editTaskAtom, deleteRowAtom,
         reparentChainAtom, archiveDrawerAtom, openProseAtom,
         editRowAtom, editAtom, patchAtom, saveOutlineAtom,

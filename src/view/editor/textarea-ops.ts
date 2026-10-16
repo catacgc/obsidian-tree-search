@@ -96,11 +96,6 @@ export function outlineIndent(text: string, caret: number, dir: 1 | -1): TextEdi
     }
 }
 
-/** Initial Append outline for parent `p`: the parent bullet and an empty child, caret goes at the end. */
-export function appendPrefill(parentName: string): string {
-    return `- [[${parentName}]]\n    - `
-}
-
 const BARE_BULLET_LINE_RE = /^[ \t]*(?:[-*+](?: \[[ xX]\])?)?[ \t]*$/
 
 /** Backspace (empty selection) in the Append outline, which must stay a list:

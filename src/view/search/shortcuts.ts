@@ -19,7 +19,7 @@ export type ShortcutId =
     | "next" | "previous" | "open" | "reveal" | "actions"
     | "toggleView" | "recency" | "expand" | "collapse" | "collapseAll" | "refresh"
     | "copy" | "insertAfter" | "moveUnder" | "cut" | "archive" | "consolidate"
-    | "append" | "edit" | "quickAdd"
+    | "edit" | "quickAdd" | "addTo"
 
 export type Shortcut = {
     id: ShortcutId
@@ -60,9 +60,9 @@ export const SHORTCUTS: Shortcut[] = [
     {id: "archive", group: "Selected row", keys: [alt("KeyX", "X")], description: "Archive / unarchive"},
     {id: "consolidate", group: "Selected row", keys: [alt("KeyP", "P")], description: "Consolidate notes (pages)"},
 
-    {id: "append", group: "Editor", keys: [alt("KeyA", "A")], description: "Append to the row's note", needs: "editing"},
     {id: "edit", group: "Editor", keys: [key(ENTER, "Enter", {macLabel: "↵", alt: true})], description: "Edit the row in place (nothing selected: the search in edit mode)", needs: "editing"},
     {id: "quickAdd", group: "Editor", keys: [alt("KeyN", "N")], description: "Quick Add: a new line in Today's outline", needs: "editing"},
+    {id: "addTo", group: "Editor", keys: [alt("KeyA", "A")], description: "Add to: a new line at the end of the view (plain search: after exploring the selected row)", needs: "editing"},
 ]
 
 /** Keys inside the inline editor's text fields (handled by InlineEditor; listed for help only). */

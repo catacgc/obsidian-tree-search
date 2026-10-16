@@ -2,7 +2,7 @@ import { describe, it, expect } from "bun:test"
 import type { ParsedNode, ParsedTextToken } from "@mdtree/core"
 import type { TreeNode } from "../view/search/SearchViewFlatten"
 import {
-    appendTargetAt, classifyReparent, deleteTargetOf, dragInfo, groupEnd, isEditableRow, isValidDropTarget,
+    classifyReparent, deleteTargetOf, dragInfo, groupEnd, isEditableRow, isValidDropTarget,
     treeParentPos, type OwnPath,
 } from "../view/editor/row-editing"
 import {
@@ -65,39 +65,6 @@ describe("groups", () => {
         expect(groupEnd(tree, 0)).toBe(4)
         expect(groupEnd(tree, 1)).toBe(3)
         expect(groupEnd(tree, 3)).toBe(3)
-    })
-})
-
-describe("appendTargetAt", () => {
-    it("Tree: the innermost page group owns the dot, placed at its group end", () => {
-        expect(appendTargetAt(tree, 3, false)).toMatchObject({ dotPos: 3, parentName: "Meeting", target: tree[1] })
-        expect(appendTargetAt(tree, 1, false)).toMatchObject({ dotPos: 3, parentName: "Meeting" })
-        expect(appendTargetAt(tree, 4, false)).toMatchObject({ dotPos: 4, parentName: "Project X", target: tree[0] })
-        expect(appendTargetAt(tree, 0, false)).toMatchObject({ dotPos: 4, parentName: "Project X" })
-    })
-
-    it("returns null for the Archive row and rows without a page", () => {
-        const rows = rowsOf(row(text("x", "a.md", 0), 0), row(page("Archive", ""), 0, { archiveRow: true }))
-        expect(appendTargetAt(rows, 0, false)).toBeNull()
-        expect(appendTargetAt(rows, 1, false)).toBeNull()
-        expect(appendTargetAt(rows, 1, true)).toBeNull()
-    })
-
-    it("Tree: a header promoted to a root appends to its own page", () => {
-        const rows = rowsOf(row(header("Project X", "Decisions", "Project X.md", 4), 0))
-        expect(appendTargetAt(rows, 0, false)).toMatchObject({ dotPos: 0, parentName: "Project X" })
-    })
-
-    it("Timeline: row page, then last breadcrumb page, then file basename", () => {
-        const breadcrumb = [page("Area", "Area.md", 0), header("Proj", "H", "Proj.md", 2), page("Proj", "Proj.md", 0), header("Proj", "H2", "Proj.md", 5)]
-        const rows = rowsOf(
-            row(page("Meeting", "Notes/2026-09-30.md", 2), 0, { timeline: { breadcrumb, pinned: false, ageDays: 0 } }),
-            row(text("t", "Notes/2026-09-30.md", 3), 0, { timeline: { breadcrumb, pinned: false, ageDays: 0 } }),
-            row(text("t2", "Notes/2026-09-30.md", 4), 0, { timeline: { breadcrumb: [header("Proj", "H", "Proj.md", 2)], pinned: false, ageDays: 0 } }),
-        )
-        expect(appendTargetAt(rows, 0, true)).toMatchObject({ dotPos: 0, parentName: "Meeting" })
-        expect(appendTargetAt(rows, 1, true)).toMatchObject({ dotPos: 1, parentName: "Proj" })
-        expect(appendTargetAt(rows, 2, true)).toMatchObject({ dotPos: 2, parentName: "2026-09-30" })
     })
 })
 

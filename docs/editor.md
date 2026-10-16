@@ -8,14 +8,14 @@ Tree Search is not only for finding things. You can write into your vault straig
 
 ## Quick Add
 
-Select a note row and press <kbd>Alt</kbd>+<kbd>A</kbd>. The Search modal or pane switches to the editor, with a `- [[Note]]` bullet ready for you. When you save, the bullets are written into today's daily note, so the new lines show up under that note in the tree, and you are back at your search with the new line selected. <kbd>Esc</kbd> also takes you back to the search.
-
 The **Tree Search: Quick Add** command (also **Open editor**, <kbd>Alt</kbd>+<kbd>N</kbd> in a search, or **Quick Add** in the action panel) opens the [outline editor](#the-outline-editor) on today's daily note, titled **Quick Add**, with a new line open: type it and press <kbd>Enter</kbd> to save.
 
-![Quick Add appending to Project Apollo](assets/screenshots/quick-add-append.webp)
-*Appending "Confirmed the launch date" under `[[Project Apollo]]`.*
+## Add to
 
-Your draft is kept when you close the editor, and even when you restart Obsidian. It stays until you **Save** (<kbd>Shift</kbd>+<kbd>Enter</kbd> or <kbd>Cmd/Ctrl</kbd>+<kbd>Enter</kbd>) or **Discard** it.
+Press <kbd>Alt</kbd>+<kbd>A</kbd> (or pick **Add to …** in the action panel, or the last row of the results) to add a line. With a row selected, the Search modal or pane opens that row as an [outline](#the-outline-editor) and puts a new line at its end; with nothing selected, the line goes to the end of the results, written to today's daily note. Type the line and press <kbd>Enter</kbd> to save.
+
+![Adding a line under Project Apollo](assets/screenshots/add-to-line.webp)
+*Adding "Confirmed the launch date" under Project Apollo.*
 
 ## Linking while you type
 

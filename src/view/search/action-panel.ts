@@ -6,7 +6,7 @@ import type {TreeNode} from "./SearchViewFlatten"
 import type {RaycastAction} from "../node-actions"
 import {openTargetOf, raycastActionOf} from "../node-actions"
 import {SHORTCUTS, type KeySpec, type ShortcutId} from "./shortcuts"
-import {appendTargetAt, deleteTargetOf, isLinkLineRow, type DeleteTarget, type OwnPath} from "../editor/row-editing"
+import {deleteTargetOf, isLinkLineRow, type DeleteTarget, type OwnPath} from "../editor/row-editing"
 import {isMovable, isPatchable} from "./chain"
 import type {TaskChange} from "../../editing/vault-edits"
 import type {SearchFilter} from "../react-context/settings"
@@ -182,8 +182,6 @@ export function panelItems(ctx: PanelContext): PanelItem[] {
         items.push({id: "edit", section: "edit", title: row ? "Edit" : "Edit search", icon: "edit", key: keyOf("edit"), run: {kind: "shortcut", id: "edit"}})
     }
     if (ctx.allowEditing && row) {
-        const target = ctx.outline ? null : appendTargetAt(ctx.rows, ctx.selectedPos, ctx.timelineActive)
-        if (target) items.push({id: "append", section: "edit", title: `Append to [[${target.parentName}]]`, icon: "append", key: keyOf("append"), run: {kind: "shortcut", id: "append"}})
         for (const t of renameTargets(row, ctx.ownPath, ctx.resolveLink, ctx.timelineActive)) {
             items.push({id: `rename:${t.path}`, section: "edit", title: t.title, icon: "rename", run: {kind: "renameFile", path: t.path}})
         }
@@ -192,7 +190,7 @@ export function panelItems(ctx: PanelContext): PanelItem[] {
         }
     }
     // Add to: a new line at the end of the view (in the plain search, after exploring the selected row).
-    if (ctx.addTo !== null) items.push({id: "addTo", section: "edit", title: ctx.addTo, icon: "append", run: {kind: "addTo"}})
+    if (ctx.addTo !== null) items.push({id: "addTo", section: "edit", title: ctx.addTo, icon: "append", key: keyOf("addTo"), run: {kind: "addTo"}})
 
     // The cut drawer's bulk actions; not in the outline editor.
     if (ctx.allowEditing && ctx.drawerCount > 0 && ctx.chainMode === null && !ctx.outline) {

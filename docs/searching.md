@@ -62,7 +62,7 @@ Select a row and press <kbd>Cmd/Ctrl</kbd>+<kbd>K</kbd>, or click **Actions**, t
 - see it in Obsidian;
 - copy it;
 - archive it;
-- append under its note, edit it in place, or move it under another note.
+- add a line under it, edit it in place, or move it under another note.
 
 Note rows add note actions, such as moving the note to a folder or consolidating notes into it. The panel also lists view actions (open the editor, switch to the Timeline, expand or collapse), and you can type to filter them.
 

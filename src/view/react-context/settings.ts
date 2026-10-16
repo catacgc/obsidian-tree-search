@@ -1,7 +1,5 @@
 import { atom } from "jotai";
 import type { GlobalStore } from "./global";
-import type { EditorState } from "../editor/EditorMolecule";
-import { draftFromData, draftToData, type PersistedDraft } from "../editor/draft";
 
 export interface TreeSearchSettings {
 	searchSeparator: string;
@@ -27,9 +25,6 @@ export type SearchViewModes = Record<string, SearchViewMode>
 // place, so replacing settingsAtom on toggle would orphan its edits.
 export const searchViewModesAtom = atom<SearchViewModes>({})
 
-// The editor's Append draft; kept until saved or discarded, persisted in data.json.
-export const appendDraftAtom = atom<EditorState | null>(null)
-
 /** A filter pill: `query` is toggled into/out of the search query (search-filter.ts). Names are unique (case-insensitive). */
 export type SearchFilter = {name: string; query: string}
 export const DEFAULT_SEARCH_FILTERS: SearchFilter[] = [{name: "Tasks", query: "is:task"}]
@@ -37,13 +32,12 @@ export const DEFAULT_SEARCH_FILTERS: SearchFilter[] = [{name: "Tasks", query: "i
 export const searchFiltersAtom = atom<SearchFilter[]>(DEFAULT_SEARCH_FILTERS)
 
 // Shape of data.json.
-export type PluginData = TreeSearchSettings & { searchViewModes?: SearchViewModes; quickAddDraft?: PersistedDraft; searchFilters?: SearchFilter[] }
+export type PluginData = TreeSearchSettings & { searchViewModes?: SearchViewModes; searchFilters?: SearchFilter[] }
 
 export function updateSettings(store: GlobalStore, data: PluginData | null) {
-	const { searchViewModes, quickAddDraft, searchFilters, ...settings } = data ?? {}
+	const { searchViewModes, searchFilters, ...settings } = data ?? {}
 	store.set(settingsAtom, {...getSettings(store), ...settings})
 	store.set(searchViewModesAtom, searchViewModes ?? {})
-	store.set(appendDraftAtom, draftFromData(quickAddDraft))
 	// Absent: never saved, so the default pills; [] means the user deleted them all. Names are rewritten to the
 	// `:Name` reference charset (letters, digits, `_`, `-`; any other run becomes `-`), so a name saved with
 	// spaces (`Recent tasks`) loads as `Recent-tasks` and can still be typed as a reference.
@@ -51,7 +45,7 @@ export function updateSettings(store: GlobalStore, data: PluginData | null) {
 }
 
 export function getPluginData(store: GlobalStore): PluginData {
-	return {...getSettings(store), searchViewModes: store.get(searchViewModesAtom), quickAddDraft: draftToData(store.get(appendDraftAtom)), searchFilters: store.get(searchFiltersAtom)}
+	return {...getSettings(store), searchViewModes: store.get(searchViewModesAtom), searchFilters: store.get(searchFiltersAtom)}
 }
 
 export function getSettings(store: GlobalStore) {

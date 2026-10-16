@@ -9,7 +9,7 @@ import {ContextCodeBlock} from "./view/markdown-code-block/ContextCodeBlock";
 import {SearchModal} from "./view/search-modal/SearchModal";
 import {archiveLine, archivePage, convertLegacyArchiveMarkers, highlightLine, insertLine, moveToFolder, openFileByName, revealFolder, showFolder, unarchiveLine, unarchivePage} from './obsidian-utils';
 import {createStore} from 'jotai';
-import {appendDraftAtom, getPluginData, getSettings, searchFiltersAtom, searchViewModesAtom, updateSettings} from './view/react-context/settings';
+import {getPluginData, getSettings, searchFiltersAtom, searchViewModesAtom, updateSettings} from './view/react-context/settings';
 import './view/styles.css';
 import {GlobalAtoms} from "./view/react-context/global";
 import {resetDefaultInjector} from "bunshi";
@@ -25,14 +25,10 @@ export default class TreeSearchPlugin extends Plugin {
     private server: RaycastServer | null = null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private refreshInterval: any = null;
-    // The Append draft changes on every keystroke; persist it once typing pauses.
-    private saveDraft = debounce(() => { void this.saveSettings() }, 500, true)
 
     async onunload() {
         console.log("Cleaning up after")
         this.server?.stop()
-        // Flush a pending draft write while the store still holds the draft.
-        this.saveDraft.run()
         this.globalStore = createStore()
         this.changedRef && this.app.metadataCache.offref(this.changedRef)
         this.finishedRef && this.app.metadataCache.offref(this.finishedRef)
@@ -169,7 +165,6 @@ export default class TreeSearchPlugin extends Plugin {
         // Tree/Timeline toggles and filter pills persist each change.
         this.register(this.globalStore.sub(searchViewModesAtom, () => { void this.saveSettings() }))
         this.register(this.globalStore.sub(searchFiltersAtom, () => { void this.saveSettings() }))
-        this.register(this.globalStore.sub(appendDraftAtom, () => this.saveDraft()))
 
         this.server = new RaycastServer(this.globalStore);
         this.server.start();

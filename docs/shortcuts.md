@@ -45,7 +45,7 @@ Alt shortcuts match the physical key, so they work on macOS even though <kbd>⌥
 
 | Keys | Action |
 | --- | --- |
-| <kbd>Alt</kbd>+<kbd>A</kbd> | Append to the row's note |
+| <kbd>Alt</kbd>+<kbd>A</kbd> | Add to: a new line at the end of the view (in the plain search, after exploring the selected row) |
 | <kbd>Alt</kbd>+<kbd>Enter</kbd> | Edit the row in place (the outline opens on the current results in edit mode; nothing selected: just that); on an attachment, rename it |
 | <kbd>Alt</kbd>+<kbd>N</kbd> | Quick Add: a new line in today's outline |
 | <kbd>&gt;</kbd> | Open the outline editor on the selected row (nothing selected: today's note, with a line pre-filled from the search) |

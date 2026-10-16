@@ -8,7 +8,7 @@ No special annotation, just record relations whenever you want them.
 
 | Search | Timeline | Quick Add |
 |---|---|---|
-| ![The Search modal for apollo](https://catacgc.github.io/obsidian-tree-search/assets/screenshots/search-modal.webp) | ![The timeline for is:task](https://catacgc.github.io/obsidian-tree-search/assets/screenshots/timeline.webp) | ![Quick Add appending to Project Apollo](https://catacgc.github.io/obsidian-tree-search/assets/screenshots/quick-add-append.webp) |
-| Results as a tree, each match under the notes and lines it lives in. | Every open task as a flat list: overdue first, then what's scheduled ahead. | Append under any result without leaving the search. |
+| ![The Search modal for apollo](https://catacgc.github.io/obsidian-tree-search/assets/screenshots/search-modal.webp) | ![The timeline for is:task](https://catacgc.github.io/obsidian-tree-search/assets/screenshots/timeline.webp) | ![Adding a line under Project Apollo](https://catacgc.github.io/obsidian-tree-search/assets/screenshots/add-to-line.webp) |
+| Results as a tree, each match under the notes and lines it lives in. | Every open task as a flat list: overdue first, then what's scheduled ahead. | Add lines under any result without leaving the search. |
 
 **Documentation:** https://catacgc.github.io/obsidian-tree-search/ (sources in [docs/](docs/index.md)).

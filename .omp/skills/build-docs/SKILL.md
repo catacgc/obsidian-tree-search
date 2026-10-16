@@ -63,8 +63,9 @@ Edit the files in `docs/example-vault/`, then rerun. Parser rules that matter he
 
 - Add a `[name, async () => target]` entry to the `shots` list in `scripts/docs/capture.ts`. Return `lastModal()`, an element handle, or `"window"`.
 - If the shot leaves state behind, undo it in `cleanup()`. Examples are an open pane, a leaf, a recency chip, or the timeline mode, which is persisted in `data.json`.
-- Chain shots (`patch-chain` for `>`, `move-under` for `<`): type the operator with `page.keyboard.type(">")` while the search input has focus, then set the query with `setQuery`. **Never press Enter on a final chain**: Enter writes it to the vault (Patch) or moves the row (Move under). Enter is only safe while drilling into a result, which adds a chip; wait for it (e.g. on the modal title) before typing the entry. `escapeAll()` cancels the chain and closes the modal without writing.
-- Use the names the UI shows. Moving a row is **Move under** everywhere: `<`, <kbd>Alt</kbd>+<kbd>M</kbd>, the action panel's **Move under…** and the footer's **Move under**. `>` is **Patch** (the modal title reads `Patch <row>`); the command that opens it chip-less is **Quick Add**. Check `src/view/search/action-panel.ts` and `ActionFooter.tsx` before naming an action in a caption or page.
+- Chain shot (`move-under` for `<`): type the operator with `page.keyboard.type("<")` while the search input has focus, then set the query with `setQuery`. **Never press Enter on the final chain**: Enter moves the row. `escapeAll()` cancels the chain and closes the modal without writing.
+- Outline editor shots (`add-to-line`, then `insert-link-autocomplete`, which keeps typing into the same line): select a row, press <kbd>Alt</kbd>+<kbd>A</kbd> and type into `.ts-line-editor .cm-content`. Never press Enter: it saves the line to the vault. `escapeAll()` discards it.
+- Use the names the UI shows. Moving a row is **Move under** everywhere: `<`, <kbd>Alt</kbd>+<kbd>M</kbd>, the action panel's **Move under…** and the footer's **Move under**. <kbd>Alt</kbd>+<kbd>A</kbd> is **Add to**, and `>` opens the outline editor on the selected row; the command that opens it on Today is **Quick Add**. Check `src/view/search/action-panel.ts` and `ActionFooter.tsx` before naming an action in a caption or page.
 - Reference the shot from a page as `![alt](assets/screenshots/<name>.webp)`, with `*caption*` on the next line. Put `narrow` in the alt text for sidebar panes.
 - Take selectors from AGENTS.md's "Surface reference".
 
@@ -87,7 +88,7 @@ gh run list --repo catacgc/obsidian-tree-search --workflow pages-build-deploymen
 - If `build_type` is `workflow`, nothing deploys: the repo has no Pages workflow. Switch it back with `gh api -X PUT repos/catacgc/obsidian-tree-search/pages -f build_type=legacy -f 'source[branch]=main' -f 'source[path]=/docs'`, which changes a repo setting, so ask the user first.
 - `builds/latest` can read `built` before the deploy run finishes; wait for the run before checking the site.
 - Then open https://catacgc.github.io/obsidian-tree-search/ and check that the images load on every nav page (`curl` each page and each `assets/screenshots/*.webp` it references for a 200).
-- `README.md` shows `workspace-overview`, `search-modal`, `timeline` and `quick-add-append` through absolute `https://catacgc.github.io/obsidian-tree-search/assets/screenshots/…` URLs, so the README (and Obsidian's plugin browser) only picks up regenerated shots once the site is republished. Renaming or removing one of these shots means updating the README too.
+- `README.md` shows `workspace-overview`, `search-modal`, `timeline` and `add-to-line` through absolute `https://catacgc.github.io/obsidian-tree-search/assets/screenshots/…` URLs, so the README (and Obsidian's plugin browser) only picks up regenerated shots once the site is republished. Renaming or removing one of these shots means updating the README too.
 
 ## Never
 

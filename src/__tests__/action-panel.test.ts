@@ -117,11 +117,11 @@ describe("panelItems", () => {
         expect(titles(task("call [scheduled:: 2026-10-14]", true), "task")).toEqual([])
     })
 
-    it("Edit: Edit on Alt+Enter, Append to the target page, Rename and Delete where they apply", () => {
-        expect(titles(ctx(), "edit")).toEqual(["Edit", "Append to [[Project X]]", "Delete"])
+    it("Edit: Edit on Alt+Enter, Rename and Delete where they apply", () => {
+        expect(titles(ctx(), "edit")).toEqual(["Edit", "Delete"])
         expect(panelItems(ctx()).find(i => i.id === "edit")?.key).toMatchObject({ label: "Enter", alt: true })
         // A root page row: its own note renamed/trashed.
-        expect(titles(ctx({ selectedPos: 0 }), "edit")).toEqual(["Edit", "Append to [[Project X]]", "Rename [[Project X]]", "Delete"])
+        expect(titles(ctx({ selectedPos: 0 }), "edit")).toEqual(["Edit", "Rename [[Project X]]", "Delete"])
     })
 
     it("a link-line page row renames its note", () => {
@@ -178,15 +178,14 @@ describe("panelItems", () => {
         expect(titles(ctx({ rows, selectedPos: 3 }), "edit")).not.toContain("Edit")
     })
 
-    it("Append shows its own key", () => {
-        const append = (c: PanelContext) => panelItems(c).find(i => i.id === "append")
-        expect(append(ctx())?.key?.label).toBe("A")
+    it("Add to shows its own key", () => {
+        expect(panelItems(ctx({addTo: "Add to loose"})).find(i => i.id === "addTo")?.key).toMatchObject({label: "A", alt: true})
     })
 
     it("Timeline: no Tree-only view items", () => {
         const tl = rowsOf(row(text("loose", "Project X.md", 7), 0, { timeline: { breadcrumb: [page("Project X", "Project X.md")], pinned: false, ageDays: 0 } }))
         const c = ctx({ rows: tl, selectedPos: 0, timelineActive: true })
-        expect(titles(c, "edit")).toEqual(["Edit", "Append to [[Project X]]", "Delete"])
+        expect(titles(c, "edit")).toEqual(["Edit", "Delete"])
         expect(titles(c, "view")).toEqual(["Quick Add", "Show tree", "Rebuild index"])
     })
 

@@ -16,7 +16,7 @@ export const ActionsMolecule = molecule((mol, scope) => {
     const scp = scope(SearchViewScope)
     const {selectedNodeAtom, enterRowAtom, selectEnterRowAtom, hoveredLineAtom, selectedLineAtom, outlineAtom, openOutlineAtom, newLineSelectedAtom, openAddToAtom, chainAtom, outlineDirtyAtom} = mol(SearchViewMolecule)
     const { appAtom } = mol(GlobalAppMolecule)
-    const { openAppendForSelectedAtom, editAtom, editTaskAtom } = mol(EditorMolecule)
+    const { editAtom, editTaskAtom } = mol(EditorMolecule)
 
     /**
      * Close the currently opened modal
@@ -151,12 +151,6 @@ export const ActionsMolecule = molecule((mol, scope) => {
         const target = openTargetOf(action)
         const sel = get(selectedNodeAtom)
         if (!inObsidian && target !== null && sel && !sel.archiveRow && isPatchable(sel.node) && set(openOutlineAtom, {kind: "link", link: target, mode: "explore"})) return
-        // Views with editor mode open the inline Append editor for the selected row (like Alt+A)
-        // instead of inserting a line in an Obsidian note; the modal stays open to host it.
-        if (scp.allowEditing && raycastActionOf(action) === "insert") {
-            await set(openAppendForSelectedAtom)
-            return
-        }
         if (action.type === "browse" && action.keepOpen && action.location) {
             const app = get(appAtom)
             const raycastaction = raycastActionOf(action)

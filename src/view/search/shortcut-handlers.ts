@@ -13,12 +13,15 @@ export function useShortcutHandlers(): ShortcutHandlers {
     const {
         arrowDownAtom, arrowUpAtom, timelineActiveAtom, toggleViewModeAtom, recencyWindowAtom,
         incExpandAtom, decExpandAtom, resetCollapseAtom, toggleActionPanelAtom, startReparentAtom, openOutlineAtom, toggleCutAtom,
+        newLineShownAtom, openAddToAtom,
     } = useMolecule(SearchViewMolecule)
+    const newLineShown = useAtomValue(newLineShownAtom)
+    const openAddTo = useSetAtom(openAddToAtom)
     const startReparent = useSetAtom(startReparentAtom)
     const toggleCut = useSetAtom(toggleCutAtom)
     const openOutline = useSetAtom(openOutlineAtom)
     const {isGraphLoadingAtom} = useMolecule(GlobalAppMolecule)
-    const {editAtom, openAppendForSelectedAtom} = useMolecule(EditorMolecule)
+    const {editAtom} = useMolecule(EditorMolecule)
     const {copyActionAtom, handleDefaultActionAtom, highlightSelectedItemAtom, runRaycastActionAtom} = useMolecule(ActionsMolecule)
 
     const timelineActive = useAtomValue(timelineActiveAtom)
@@ -36,7 +39,6 @@ export function useShortcutHandlers(): ShortcutHandlers {
     const copyAction = useSetAtom(copyActionAtom)
     const runRaycastAction = useSetAtom(runRaycastActionAtom)
     const edit = useSetAtom(editAtom)
-    const openAppendForSelected = useSetAtom(openAppendForSelectedAtom)
 
     return {
         next: () => arrowDown(),
@@ -56,8 +58,8 @@ export function useShortcutHandlers(): ShortcutHandlers {
         cut: () => toggleCut(),
         archive: () => runRaycastAction(["archive", "unarchive", "archivePage", "unarchivePage"]),
         consolidate: () => runRaycastAction(["pullChildren"]),
-        append: () => openAppendForSelected(),
         edit: () => edit(),
         quickAdd: () => openOutline({kind: "today", quickAdd: true}),
+        addTo: () => { if (newLineShown) openAddTo() },
     }
 }

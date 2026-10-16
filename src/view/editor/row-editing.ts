@@ -9,8 +9,6 @@ import type {DragReparentPlan} from "../../editing/vault-edits"
  *  other nodes. */
 export type OwnPath = (node: ParsedNode) => string | null
 
-export type AppendTarget = { dotPos: number; parentName: string; target: TreeNode }
-
 export const INLINE_LINK_REFUSAL = "Linked inline — edit the text to change its parent"
 
 /** Rows whose line can be Alt-edited: text and headers, pages written as a link line in another file, and attachments
@@ -78,34 +76,6 @@ export function groupEnd(rows: TreeNode[], pos: number): number {
     let end = pos
     while (end + 1 < rows.length && rows[end + 1].indent > indent) end++
     return end
-}
-
-export function appendTargetAt(rows: TreeNode[], pos: number, timeline: boolean): AppendTarget | null {
-    const row = rows[pos]
-    if (!row || row.archiveRow) return null
-    if (timeline) {
-        const node = row.node
-        let parentName: string | undefined
-        if (node.nodeType === "page") parentName = node.page
-        else {
-            const crumb = [...(row.timeline?.breadcrumb ?? [])].reverse().find(n => n.nodeType === "page")
-            if (crumb?.nodeType === "page") parentName = crumb.page
-            else if (node.location.path) parentName = node.location.path.split("/").pop()!.replace(/\.md$/, "")
-        }
-        return parentName ? {dotPos: pos, parentName, target: row} : null
-    }
-    let minIndent = Infinity
-    for (let i = pos; i >= 0; i--) {
-        const r = rows[i]
-        if (r.indent >= minIndent) continue
-        minIndent = r.indent
-        if (r.node.nodeType === "page" && !r.archiveRow) {
-            return {dotPos: groupEnd(rows, i), parentName: r.node.page, target: r}
-        }
-    }
-    // A header promoted to a root (its page didn't match) appends to its own page.
-    if (row.node.nodeType === "header") return {dotPos: groupEnd(rows, pos), parentName: row.node.page, target: row}
-    return null
 }
 
 export function dragInfo(rows: TreeNode[], pos: number): { draggable: boolean; refusal?: string } {

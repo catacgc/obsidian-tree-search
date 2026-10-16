@@ -1,7 +1,7 @@
-// The inline editor shared by Append, prose, Rename and filter names (EDITOR.md §3): title, outline section, optional
-// content section, live preview and footer hints. Shown at the top of Quick Add and in place by the Search modal
-// and pane, keyed by session, with its link results (LinkResults: `[[` matches, else the parent's tree, the picked
-// line's note or the daily outline) filling the view below it.
+// The inline editor shared by prose, Rename and filter names (EDITOR.md §3): title, outline section, optional
+// content section, live preview and footer hints. Shown in place by the Search modal and pane, keyed by
+// session, with its link results (LinkResults: `[[` matches, else the caret line's note tree or the daily outline)
+// filling the view below it.
 import React, {useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
 import {useAtomValue, useSetAtom} from "jotai";
 import {useMolecule} from "bunshi/react";
@@ -26,17 +26,11 @@ import {autoConvertHtml} from "./obsidian-editor";
 import {linkPasteEdit} from "./clipboard";
 import {
     acceptLink,
-    ensureBullet,
     firstLinkOnLine,
     insertAtCaret,
-    insertAttachmentBullets,
     linkAt,
-    outlineBackspace,
     caretNote,
-    outlineEnter,
     outlineIndent,
-    outlineRepairs,
-    pasteOutline,
     toggleTask,
     wrapLink,
     wrapSelection,
@@ -127,12 +121,10 @@ export function InlineEditor({state}: { state: EditorState }) {
     const [focused, setFocused] = useState<Section>("outline")
     const [contentCaret, setContentCaret] = useState(0)
 
-    const append = state.mode === "append"
     /** Prose mode: the whole note as Markdown; keys, paste and links behave as in a content section. */
     const prose = state.mode === "prose"
     /** Rename of an attachment, or a new filter's name: the outline holds a name; no pastes of files, links or preview. */
     const renaming = state.editKind === "file" || state.editKind === "filter"
-    const parentName = state.parentName ?? ""
     const active = state.activeContent
     const contentText = active !== null ? state.contents[active] ?? "" : ""
 
@@ -188,14 +180,13 @@ export function InlineEditor({state}: { state: EditorState }) {
         }
         if (rootRef.current?.contains(document.activeElement)) pushScope()
 
-        // The Append draft outlives Quick Add (until saved or discarded); the other sessions do not.
-        const {sessionId, mode} = state
+        const {sessionId} = state
         return () => {
             popScope()
             scopeRef.current = null
             alive.current = false
             // StrictMode re-mounts synchronously; only a real unmount leaves `alive` false.
-            if (mode !== "append") queueMicrotask(() => { if (!alive.current) void cancel(sessionId) })
+            queueMicrotask(() => { if (!alive.current) void cancel(sessionId) })
         }
     }, [])
 
@@ -226,7 +217,7 @@ export function InlineEditor({state}: { state: EditorState }) {
     useEffect(() => setQuery({query: suggest.open ? `[[${suggest.query}` : quickAddDefaultQuery(caretParent)}),
         [suggest.open, suggest.query, caretParent])
 
-    /** Escape / ✕ / backdrop: close the editor (Quick Add, or back to the search); the Append draft stays for next time. */
+    /** Escape / ✕ / backdrop: close the editor, back to the search. */
     const close = () => closeEditor({kind: "cancelled"})
     /** Discard (Cancel for Rename and filters): drop the session and its pasted attachments, then close. */
     const discard = () => {
@@ -320,37 +311,14 @@ export function InlineEditor({state}: { state: EditorState }) {
         if (!h) return
         const sug = suggestFor(section)
         const {text, start} = fieldState(h)
-        let edit = sug.open ? acceptLink(text, sug.start, start, link) : insertAtCaret(text, start, link)
-        // A pick keeps the Append outline's caret line a list item.
-        if (section === "outline" && append) edit = ensureBullet(edit.text, edit.caret)
-        applyEdit(section, edit)
-    }
-
-    /** Plain Enter in the outline: a new bullet (Append) or save (Edit). */
-    function outlinePlainEnter() {
-        const h = outlineRef.current
-        if (!h) return
-        if (append) applyEdit("outline", outlineEnter(h.text(), h.selection().start))
-        else void save()
-    }
-
-    /** Backspace in the Append outline (outlineBackspace, empty selection only); false leaves it to the field. */
-    function outlinePlainBackspace(): boolean {
-        const h = outlineRef.current
-        if (!h || !append) return false
-        const {text, start, end} = fieldState(h)
-        if (start !== end) return false
-        const edit = outlineBackspace(text, start)
-        if (!edit) return false
-        applyEdit("outline", edit)
-        return true
+        applyEdit(section, sug.open ? acceptLink(text, sug.start, start, link) : insertAtCaret(text, start, link))
     }
 
     // ── Mobile toolbar ────────────────────────────────────────────────────────
     /** Section the toolbar acts on: the content field when open and last focused, else the outline. */
     const toolSection: Section = focused === "content" && active !== null ? "content" : "outline"
-    /** Task, Indent and Outdent act on list lines: the Append outline and the content section. */
-    const canEditPrefix = toolSection === "content" || append
+    /** Task, Indent and Outdent act on list lines: the content section only. */
+    const canEditPrefix = toolSection === "content"
 
     /** Toolbar Insert link: wraps the selection in `[[…]]` (empty: `[[]]`), caret before `]]`, so the link results open on the text inside. */
     function insertLinkBrackets() {
@@ -452,22 +420,15 @@ export function InlineEditor({state}: { state: EditorState }) {
             void save()
             return true
         }
-        if (section === "outline" && !prose && ev.key === "Backspace" && !ev.altKey && !mod && !ev.ctrlKey && !ev.metaKey && outlinePlainBackspace()) return true
         if (section === "outline" && !prose && ev.key === "Enter" && ev.altKey) {
             if (renaming) return true
             const name = linkAt(text, start) ?? firstLinkOnLine(text, start)
             if (name) openContent(name)
-            // No link on the line: the whole-note prose editor (the parent's note, or today's daily note).
-            else if (append) void openProse({kind: "note", noteName: state.parentName ? state.parentName.split("#")[0] : null})
             return true
         }
         // In the content section Enter is Obsidian's (it continues lists).
         if (ev.key === "Enter" && section === "outline" && !prose) {
-            outlinePlainEnter()
-            return true
-        }
-        if (ev.key === "Tab" && section === "outline" && append) {
-            applyEdit(section, outlineIndent(text, start, ev.shiftKey ? -1 : 1))
+            void save()
             return true
         }
         if (mod && !ev.altKey && !ev.shiftKey) {
@@ -504,7 +465,7 @@ export function InlineEditor({state}: { state: EditorState }) {
             base = active
             sourcePath = contentSourcePath(active)
         } else {
-            base = caretNote(text, caret) ?? (append ? parentName : basenameOf(state.sourcePath))
+            base = caretNote(text, caret) ?? basenameOf(state.sourcePath)
             sourcePath = state.sourcePath
         }
 
@@ -536,8 +497,7 @@ export function InlineEditor({state}: { state: EditorState }) {
         const h = fieldOf(section)
         const current = h ? h.text() : text
         const at = Math.min(caret, current.length)
-        if (section === "outline" && append) applyEdit(section, insertAttachmentBullets(current, at, names))
-        else applyEdit(section, insertAtCaret(current, at, names.map(n => `![[${n}]]`).join(section === "outline" && !prose ? " " : "\n")))
+        applyEdit(section, insertAtCaret(current, at, names.map(n => `![[${n}]]`).join(section === "outline" && !prose ? " " : "\n")))
     }
 
     function onPaste(ev: ClipboardEvent, section: Section): boolean {
@@ -570,10 +530,7 @@ export function InlineEditor({state}: { state: EditorState }) {
             if (pasted !== "") applyEdit(section, insertAtCaret(text.slice(0, start) + text.slice(end), start, pasted))
             return true
         }
-        if (append) {
-            const edit = pasteOutline(text, start, end, pasted)
-            if (edit) applyEdit("outline", edit)
-        } else if (pasted !== "") {
+        if (pasted !== "") {
             applyEdit("outline", insertAtCaret(text.slice(0, start) + text.slice(end), start, pasted.replace(/\n/g, " ")))
         }
         return true
@@ -596,11 +553,10 @@ export function InlineEditor({state}: { state: EditorState }) {
         onCaret: (caret: number) => setCaret(section, caret),
         onEnter: () => {
             if (section !== "outline" || prose) return false
-            outlinePlainEnter()
+            void save()
             return true
         },
-        onBackspace: () => section === "outline" && outlinePlainBackspace(),
-        repair: section === "outline" && append ? outlineRepairs : undefined,
+        onBackspace: () => false,
         onKeyDown: (ev: KeyboardEvent) => onKeyDown(ev, section),
         onPaste: (ev: ClipboardEvent) => onPaste(ev, section),
         onDropFiles: (files: File[]) => onDropFiles(section, files),
@@ -685,7 +641,7 @@ export function InlineEditor({state}: { state: EditorState }) {
                 {hints.map((h, i) => <div key={i} className={`ts-editor-hint ${h.blocking ? "is-blocking" : ""}`}>{h.text}</div>)}
             </div>
             <div className="ts-editor-buttons">
-                <button className="ts-editor-button" onClick={discard}>{append ? "Discard" : "Cancel"}</button>
+                <button className="ts-editor-button" onClick={discard}>Cancel</button>
                 <button className="ts-editor-button ts-editor-save" disabled={blocked || state.saving} onClick={() => void save()}>{replacing ? "Replace" : "Save"}</button>
             </div>
         </div>

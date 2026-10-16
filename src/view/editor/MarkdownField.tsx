@@ -186,6 +186,8 @@ export function MarkdownField(props: Props) {
         host.addEventListener("mousedown", onMouseDownCapture, true)
         host.addEventListener("click", onClickCapture, true)
         host.addEventListener("focusin", onFocusIn)
+        // The remount's cm.focus() above ran before this listener existed; the owner still has to hear it.
+        if (carried?.focused) latest.current.onFocus()
         return () => {
             host.removeEventListener("keydown", onKeyDownCapture, true)
             host.removeEventListener("keydown", onKeyDownBubble)

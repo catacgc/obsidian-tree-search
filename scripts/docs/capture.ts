@@ -104,7 +104,7 @@ async function selectRow(scopeSel: string, text: string) {
     await Bun.sleep(300);
 }
 
-async function alt(code: "KeyA" | "Enter") {
+async function alt(code: "KeyA") {
     await page.keyboard.down("Alt");
     await page.keyboard.press(code);
     await page.keyboard.up("Alt");
@@ -149,6 +149,9 @@ await ev(`(() => { const w = window.require("@electron/remote").getCurrentWindow
 await Bun.sleep(500);
 if ((await ev<string>("document.visibilityState")) !== "visible") console.warn("warning: the docs vault window is still hidden; bring it to the front if shots time out");
 await page.setViewport({ width: 1280, height: 800, deviceScaleFactor: 2 });
+// A window the OS has not focused sends no focus events, so editors that track focus (the outline's line editor
+// and its `[[` suggestions) would stay inactive; emulate a focused page.
+await (await page.createCDPSession()).send("Emulation.setFocusEmulationEnabled", { enabled: true });
 if ((await ev<number>("innerWidth")) !== 1280) console.warn("warning: viewport is not 1280px wide; element shots are unaffected");
 
 await ev(`(async () => {
@@ -233,51 +236,28 @@ const shots: [name: string, run: () => Promise<Target>][] = [
         await Bun.sleep(400);
         return lastModal();
     }],
-    ["quick-add-append", async () => {
+    ["add-to-line", async () => {
         await searchModal("project apollo");
+        await selectRow(".modal", "Project Apollo (Apollo)");
+        // Add to explores the selected row and opens a new line at the end of its outline.
         await alt("KeyA");
-        // Quick Add replaces the Search modal's content (title "Add to <date>"), not a new modal.
-        const editor = await element(".modal .cm-content");
+        const editor = await element(".modal .ts-line-editor .cm-content");
         await Bun.sleep(500);
-        await editor.focus();
-        // Caret to the end of the draft: the empty child bullet under [[Project Apollo]].
-        await page.keyboard.down("Meta");
-        await page.keyboard.press("ArrowDown");
-        await page.keyboard.up("Meta");
+        // A real click, so the field has focus whatever else grabbed it while the editor mounted.
+        await editor.click();
         await page.keyboard.type("Confirmed the launch date");
+        await ev(`document.querySelector(".modal .ts-line-editor").scrollIntoView({block: "end"})`);
         await Bun.sleep(500);
         return lastModal();
     }],
     ["insert-link-autocomplete", async () => {
-        // Continues the Quick Add draft from the previous shot; never type into a note.
-        if (!(await page.$(".modal .cm-content"))) throw new Error("Quick Add is not open");
+        // Continues the new line from the previous shot; never type into a note.
+        if (!(await page.$(".modal .ts-line-editor .cm-content"))) throw new Error("the line editor is not open");
         // Suggestions start at 3 characters after `[[`.
         await page.keyboard.type(" with [[bob");
         await Bun.sleep(800);
-        return lastModal();
-    }],
-    ["alt-edit", async () => {
-        await searchModal("budget");
-        await selectRow(".modal", "Budget approved");
-        await alt("Enter");
-        await element(".modal .cm-content");
-        await Bun.sleep(600);
-        return lastModal();
-    }],
-    ["patch-chain", async () => {
-        await searchModal("project apollo");
-        await selectRow(".modal", "Project Apollo (Apollo)");
-        // `>` makes the selected row the anchor chip; Enter on a result under it adds that as the next chip.
-        await page.keyboard.type(">");
-        await setQuery(SEARCH_INPUT, "ship");
-        await waitRows(".modal");
-        await selectRow(".modal", "Ship the public beta");
-        // The click may move focus off the search input, whose keydown handles the chain's Enter.
-        await ev(`[...document.querySelectorAll(${JSON.stringify(SEARCH_INPUT)})].pop().focus()`);
-        await page.keyboard.press("Enter");
-        await page.waitForFunction(() => document.querySelector(".modal .modal-title")?.textContent?.includes("Ship the public beta"), { timeout: 5_000, polling: 100 });
-        await setQuery(SEARCH_INPUT, "[ ] Order the launch t-shirts");
-        await Bun.sleep(600);
+        await ev(`document.querySelector(".modal .ts-line-links")?.scrollIntoView({block: "center"})`);
+        await Bun.sleep(300);
         return lastModal();
     }],
     ["move-under", async () => {
@@ -337,8 +317,8 @@ const shots: [name: string, run: () => Promise<Target>][] = [
 
 // Undo per-shot state so the next shot starts from a clean workspace.
 async function cleanup(name: string) {
-    // insert-link-autocomplete keeps typing into this Quick Add draft.
-    if (name === "quick-add-append") return;
+    // insert-link-autocomplete keeps typing into this line.
+    if (name === "add-to-line") return;
     await escapeAll();
     if (name === "workspace-overview" || name === "file-context") await ev(`app.workspace.rightSplit.collapse()`);
     if (name === "tree-apollo") await ev(`window.__docsLeaf?.detach(); delete window.__docsLeaf`);
@@ -357,8 +337,12 @@ async function cleanup(name: string) {
     }
 }
 
+// SHOTS=a,b captures only those shots (add-to-line must come with insert-link-autocomplete).
+const only = process.env.SHOTS?.split(",");
+const selected = shots.filter(([n]) => !only || only.includes(n));
+const count = selected.length;
 const failed: string[] = [];
-for (const [name, run] of shots) {
+for (const [name, run] of selected) {
     // One retry from a clean state: the live app occasionally drops a step.
     for (let attempt = 1; attempt <= 2; attempt++) {
         try {
@@ -392,4 +376,4 @@ for (const [name, run] of shots) {
 await escapeAll();
 await openNote("Tree Search Examples.md", "source");
 browser.disconnect();
-console.log(`captured ${shots.length - failed.length}/${shots.length}${failed.length ? `; failed: ${failed.join(", ")}` : ""}`);
+console.log(`captured ${count - failed.length}/${count}${failed.length ? `; failed: ${failed.join(", ")}` : ""}`);

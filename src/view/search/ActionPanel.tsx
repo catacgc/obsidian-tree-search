@@ -34,7 +34,7 @@ const ICONS: Record<PanelIcon, LucideIcon> = {
 
 /** Panel items that open an editor (the inline editor, the outline editor's line editor or search), which takes focus;
  *  after any other item focus returns to the search. */
-const OPENS_EDITOR: Partial<Record<ShortcutId, true>> = {append: true, edit: true, quickAdd: true}
+const OPENS_EDITOR: Partial<Record<ShortcutId, true>> = {edit: true, quickAdd: true}
 
 /** Keycaps for a key (hidden on mobile, which has no keyboard shortcuts). */
 export const Keycaps = ({k}: {k?: KeySpec}) => {
