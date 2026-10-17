@@ -4,8 +4,8 @@ import {atom, useAtomValue, type Getter, type Setter} from 'jotai'
 import {findTargetRow, revealRow, rowTargets, type RowTarget} from '../search/select-target'
 import {expandFilterRefs, filterSuggestionsAt, toggleFilterPill} from '../search/search-filter'
 import {buildTimelineRows, tagOutlineParents} from '../search/timeline-utils'
-import {addToPlan, chainPrefill, chainResults, dirtyBodyKeys, isMovable, isPatchable, linksTo, patchPath, reparentLabel, rowLabel, type BodyRef, type ChainState, type NoteBody, type RowRef} from '../search/chain'
-import {crumbKey, extendPath, isPinned, linkCrumbs, newLineLabel, nextLineEditId, rootFor, rootKey, rootOf, TODAY_LABEL, type LineEdit, type OutlineRoot, type OutlineState, type OutlineTarget, type PaneState} from '../search/outline'
+import {addToPlan, canAddToParent, chainPrefill, chainResults, dirtyBodyKeys, isMovable, isPatchable, linksTo, patchPath, reparentLabel, rowLabel, selectCandidateParent, type AddToPlan, type BodyRef, type ChainState, type NoteBody, type RowRef} from '../search/chain'
+import {crumbKey, extendPath, isPinned, linkCrumbs, nextLineEditId, rootFor, rootKey, rootOf, rootLabel, TODAY_LABEL, type LineEdit, type OutlineRoot, type OutlineState, type OutlineTarget, type PaneState} from '../search/outline'
 import {dailyNotePath, trashSessionAttachments, type EditorAttachment} from '../../editing/vault-edits'
 import {toggleCut} from '../search/cut-drawer'
 import {basenameOf, dailyConfigOf, searchModalTitle} from '../editor/draft'
@@ -227,7 +227,8 @@ export const SearchViewMolecule = molecule((mol, scope) => {
      *  in the plain search of an editable view, outside a reparent. */
     const newLineShown = (get: Getter) => {
         if (!scp.allowEditing) return false
-        return get(outlineAtom) !== null ? get(lineEditAtom)?.row !== null : get(chainAtom) === null && !get(editorOpenAtom)
+        const shown = get(outlineAtom) !== null ? get(lineEditAtom)?.row !== null : get(chainAtom) === null && !get(editorOpenAtom)
+        return shown && get(canAddToAtom)
     }
     /** The Add to row is listed and selected. */
     const newLineSelectedAtom = atom(get => newLineShown(get) && get(selectedLineAtom) === NEW_LINE_ROW)
@@ -907,13 +908,17 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         return showOutline(get, set, extendPath(o?.path ?? [], added, daily), target)
     })
 
-    /** The New line row's editor, filled with `prefill` (an item such as chainPrefill's; its bullet and checkbox are
-     *  the prefix). A changed line editor refuses it once. */
+    /** First Enter on a search query opens its results as an Explore outline, leaving the filter input empty. */
+    const openExploreSearchAtom = atom(null, (get, set): boolean => {
+        if (!scp.allowEditing || get(outlineAtom) !== null || get(chainAtom) !== null || !get(actualQueryAtom).trim()) return false
+        return set(openOutlineAtom, {kind: "search"})
+    })
+
+    /** The New line row's editor, filled with `prefill` (an item such as chainPrefill's); its list marker is editable. */
     const openNewLineAtom = atom(null, (get, set, prefill: string = "") => {
         if (get(lineEditAtom) && !set(releaseOutlineAtom, "line")) return
-        const m = /^- (\[.\] )?/.exec(prefill)
-        const prefix = m ? m[0] : "- "
-        const text = m ? prefill.slice(m[0].length) : prefill
+        const prefix = ""
+        const text = prefill || "- "
         set(lineEditAtom, {id: nextLineEditId(), row: null, prefix, text, initial: text, caret: text.length, attachments: [], saving: false})
     })
 
@@ -923,51 +928,77 @@ export const SearchViewMolecule = molecule((mol, scope) => {
         return sel && !sel.archiveRow && isPatchable(sel.node) ? sel : null
     }
 
-    /** The note and pre-filled line Add to uses when no row is selected: in the outline editor the line is built from
-     *  its filter crumbs (at the search root also from the search's query, which writes to Today); in the plain search
-     *  from the query (addToPlan: its `[[Note]]` scope is the note the line goes under). */
-    const addToPlanOf = (get: Getter): {note: string | null; prefill: string} => {
+    /** Builds the Add plan from the Explore filters or the original search chain. */
+    const addToPlanOf = (get: Getter): AddToPlan => {
         const separator = get(separatorAtom)
         const archiveTag = get(settingsAtom).archiveTag
         const o = get(outlineAtom)
         if (!o) return addToPlan(get(searchTextAtom), separator, archiveTag)
         const filters = get(searchFiltersAtom)
-        const text = [o.path.length === 0 ? o.prevQuery : "", ...o.filters].map(q => expandFilterRefs(q, filters, separator)).join(" ")
-        return {note: null, prefill: chainPrefill(text, separator, archiveTag)}
+        const parts = o.path.length === 0 ? [o.prevQuery, ...o.filters, get(actualQueryAtom)] : [...o.filters, get(actualQueryAtom)]
+        const query = parts.map(q => expandFilterRefs(q, filters, separator)).filter(q => q.trim() !== "").join(` ${separator} `)
+        return addToPlan(query, separator, archiveTag)
     }
 
-    /** The Add to row's (and the action panel's Add to) label: in the outline editor `Add to <root>`; in the plain
-     *  search `Add to <selected row>`, else `Add to <the query's [[Note]] scope>`, or `Add to Today`. */
+    const resolveAddTarget = (get: Getter): {root: OutlineRoot | null; plan: AddToPlan; quickAdd: boolean} | null => {
+        const separator = get(separatorAtom)
+        const outline = get(outlineAtom)
+        const plan = addToPlanOf(get)
+        const selected = outline ? null : addToRow(get)
+        if (selected) {
+            if (!canAddToParent(selected.node, "", separator)) return null
+            return {root: rootFor(selected.node, dailyNameOf(get)), plan: {...plan, filter: "", prefill: ""}, quickAdd: false}
+        }
+
+        const currentRoot = outline ? rootOf(outline) : null
+        if (!plan.parentQuery) {
+            const parent = currentRoot?.kind === "node" ? currentRoot.node : null
+            if (!canAddToParent(parent, plan.filter, separator)) return null
+            return {root: currentRoot, plan, quickAdd: !outline && !get(actualQueryAtom).trim()}
+        }
+
+        const filters = get(searchFiltersAtom)
+        const query = expandFilterRefs(plan.parentQuery, filters, separator)
+        const graph = get(GlobalAtoms.graphAtom)
+        const options = get(GlobalAtoms.indexAtom)?.searchOptions() ?? {}
+        let results: ResultNode[]
+        if (currentRoot) {
+            const base = advancedSearch(graph, rootKey(currentRoot, dailyNameOf(get)), "", separator)
+            results = filterOutline(base, stagesOf(get, query), n => isPinned(outline?.pins ?? [], n))
+        } else {
+            const raw = searchIndex(graph, query, separator, options)
+            const {reveal} = extractArchiveReveal(parseQuery(query, separator))
+            results = partitionArchived(raw, reveal).visible
+        }
+        const parent = selectCandidateParent(results, query, separator, plan.filter)
+        if (!parent) return null
+        return {root: rootFor(parent, dailyNameOf(get)), plan, quickAdd: false}
+    }
+
+    const canAddToAtom = atom(get => resolveAddTarget(get) !== null)
+
+    /** Null when the final filter cannot be created under any matching parent. */
     const addToLabelAtom = atom(get => {
-        const o = get(outlineAtom)
-        if (o) return newLineLabel(o)
-        const row = addToRow(get)
-        return `Add to ${row ? rowLabel(row.node) : addToPlanOf(get).note ?? TODAY_LABEL}`
+        const target = resolveAddTarget(get)
+        if (!target) return null
+        return `Add to ${target.root ? rootLabel(target.root) : TODAY_LABEL}`
     })
 
-    /** Add to: the line editor on a new line at the end of the view, pre-filled from the filters (addToPlanOf).
-     *  Outside the outline editor it first explores the selected row; with nothing selected it explores the note the
-     *  query scopes to (`[[Note]] > is:task home` adds `- [ ] home ` under Note); with no search, Today (Quick Add);
-     *  with a search and no such note, the search (its new lines go to today's note). */
+    /** Add to the resolved Explore parent, retaining the final filter as a live editor criterion. */
     const openAddToAtom = atom(null, (get, set) => {
-        const plan = addToPlanOf(get)
-        let prefill = plan.prefill
-        if (get(outlineAtom) === null) {
-            const row = addToRow(get)
-            if (row) {
-                if (!set(openOutlineAtom, {kind: "row", row})) return
-                prefill = ""
-            } else if (plan.note !== null && set(openOutlineAtom, {kind: "link", link: plan.note})) {
-                // Under the note the query scopes to.
-            } else if (get(actualQueryAtom).trim() === "") {
-                set(openOutlineAtom, {kind: "today", quickAdd: true})
-                return
-            } else {
-                if (!set(openOutlineAtom, {kind: "search"})) return
-                prefill = chainPrefill(get(searchTextAtom), get(separatorAtom), get(settingsAtom).archiveTag)
-            }
-        }
-        set(openNewLineAtom, prefill)
+        const target = resolveAddTarget(get)
+        if (!target) return
+        if (get(lineEditAtom) && !set(releaseOutlineAtom, "line")) return
+        const path = target.root ? [target.root] : [{kind: "today" as const}]
+        showOutline(get, set, path, {kind: "search"})
+        const shown = get(outlineAtom)
+        if (!shown) return
+        const shownRoot = rootOf(shown)
+        const expectedRoot = path[path.length - 1]
+        if (!shownRoot || crumbKey(shownRoot, dailyNameOf(get)) !== crumbKey(expectedRoot, dailyNameOf(get))) return
+        set(outlineAtom, {...shown, filters: target.plan.filter ? [target.plan.filter] : [], quickAdd: shown.quickAdd || target.quickAdd})
+        setQuery(set, "")
+        set(openNewLineAtom, target.plan.prefill)
     })
 
     /** The line editor's edit (its field, caret, pasted files); an edit disarms a refused discard. */
@@ -1152,7 +1183,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             decExpandAtom,
             incExpandAtom,
             resetCollapseAtom,
-            selectedNodeAtom, enterRowAtom, selectEnterRowAtom, newLineSelectedAtom, newLineShownAtom, addToLabelAtom, openAddToAtom,
+            selectedNodeAtom, enterRowAtom, selectEnterRowAtom, newLineSelectedAtom, newLineShownAtom, addToLabelAtom, canAddToAtom, openAddToAtom,
             searchPlaceholderAtom,
             setDefaultExpandLevelAtom,
             expandNodeAtom, selectedLineAtom, updateHoveredLineAtom, hoveredLineAtom,
@@ -1171,7 +1202,7 @@ export const SearchViewMolecule = molecule((mol, scope) => {
             toggleCutAtom, startDrawerMoveAtom,
             outlineAtom, lineEditAtom, outlineBodiesAtom, bodyAttachmentsAtom, discardArmedAtom, paneAtom,
             paneRefAtom, loadBodyAtom, setBodyTextAtom, releaseOutlineAtom, outlineDirtyAtom, discardBodiesAtom, outlineFilterStagesAtom,
-            refreshOutlineResultsAtom, openOutlineAtom, openNewLineAtom, exitOutlineAtom, popCrumbAtom, openCrumbAtom,
+            refreshOutlineResultsAtom, openOutlineAtom, openExploreSearchAtom, openNewLineAtom, exitOutlineAtom, popCrumbAtom, openCrumbAtom,
             openFilterCrumbAtom, addFilterAtom, updateLineEditAtom,
             editorOpenAtom, enterEditorAtom, leaveEditorAtom, searchModalTitleAtom,
     }

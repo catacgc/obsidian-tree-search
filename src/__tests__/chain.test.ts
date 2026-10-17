@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test"
 import { buildGraphFromScanner, getKey, type NotesGraph, type ParsedNode, type ResultNode, type VaultScanner } from "@mdtree/core"
-import { addToPlan, chainPrefill, chainResults, dirtyBodyKeys, patchPath, planReparent, selectCandidateParent, type RowRef } from "../view/search/chain"
+import { addToPlan, canAddToParent, chainPrefill, chainResults, dirtyBodyKeys, patchPath, planReparent, selectCandidateParent, type RowRef } from "../view/search/chain"
 import type { OwnPath } from "../view/editor/row-editing"
 import type { DailyNoteConfig } from "../indexing/indexed-tree"
 
@@ -231,6 +231,14 @@ describe("addToPlan", () => {
 
             expect(selectCandidateParent(results, "is:page", ".", "is:subtext")).toBeNull()
             expect(selectCandidateParent(results, "is:list", ".", "is:subtext")).toBe(line)
+        })
+    })
+
+    describe("canAddToParent", () => {
+        it("allows Today and page roots for ordinary lines, but subtexts only under a line", () => {
+            expect(canAddToParent(null, "is:task", ".")).toBe(true)
+            expect(canAddToParent(page("Project"), "is:subtext", ".")).toBe(false)
+            expect(canAddToParent(text("list", "Project.md", 2), "is:subtext", ".")).toBe(true)
         })
     })
 

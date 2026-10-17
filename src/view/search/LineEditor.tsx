@@ -42,8 +42,9 @@ import {
     outlineBackspace,
     outlineEnter,
     outlineIndent,
-    outlineRepairs,
+    lineEditorRepairs,
     pasteOutline,
+    shouldAppendLineOnEnter,
     wrapLink,
     wrapSelection,
     type TextEdit,
@@ -133,7 +134,8 @@ export function LineEditor({edit, rows}: {edit: LineEdit; rows: readonly TreeNod
     const notePath = row?.path ?? dailyPath
 
     const suggest = useLinkSuggest(edit.text, edit.caret, focused)
-    const caretLinePrefix = onFirstLine(edit.text, edit.caret) ? edit.prefix : ""
+    const listPrefix = /^\s*(?:[-*+]|\d+\.)\s+(?:\[[ xX]\]\s+)?/.exec(edit.text.split("\n")[0])?.[0] ?? ""
+    const caretLinePrefix = onFirstLine(edit.text, edit.caret) ? (row?.heading ? edit.prefix : edit.prefix + listPrefix) : ""
     const dateSuggest = useDateSuggest(edit.text, edit.caret, focused, caretLinePrefix)
 
     const linkResults = useMemo(() => suggest.open ? linkTargetTree(graph, suggest.query, separator) : [], [suggest.open, suggest.query, graph, separator])
@@ -154,7 +156,7 @@ export function LineEditor({edit, rows}: {edit: LineEdit; rows: readonly TreeNod
         const raws = fieldRawLines(edit.text, edit.prefix)
         const at: number[] = []
         const lines: {depth: number; node: ParsedNode | null}[] = []
-        const nested = row?.nested ?? false
+        const nested = row?.nested ?? target?.kind === "under"
         const base = row?.line ?? 0
         raws.forEach((l, i) => {
             if (!l) return
@@ -291,7 +293,9 @@ export function LineEditor({edit, rows}: {edit: LineEdit; rows: readonly TreeNod
 
     function enter() {
         const h = fieldRef.current
-        if (h) applyEdit(outlineEnter(h.text(), h.selection().start))
+        if (!h) return
+        const {text, start, end} = fieldState(h)
+        applyEdit(outlineEnter(text.slice(0, start) + text.slice(end), start))
     }
 
     // ── Keys ──────────────────────────────────────────────────────────────────
@@ -332,7 +336,12 @@ export function LineEditor({edit, rows}: {edit: LineEdit; rows: readonly TreeNod
             }
         }
 
-        // Alt+Enter adds a line (on the first line: a child); Enter, Mod+Enter and Shift+Enter save.
+        // The New line outline uses Enter to add a child; an edited row saves on Enter.
+        if (ev.key === "Enter" && shouldAppendLineOnEnter(edit.row === null ? "append" : "edit", "outline", ev.altKey, mod, ev.shiftKey)) {
+            enter()
+            return true
+        }
+        // Alt+Enter adds a line to a row edit; modified Enter saves.
         if (ev.key === "Enter" && ev.altKey && !mod && !ev.shiftKey) {
             enter()
             return true
@@ -418,8 +427,8 @@ export function LineEditor({edit, rows}: {edit: LineEdit; rows: readonly TreeNod
             return true
         }
         const pasted = (!plainOnly && data.html !== "" && autoConvertHtml(app) ? htmlToMarkdown(data.html) : data.plain).replace(/\r\n?/g, "\n")
-        const e = pasteOutline("- " + text, start + 2, end + 2, pasted)
-        if (e) applyEdit({text: e.text.slice(2), caret: e.caret - 2, selectionEnd: e.selectionEnd === undefined ? undefined : e.selectionEnd - 2})
+        const e = pasteOutline(text, start, end, pasted)
+        if (e) applyEdit(e)
         return true
     }
 
@@ -428,11 +437,8 @@ export function LineEditor({edit, rows}: {edit: LineEdit; rows: readonly TreeNod
         if (h) void pasteFiles(files, h.text(), h.selection().start)
     }
 
-    /** Added lines stay list items; the first line holds the row's text without its prefix. */
-    const repair = (text: string) => {
-        const nl = text.indexOf("\n")
-        return nl < 0 ? [] : outlineRepairs(text).filter(r => r.from > nl)
-    }
+    /** List rows and New lines keep a list marker; heading rows keep their first heading line. */
+    const repair = (text: string) => lineEditorRepairs(text, !!row?.heading)
 
     const indentLevel = (rowPos >= 0 ? rows[rowPos].indent : 0) + 1
 
@@ -448,7 +454,7 @@ export function LineEditor({edit, rows}: {edit: LineEdit; rows: readonly TreeNod
         }}
     >
         <div className="ts-line-editor-row">
-            <span className="ts-line-editor-prefix">{edit.prefix.trim()}</span>
+            {row?.heading && <span className="ts-line-editor-prefix">{edit.prefix.trim()}</span>}
             <div className="ts-editor-field ts-line-editor-field" ref={fieldBoxRef}>
                 <MarkdownField
                     handleRef={fieldRef}
@@ -460,8 +466,9 @@ export function LineEditor({edit, rows}: {edit: LineEdit; rows: readonly TreeNod
                     onText={(text, caret) => update(s => ({...s, text, caret}))}
                     onCaret={caret => update(s => s.caret === caret ? s : {...s, caret})}
                     onEnter={() => {
-                        // Enter from a soft keyboard (no keydown, no Alt): adds a line; the Save button saves.
-                        enter()
+                        // Soft keyboards may not send keydown; mirror the New line / edited-row behavior.
+                        if (edit.row === null) enter()
+                        else void save()
                         return true
                     }}
                     onBackspace={backspace}

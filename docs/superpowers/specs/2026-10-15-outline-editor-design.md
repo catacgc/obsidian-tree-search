@@ -41,21 +41,27 @@ The Search modal and pane (`allowEditing`) get an **outline editor**: a browsabl
 - Alt+Enter, Alt-click or the action panel's row-specific action edits the selected row directly, without opening an outline: a page's own resolved note file opens Rename, a page-link row edits its source link line, a heading or text row opens the line editor, and an attachment opens Rename. With no selected row, Alt+Enter does nothing.
 - Ordinary Enter keeps its existing row intent: page/header rows and lines with children Explore; a line's URL, task, snippet or plain-leaf action remains unchanged. In the outline, Enter on a plain leaf line opens its source line editor; a second click on a row remains an Explore action.
 - The source line is checked as before (`readLine` + list item or heading + `lineHasIdentity`, else the out-of-date Notice).
-- The field's first line is the row's text without its indent, bullet, checkbox or `#…` prefix, which are kept. Alt+Enter
-  adds a line (on the first line one level deeper: a child), Tab / Shift+Tab indent, Backspace on an empty line removes
-  it. `[[` lists link targets (pages and headings, plus a New note row) under the field; `@` on an open task offers
-  scheduled dates; Mod+B / Mod+I / Mod+K wrap; pasted lists become lines; pasted files are attachments named after the
-  note at the caret (or the row's note) and renamed by alias on save; editor hints show under the field.
+- For list-row and New line edits, the first-line list marker and optional task checkbox are inside the field and may be
+  changed freely; removing the task checkbox turns a task into a plain outline item. The line editor repairs a missing
+  first-line list marker to `- `, preventing accidental removal of the outline item. Indentation follows the edited row's
+  depth. Heading edits keep their `#… ` prefix outside the field. For a source-row edit, Enter saves; Alt+Enter adds a
+  line (on the first line one level deeper: a child). For the New line, plain Enter adds a child bullet on the first line
+  and a sibling thereafter; Alt+Enter does the same. Mod+Enter and Shift+Enter save either. Tab / Shift+Tab indent, and
+  Backspace on an empty line removes it. `[[` lists link targets (pages and headings, plus a New note row) under the
+  field; `@` on an open task offers scheduled dates; Mod+B / Mod+I / Mod+K wrap; pasted lists become lines; pasted files
+  are attachments named after the note at the caret (or the row's note) and renamed by alias on save; editor hints show
+  under the field.
 - Lines of the field that the crumbs would hide (`blockMisses`: per stage, neither the line, a line above or below it in
   the field, nor the row's tree context matches) get a red outline.
-- **Save** (Enter, Mod+Enter or Shift+Enter): one `vault.process` per file through core `editOutlineBlock(content, line,
+- **Save** (Enter on a source-row edit; Mod+Enter or Shift+Enter in either editor): one `vault.process` per file through core `editOutlineBlock(content, line,
   expectedLine, first, extra)`. The line must still equal what was read (else `StaleLineError` → the out-of-date Notice).
   Deeper new lines go right after the line (before its existing children); same-depth lines (with their children) go
   after its subtree; under a heading every new line goes right after it. The first line gets Alt-Edit's
   `scheduleUnscheduledTasks` (not for a nested line); new lines are stamped (`stampNewOutlineLines`). The written lines
   are pinned, later pins in that file shift, the file is reindexed and the row flashes.
 - **Escape:** closes the popups first; a changed field refuses once (Notice), a repeat discards it.
-- A trailing **New line…** row opens the same editor on an empty `- ` line, written without editing an existing line:
+- A trailing **New line…** row opens the same editor on an empty `- ` line; plain Enter grows its child outline, and the
+  line is written without editing an existing line:
   a note or heading root → today's daily note under `- [[P]]` / `- [[P#H]]` (`appendToDailyNote`); a line root → as its
   last children (`appendUnderLine`); the search and Today roots → today's daily note.
 

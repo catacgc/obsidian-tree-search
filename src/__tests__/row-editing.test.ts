@@ -8,7 +8,7 @@ import {
 import {
     outlineIndent, linkQueryAt, acceptLink, linkAt, insertAttachmentBullets, caretNote,
     outlineBackspace, pasteOutline, changedRange, pasteLink, pastedUrl, ensureBullet,
-    outlineEnter, outlineRepairs, toggleTask,
+    lineEditorRepairs, outlineEnter, outlineRepairs, shouldAppendLineOnEnter, toggleTask,
 } from "../view/editor/textarea-ops"
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -219,6 +219,17 @@ describe("outlineEnter", () => {
     })
 })
 
+describe("shouldAppendLineOnEnter", () => {
+    it("uses plain Enter to create outline lines only in the Append outline", () => {
+        expect(shouldAppendLineOnEnter("append", "outline", false, false, false)).toBe(true)
+        expect(shouldAppendLineOnEnter("append", "content", false, false, false)).toBe(false)
+        expect(shouldAppendLineOnEnter("edit", "outline", false, false, false)).toBe(false)
+        expect(shouldAppendLineOnEnter("append", "outline", true, false, false)).toBe(false)
+        expect(shouldAppendLineOnEnter("append", "outline", false, true, false)).toBe(false)
+        expect(shouldAppendLineOnEnter("append", "outline", false, false, true)).toBe(false)
+    })
+})
+
 describe("outlineRepairs", () => {
     it("accepts every list marker, checkboxes included", () => {
         expect(outlineRepairs("- a\n    - [ ] b\n* c\n1. d")).toEqual([])
@@ -228,6 +239,22 @@ describe("outlineRepairs", () => {
         expect(outlineRepairs("a\n    b\n-\n")).toEqual([
             { from: 0, insert: "- " }, { from: 6, insert: "- " }, { from: 9, insert: " " }, { from: 10, insert: "- " },
         ])
+    })
+})
+
+describe("lineEditorRepairs", () => {
+    it("restores a missing list marker on the editable first line", () => {
+        expect(lineEditorRepairs("task without a marker", false)).toEqual([{from: 0, insert: "- "}])
+    })
+
+    it("allows a task checkbox to be removed or another valid list marker chosen", () => {
+        expect(lineEditorRepairs("- outline", false)).toEqual([])
+        expect(lineEditorRepairs("* outline", false)).toEqual([])
+        expect(lineEditorRepairs("1. outline", false)).toEqual([])
+    })
+
+    it("leaves a heading first line alone but repairs added outline lines", () => {
+        expect(lineEditorRepairs("Heading\nchild without a marker", true)).toEqual([{from: 8, insert: "- "}])
     })
 })
 
@@ -265,6 +292,12 @@ describe("pasteOutline", () => {
     it("at a bare bullet: the first line fills it, nested lines keep their relative depth", () => {
         expect(pasteOutline("- [[P]]\n    - ", 14, 14, "- a\n    - b\n        - c\n- d"))
             .toEqual({ text: "- [[P]]\n    - a\n        - b\n            - c\n    - d", caret: 51 })
+    })
+    it("pastes after an editable task marker without duplicating it", () => {
+        expect(pasteOutline("- [ ] ", 6, 6, "task\n- sibling")?.text).toBe("- [ ] task\n- sibling")
+    })
+    it("fills a bare ordered marker when pasting several lines", () => {
+        expect(pasteOutline("1. ", 3, 3, "first\n- second")?.text).toBe("1. first\n- second")
     })
     it("bullets plain lines, maps tabs to one level and drops blanks", () => {
         expect(pasteOutline("- [[P]]\n    - ", 14, 14, "a\n\tb\n\nc")?.text).toBe("- [[P]]\n    - a\n        - b\n    - c")

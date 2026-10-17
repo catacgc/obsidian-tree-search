@@ -40,9 +40,9 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
         resetSuggestionsAtom, repositionSuggestionsAtom, focusSearchInputAtom,
         allowTimeline, timelineActiveAtom, toggleViewModeAtom, scopeName, allowEditing,
         chainAtom, cancelChainAtom, startReparentAtom,
-        outlineAtom, openOutlineAtom, exitOutlineAtom, popCrumbAtom, openCrumbAtom, openFilterCrumbAtom, addFilterAtom,
+        outlineAtom, openOutlineAtom, openExploreSearchAtom, exitOutlineAtom, popCrumbAtom, openCrumbAtom, openFilterCrumbAtom, addFilterAtom,
         selectedNodeAtom, enterRowAtom, renderableTreeNodesAtom, toggleRowAtom,
-        newLineSelectedAtom,
+        newLineSelectedAtom, canAddToAtom, openAddToAtom,
     } = useMolecule(SearchViewMolecule)
     const {reparentChainAtom, editAtom, patchAtom, saveOutlineAtom} = useMolecule(EditorMolecule)
     const {handleDefaultActionAtom} = useMolecule(ActionsMolecule)
@@ -54,6 +54,7 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
     const reparentChain = useSetAtom(reparentChainAtom)
     const outline = useAtomValue(outlineAtom)
     const openOutline = useSetAtom(openOutlineAtom)
+    const openExploreSearch = useSetAtom(openExploreSearchAtom)
     const exitOutline = useSetAtom(exitOutlineAtom)
     const popCrumb = useSetAtom(popCrumbAtom)
     const openCrumb = useSetAtom(openCrumbAtom)
@@ -67,6 +68,8 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
     const rows = useAtomValue(renderableTreeNodesAtom)
     const toggleRow = useSetAtom(toggleRowAtom)
     const newLineSelected = useAtomValue(newLineSelectedAtom)
+    const canAddTo = useAtomValue(canAddToAtom)
+    const openAddTo = useSetAtom(openAddToAtom)
     const handleDefault = useSetAtom(handleDefaultActionAtom)
 
     const timelineActive = useAtomValue(timelineActiveAtom)
@@ -238,10 +241,17 @@ export const SearchBar = ({ isQuickLink }: SearchBarProps) => {
                 else setChain({...chain, confirm: name})
             }
         } else if (ev.key === "Enter" && outline && !ev.altKey && !ev.shiftKey) {
-            // A picked row or New line, or an empty input (the first row): the row's ordinary Enter behavior;
-            // typed text with nothing picked becomes a filter crumb.
-            if (selectedRow || newLineSelected || q.trim() === "") void handleDefault()
+            // A blank Explore filter adds from the preceding search stages; text becomes a filter crumb unless a row
+            // is explicitly selected, in which case its ordinary Enter intent remains available.
+            if (q.trim() === "") {
+                if (canAddTo) openAddTo()
+                else void handleDefault()
+            }
+            else if (selectedRow || newLineSelected) void handleDefault()
             else addFilter()
+        } else if (ev.key === "Enter" && allowEditing && !outline && !chain && q.trim() !== ""
+            && !ev.altKey && !ev.shiftKey) {
+            openExploreSearch()
         } else {
             return false
         }

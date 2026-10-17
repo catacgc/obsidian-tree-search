@@ -6,6 +6,7 @@ import type {App} from "obsidian"
 import {EditorMolecule} from "../view/editor/EditorMolecule"
 import {GlobalAtoms} from "../view/react-context/global"
 import {GlobalAppScope, SearchViewMolecule, SearchViewScope} from "../view/react-context/state"
+import {settingsAtom} from "../view/react-context/settings"
 import type {TreeNode} from "../view/search/SearchViewFlatten"
 
 const cleanups: (() => void)[] = []
@@ -100,7 +101,7 @@ describe("editAtom", () => {
 
         await store.set(editor.editAtom)
 
-        expect(store.get(view.lineEditAtom)).toMatchObject({row: {expectedLine: "- note to self", heading: false}, prefix: "- ", text: "note to self"})
+        expect(store.get(view.lineEditAtom)).toMatchObject({row: {expectedLine: "- note to self", heading: false}, prefix: "", text: "- note to self"})
         expect(store.get(view.outlineAtom)).toBeNull()
     })
 
@@ -114,7 +115,7 @@ describe("editAtom", () => {
 
         await store.set(editor.editAtom)
 
-        expect(store.get(view.lineEditAtom)).toMatchObject({row: {path: "Daily.md", expectedLine: "- [[Project]]", heading: false}, text: "[[Project]]"})
+        expect(store.get(view.lineEditAtom)).toMatchObject({row: {path: "Daily.md", expectedLine: "- [[Project]]", heading: false}, prefix: "", text: "- [[Project]]"})
         expect(store.get(GlobalAtoms.editSessionAtom)).toBeNull()
         expect(store.get(view.outlineAtom)).toBeNull()
     })
@@ -127,7 +128,7 @@ describe("editAtom", () => {
         expect(store.get(view.selectedNodeAtom)?.hasChildren).toBe(true)
         await store.set(editor.editAtom)
 
-        expect(store.get(view.lineEditAtom)).toMatchObject({row: {expectedLine: "- parent task"}, text: "parent task"})
+        expect(store.get(view.lineEditAtom)).toMatchObject({row: {expectedLine: "- parent task"}, prefix: "", text: "- parent task"})
         expect(store.get(view.outlineAtom)).toBeNull()
     })
     it("uses the Enter-row fallback when Alt+Enter has no outline selection", async () => {
@@ -140,7 +141,7 @@ describe("editAtom", () => {
         expect(store.get(view.enterRowAtom)?.node).toEqual(item)
         await store.set(editor.editAtom)
 
-        expect(store.get(view.lineEditAtom)).toMatchObject({row: {expectedLine: "- first row"}, text: "first row"})
+        expect(store.get(view.lineEditAtom)).toMatchObject({row: {expectedLine: "- first row"}, prefix: "", text: "- first row"})
         expect(store.get(view.outlineAtom)).toMatchObject({path: []})
     })
 
@@ -163,5 +164,118 @@ describe("editAtom", () => {
         expect(store.get(GlobalAtoms.editSessionAtom)).toBeNull()
         expect(store.get(view.lineEditAtom)).toBeNull()
         expect(store.get(view.outlineAtom)).toBeNull()
+    })
+})
+
+describe("Explore Add dispatch", () => {
+    it("turns the search into Explore, then adds the final filter under its first matching parent", async () => {
+        const cowo = {...page("Cowo", "Cowo.md"), searchKey: "Cowo"}
+        const {store, view} = setup({"Cowo.md": "# Cowo\n"}, [cowo], [resultNode(cowo)])
+        store.set(settingsAtom, {...store.get(settingsAtom), searchSeparator: ">"})
+        store.set(view.searchQueryAtom, {query: "cowo > gateway is:task"})
+
+        await store.set(view.openExploreSearchAtom)
+        expect(store.get(view.outlineAtom)).toMatchObject({path: [], prevQuery: "cowo > gateway is:task"})
+        expect(store.get(view.searchQueryAtom)).toEqual({query: ""})
+
+        await store.set(view.openAddToAtom)
+
+        expect(store.get(view.outlineAtom)?.path.at(-1)).toMatchObject({kind: "node", node: cowo})
+        expect(store.get(view.outlineAtom)?.filters).toEqual(["gateway is:task"])
+        expect(store.get(view.lineEditAtom)).toMatchObject({row: null, prefix: "", text: "- [ ] gateway "})
+        expect(store.get(view.addToLabelAtom)).toBe("Add to Cowo")
+    })
+
+    it("reconstructs the default dot-separated parent and task filter", async () => {
+        const work = {...page("Work", "Work.md"), searchKey: "work"}
+        const {store, view} = setup({"Work.md": "# Work\n"}, [work], [resultNode(work)])
+        store.set(view.searchQueryAtom, {query: "work . is:task"})
+
+        await store.set(view.openExploreSearchAtom)
+        await store.set(view.openAddToAtom)
+
+        expect(store.get(view.outlineAtom)?.path.at(-1)).toMatchObject({kind: "node", node: work})
+        expect(store.get(view.outlineAtom)?.filters).toEqual(["is:task"])
+        expect(store.get(view.lineEditAtom)).toMatchObject({row: null, prefix: "", text: "- [ ] "})
+    })
+
+    it("adds filter-only tasks to Today and seeds text from the last filter", async () => {
+        const task = {...text("test", "Today.md", 0), isTask: true}
+        const {store, view} = setup({"Today.md": "- [ ] test\n"}, [task], [resultNode(task)])
+        store.set(view.searchQueryAtom, {query: "is:task test"})
+
+        await store.set(view.openExploreSearchAtom)
+        await store.set(view.openAddToAtom)
+
+        expect(store.get(view.outlineAtom)?.path.at(-1)).toMatchObject({kind: "today"})
+        expect(store.get(view.outlineAtom)?.filters).toEqual(["is:task test"])
+        expect(store.get(view.lineEditAtom)).toMatchObject({row: null, prefix: "", text: "- [ ] test "})
+    })
+
+    it("adds has:link under a scoped page and leaves an open link for completion", async () => {
+        const project = {...page("Page", "Page.md"), searchKey: "Page"}
+        const {store, view} = setup({"Page.md": "# Page\n"}, [project], [resultNode(project)])
+        store.set(settingsAtom, {...store.get(settingsAtom), searchSeparator: ">"})
+        store.set(view.searchQueryAtom, {query: "[[Page]] > has:link"})
+
+        await store.set(view.openExploreSearchAtom)
+        await store.set(view.openAddToAtom)
+
+        expect(store.get(view.outlineAtom)?.path.at(-1)).toMatchObject({kind: "node", node: project})
+        expect(store.get(view.outlineAtom)?.filters).toEqual(["has:link"])
+        expect(store.get(view.lineEditAtom)).toMatchObject({row: null, prefix: "", text: "- [["})
+    })
+
+    it("adds the emoji prefill under a scoped page", async () => {
+        const project = {...page("Page", "Page.md"), searchKey: "Page"}
+        const {store, view} = setup({"Page.md": "# Page\n"}, [project], [resultNode(project)])
+        store.set(settingsAtom, {...store.get(settingsAtom), searchSeparator: ">"})
+        store.set(view.searchQueryAtom, {query: "[[Page]] > has:emoji"})
+
+        await store.set(view.openExploreSearchAtom)
+        await store.set(view.openAddToAtom)
+
+        expect(store.get(view.outlineAtom)?.path.at(-1)).toMatchObject({kind: "node", node: project})
+        expect(store.get(view.outlineAtom)?.filters).toEqual(["has:emoji"])
+        expect(store.get(view.lineEditAtom)).toMatchObject({row: null, prefix: "", text: "- 🪴 "})
+    })
+
+    it("adds subtext under a deterministic list child", async () => {
+        const project = page("Page", "Page.md")
+        const list = {...text("list", "Page.md", 1), list: true} as ParsedNode
+        const results = [resultNode(project, [resultNode(list)])]
+        const {store, view} = setup({"Page.md": "# Page\n- list\n"}, [project, list], results)
+        store.get(GlobalAtoms.graphAtom).addChild(project, list, list.location, 1)
+        store.set(settingsAtom, {...store.get(settingsAtom), searchSeparator: ">"})
+        store.set(view.searchQueryAtom, {query: "[[Page]] > list > is:subtext"})
+
+        await store.set(view.openExploreSearchAtom)
+        await store.set(view.openAddToAtom)
+
+        expect(store.get(view.outlineAtom)?.path.at(-1)).toMatchObject({kind: "node", node: list})
+        expect(store.get(view.outlineAtom)?.filters).toEqual(["is:subtext"])
+        expect(store.get(view.lineEditAtom)).toMatchObject({row: null, prefix: "", text: "- "})
+    })
+
+    it("does not expose Add for subtext directly under a scoped page", async () => {
+        const project = {...page("Page", "Page.md"), searchKey: "Page"}
+        const {store, view} = setup({"Page.md": "# Page\n"}, [project], [resultNode(project)])
+        store.set(settingsAtom, {...store.get(settingsAtom), searchSeparator: ">"})
+        store.set(view.searchQueryAtom, {query: "[[Page]] > is:subtext"})
+
+        await store.set(view.openExploreSearchAtom)
+
+        expect(store.get(view.addToLabelAtom)).toBeNull()
+    })
+
+    it("does not expose Add when a subtext filter has no line parent", () => {
+        const project = page("Project", "Project.md")
+        const {store, view} = setup({"Project.md": "# Project\n"}, [project], [resultNode(project)])
+        store.set(view.outlineAtom, {
+            path: [{kind: "node", node: project, label: "Project"}],
+            filters: ["is:subtext"], prevQuery: "", returnTo: [], quickAdd: false, pins: [],
+        })
+
+        expect(store.get(view.addToLabelAtom)).toBeNull()
     })
 })

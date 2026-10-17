@@ -177,7 +177,7 @@ const SearchResultsView = () => {
                         </React.Fragment>
                     )}
                     {lineEdit && editPos < 0 && <LineEditor key={lineEdit.id} edit={lineEdit} rows={rows}/>}
-                    {newLineShown && <NewLineRow label={addToLabel} selected={newLineSelected} onOpen={() => openAddTo()}/>}
+                    {newLineShown && addToLabel && <NewLineRow label={addToLabel} selected={newLineSelected} onOpen={() => openAddTo()}/>}
                     {viewState.searchResults.hasMore && (
                         <div className="flex justify-center items-center py-4">
                             <button

@@ -309,13 +309,16 @@ export const EditorMolecule = molecule((mol, scope) => {
             await markOutOfDate(app, get(GlobalAtoms.indexAtom), path)
             return
         }
+        const heading = !isList
+        const indent = isList ? /^[ \t]*/.exec(split.prefix)![0] : split.prefix
+        const fieldText = isList ? split.prefix.slice(indent.length) + split.text : split.text
         set(view.lineEditAtom, {
             id: nextLineEditId(),
-            row: {node, path, line, expectedLine: text, heading: !isList, nested: node.nodeType === "text" && node.nested === true},
-            prefix: split.prefix,
-            text: split.text,
-            initial: split.text,
-            caret: split.text.length,
+            row: {node, path, line, expectedLine: text, heading, nested: node.nodeType === "text" && node.nested === true},
+            prefix: indent,
+            text: fieldText,
+            initial: fieldText,
+            caret: fieldText.length,
             attachments: [],
             saving: false,
         })

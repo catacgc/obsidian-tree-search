@@ -18,7 +18,7 @@ const keyOf = (id: string) => SHORTCUTS.find(s => s.id === id)?.keys[0]
 
 export const ActionFooter = () => {
     const {enterRowAtom, selectEnterRowAtom, selectedNodeAtom, actionPanelAtom, toggleActionPanelAtom, chainAtom, outlineAtom, actualQueryAtom, addFilterAtom,
-        allowEditing, newLineSelectedAtom, openAddToAtom, addToLabelAtom} = useMolecule(SearchViewMolecule)
+        allowEditing, newLineSelectedAtom, openAddToAtom, addToLabelAtom, canAddToAtom} = useMolecule(SearchViewMolecule)
     const {reparentChainAtom} = useMolecule(EditorMolecule)
     const reparentChain = useSetAtom(reparentChainAtom)
     const chain = useAtomValue(chainAtom)
@@ -28,6 +28,7 @@ export const ActionFooter = () => {
     const newLineSelected = useAtomValue(newLineSelectedAtom)
     const openAddTo = useSetAtom(openAddToAtom)
     const addToLabel = useAtomValue(addToLabelAtom)
+    const canAddTo = useAtomValue(canAddToAtom)
     const {enterRowActionsAtom, enterIntentAtom, executeActionAtom, handleDefaultActionAtom} = useMolecule(ActionsMolecule)
     const intent = useAtomValue(enterIntentAtom)
     const enterRow = useAtomValue(enterRowAtom)
@@ -48,15 +49,16 @@ export const ActionFooter = () => {
     const usable = enterRow && !enterRow.archiveRow ? enterRow : null
     const intentTitle = usable && intent ? intentLabel(intent, usable.node) : null
     // Nothing selected (and no filter text typed in the outline editor): Enter is Add to (handleDefaultActionAtom).
-    const addsTo = allowEditing && chain === null && !selected && !newLineSelected
+    const addsTo = allowEditing && canAddTo && chain === null && !outline && !selected && !newLineSelected
     const main: {title: string; run: () => void} | null =
         chain?.mode === "reparent" ? usable ? {title: "Move under", run: () => void reparentChain(usable.node)} : null
-        : newLineSelected ? {title: addToLabel, run: () => openAddTo()}
+        : newLineSelected && addToLabel ? {title: addToLabel, run: () => openAddTo()}
+        : outline && query.trim() === "" && canAddTo && addToLabel ? {title: addToLabel, run: () => openAddTo()}
         : outline && query.trim() !== "" && (!selected || selected.archiveRow) ? {title: "Filter", run: () => addFilter()}
-        : addsTo ? {title: addToLabel, run: () => void openDefault()}
+        : addsTo && addToLabel ? {title: addToLabel, run: () => void openDefault()}
         : intentTitle ? {title: intentTitle, run: () => void openDefault()}
         : enterAction ? {title: enterAction.title, run: () => { selectEnterRow(); void execute(enterAction) }} : null
-    const title = newLineSelected ? `${addToLabel}…` : addsTo ? "" : enterRow ? truncateMiddle(nodeLabel(enterRow.node), 60) : ""
+    const title = newLineSelected && addToLabel ? `${addToLabel}…` : addsTo || (outline && query.trim() === "" && canAddTo) ? "" : enterRow ? truncateMiddle(nodeLabel(enterRow.node), 60) : ""
 
     return <div ref={dockRef} className="ts-action-dock">
         <ActionPanel dockRef={dockRef}/>

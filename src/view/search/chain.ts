@@ -246,7 +246,7 @@ export function addToPlan(query: string, separator: string, archiveTag: string):
     const last = stages[stages.length - 1]
     const {scope, filter} = withoutTreeScope(last)
     const parentStages = stages.slice(0, -1)
-    if (scope) parentStages.push(scope)
+    if (scope && scope.type !== "empty") parentStages.push(scope)
     const filterQuery = queryOf(filter)
     const parentQuery = parentStages.length > 0 ? parentStages.map(e => queryOf(e)).filter(Boolean).join(` ${separator} `) || null : null
     const note = parentStages.length === 1 ? treeScopeOf(parentStages[0]) : null
@@ -266,14 +266,19 @@ function needsNestedParent(query: string, separator: string): boolean {
     return parseQuery(query, separator, true).some(hasNestedModifier)
 }
 
+/** Whether an outline parent can contain the node shape requested by the final filter. */
+export function canAddToParent(parent: ParsedNode | null, filter: string, separator: string): boolean {
+    if (needsNestedParent(filter, separator)) return parent?.nodeType === "text"
+    return parent === null || isPatchable(parent)
+}
+
 /** The first ranked result matching the parent's final stage that can contain the line described by `filter`. */
 export function selectCandidateParent(results: ResultNode[], parentQuery: string, separator: string, filter: string): ParsedNode | null {
     const parentStages = parseQuery(parentQuery, separator, true).filter(e => e.type !== "empty")
     const match = parentStages[parentStages.length - 1]
     if (!match) return null
-    const nested = needsNestedParent(filter, separator)
     return flattenIndex(results, 10, parentStages, {expandAll: true})
-        .find(row => matchQuery(row.node, match) && isPatchable(row.node) && (!nested || row.node.nodeType === "text"))
+        .find(row => matchQuery(row.node, match) && canAddToParent(row.node, filter, separator))
         ?.node ?? null
 }
 

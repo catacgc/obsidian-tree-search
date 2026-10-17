@@ -30,7 +30,9 @@ import {
     insertAtCaret,
     linkAt,
     caretNote,
+    outlineEnter,
     outlineIndent,
+    shouldAppendLineOnEnter,
     toggleTask,
     wrapLink,
     wrapSelection,
@@ -420,6 +422,11 @@ export function InlineEditor({state}: { state: EditorState }) {
             void save()
             return true
         }
+        if (ev.key === "Enter" && shouldAppendLineOnEnter(state.mode, section, ev.altKey, mod, ev.shiftKey)) {
+            const selectedTextReplaced = text.slice(0, start) + text.slice(end)
+            applyEdit(section, outlineEnter(selectedTextReplaced, start))
+            return true
+        }
         if (section === "outline" && !prose && ev.key === "Enter" && ev.altKey) {
             if (renaming) return true
             const name = linkAt(text, start) ?? firstLinkOnLine(text, start)
@@ -553,6 +560,13 @@ export function InlineEditor({state}: { state: EditorState }) {
         onCaret: (caret: number) => setCaret(section, caret),
         onEnter: () => {
             if (section !== "outline" || prose) return false
+            if (state.mode === "append") {
+                const h = outlineRef.current
+                if (!h) return false
+                const {text, start, end} = fieldState(h)
+                applyEdit("outline", outlineEnter(text.slice(0, start) + text.slice(end), start))
+                return true
+            }
             void save()
             return true
         },

@@ -305,7 +305,7 @@
     gap: 6px;
 }
 
-/* The row's indent, bullet, checkbox or `#…`, kept outside the field. */
+/* Heading prefix kept outside the field; list markers are editable within it. */
 .ts-line-editor-prefix {
     flex-shrink: 0;
     padding-top: 7px;

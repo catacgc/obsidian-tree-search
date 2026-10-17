@@ -2,6 +2,16 @@
 // Every edit returns the new text plus the caret (and optional selection end).
 
 export type TextEdit = { text: string; caret: number; selectionEnd?: number }
+
+export function shouldAppendLineOnEnter(
+    mode: "append" | "edit" | "prose",
+    section: "outline" | "content",
+    alt: boolean,
+    mod: boolean,
+    shift: boolean,
+): boolean {
+    return mode === "append" && section === "outline" && !alt && !mod && !shift
+}
 /** What a paste carries: files (attachments), plain text and HTML. */
 export type PasteData = { files: File[]; plain: string; html: string }
 
@@ -150,6 +160,13 @@ export function outlineRepairs(text: string): { from: number; insert: string }[]
     return out
 }
 
+/** Repairs list markers in a line editor, except that a heading's first line remains heading content. */
+export function lineEditorRepairs(text: string, heading: boolean): { from: number; insert: string }[] {
+    const newline = text.indexOf("\n")
+    const firstLineEnd = newline < 0 ? text.length : newline
+    return outlineRepairs(text).filter(r => !heading || r.from > firstLineEnd)
+}
+
 /** Mobile toolbar Task: the caret line (ensureBullet first) becomes a `[ ] ` task after its marker, or loses its
  *  checkbox when it has one. The caret keeps its place in the text (moved after the checkbox when inside the prefix). */
 export function toggleTask(text: string, caret: number): TextEdit {
@@ -179,7 +196,7 @@ function outlineBlock(pasted: string): string[] {
     })
 }
 
-const BARE_PREFIX_RE = /^[ \t]*[-*+] (?:\[[ xX]\] )?$/
+const BARE_PREFIX_RE = /^[ \t]*(?:[-*+]|\d+\.) (?:\[[ xX]\] )?$/
 
 /** Outline paste (EDITOR.md §3.2). Replaces [start, end) with the pasted lines re-indented under the caret line. Null when nothing pastable. */
 export function pasteOutline(text: string, start: number, end: number, pasted: string): TextEdit | null {
